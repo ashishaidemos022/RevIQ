@@ -56,29 +56,46 @@
 ### Role Hierarchy
 
 ```
-C-Level / RevOps (full company visibility)
-    └── CRO (full company visibility)
-        └── SVP / VP (full regional org tree)
-            └── Sales Manager / Line Manager (direct reports + their reports)
-                └── Account Executive (own data only)
+C-Level (full company visibility + read/write)
+RevOps Read/Write — revops_rw (full company visibility + read/write)
+RevOps Read-Only — revops_ro (full company visibility, no writes)
+    └── CRO (full company visibility + read/write)
+        └── SVP / VP (full regional org tree + quota write)
+              └── AVP (their group/pod org subtree — between VP and Manager)
+                    └── Sales Manager / Line Manager (direct reports + their reports)
+                          └── Account Executive (own data only)
 ```
+
+> Note: RevOps and Enterprise App Group roles sit outside the reporting hierarchy — they are not part of the AE → Manager → AVP → VP → CRO org tree. Their access is granted by role, not org position.
+> Note: The AVP layer is optional — the hierarchy engine is depth-agnostic and resolves the org tree recursively regardless of how many layers exist. AVP users are provisioned via Okta SCIM like any other role; no schema or code changes are required when the layer is introduced.
 
 ### Role Definitions & Data Access
 
-| Role | Display Name | Data Scope | Can Edit Quotas |
-|------|-------------|------------|-----------------|
-| `ae` | Account Executive | Own opportunities, activities, commissions only | No |
-| `manager` | Sales Manager | All AEs in their direct + transitive reporting tree | No |
-| `vp` | VP / SVP | All managers and AEs within their region/org subtree | Yes (their region) |
-| `cro` | CRO | Full company — all regions, all AEs | Yes (company-wide) |
-| `c_level` | C-Level / RevOps | Full company — same as CRO | Yes (company-wide) |
+| Role | Display Name | Data Scope | Can Edit Quotas | Can Edit Commission Rates |
+|------|-------------|------------|-----------------|--------------------------|
+| `ae` | Account Executive | Own opportunities, activities, commissions only | No | No |
+| `manager` | Sales Manager | All AEs in their direct + transitive reporting tree | No | No |
+| `avp` | Area VP | All managers and AEs within their group/pod subtree (broader than manager, narrower than VP) | No | No |
+| `vp` | VP / SVP | All managers, AVPs, and AEs within their full regional org subtree | Yes (their region) | No |
+| `cro` | CRO | Full company — all regions, all AEs | Yes (company-wide) | Yes |
+| `c_level` | C-Level | Full company — same as CRO | Yes (company-wide) | Yes |
+| `revops_ro` | RevOps (Read-Only) | Full company — read-only, no data modifications | No | No |
+| `revops_rw` | RevOps (Read/Write) | Full company — full read + write access to quotas, commission rates, and sync | Yes (company-wide) | Yes |
+| `enterprise_ro` | Enterprise App Group | Full company — read-only access to all dashboards and data, no exceptions | No | No |
 
-### Row-Level Security Rules
-- Every data query is scoped by the authenticated user's role and their position in the `user_hierarchy` table
-- Managers see their **full transitive org tree** (direct reports + their reports recursively), not just direct reports
+### Access Control Rules
+Access control is enforced **exclusively at the Next.js API layer**. Supabase has no awareness of the end user — it executes queries issued by the Next.js backend using the service role key. Every API route is responsible for scoping queries to the authenticated user's role and org position before hitting Supabase.
+
+- Every API route reads the user's role and `user_id` from the validated Okta session
+- Queries are filtered in Next.js before execution — e.g., opportunities are scoped to `WHERE owner_user_id IN (org subtree of current user)`
+- Managers see their **full transitive org tree** (direct reports + their reports recursively), resolved via the `user_hierarchy` table
 - VPs see their region only — not other VPs' regions
-- CRO and C-Level see everything
+- CRO, C-Level, `revops_ro`, and `revops_rw` see all data company-wide — no hierarchy filter applied
+- `revops_ro` — all write operations return HTTP 403 at the API route level (quota edits, commission rate changes, sync triggers, user role changes)
+- `revops_rw` — full read + write access equivalent to CRO
 - AEs never see other AEs' individual data, except on the Leaderboard (see Section 12)
+- RevOps roles are **not** inserted into the `user_hierarchy` table — their access is granted by role, not org position
+- A shared `requireRole(...roles)` middleware function must be applied to every API route to enforce this consistently
 
 ---
 
@@ -93,17 +110,19 @@ C-Level / RevOps (full company visibility)
 - **Theme:** Light/Dark mode via CSS variables, persisted in user preferences
 
 ### Backend & Database
-- **Database:** Supabase (PostgreSQL)
-- **Auth:** Supabase Auth integrated with Okta via OIDC/SAML
-- **User Provisioning:** SCIM from Okta → Supabase
-- **API Layer:** Next.js API routes or Supabase Edge Functions
-- **Row-Level Security:** Supabase RLS policies enforcing org hierarchy
+- **Database:** Supabase (PostgreSQL only — used purely as a managed Postgres database)
+- **Auth:** Handled entirely in Next.js backend via Okta OIDC JWT validation — Supabase Auth is NOT used
+- **User Provisioning:** Okta SCIM → custom `/api/scim` endpoint in Next.js → Supabase `users` table
+- **Session Management:** Next.js manages sessions via signed cookies or app-issued JWTs (e.g., using `next-auth` with Okta provider or `jose` for JWT validation)
+- **API Layer:** Next.js API routes (Supabase Edge Functions not used)
+- **Database Access:** All Supabase queries run server-side using the Supabase **service role key** — never exposed to the client
+- **Access Control:** Enforced exclusively at the Next.js API layer — Supabase RLS is not used
 
 ### External Integrations
 | System | Purpose | Method |
 |--------|---------|--------|
 | **Okta** | SSO Authentication | OIDC / SAML 2.0 |
-| **Okta SCIM** | User provisioning & deprovisioning | SCIM 2.0 |
+| **Okta SCIM** | Automated user provisioning & deprovisioning | SCIM 2.0 → custom `/api/scim/v2` endpoint in Next.js |
 | **Salesforce** | Accounts, Opportunities, Activities, Authorization | MCP (Model Context Protocol) |
 | **Looker** | Product usage data per account | Looker API (direct, server-side) |
 
@@ -126,33 +145,84 @@ C-Level / RevOps (full company visibility)
 | Q4 | November, December, January |
 
 ### FY Label Convention
-- FY2026 = February 1, 2026 → January 31, 2027
-- Always label quarters as "Q1 FY2026", "Q2 FY2026", etc. — never use calendar quarter labels
+- TD uses a **forward-labeled fiscal year** — the FY label is one year ahead of the calendar year in which it starts
+- FY2027 = February 1, **2026** → January 31, **2027**
+- FY2028 = February 1, **2027** → January 31, **2028**
+- FY2026 = February 1, **2025** → January 31, **2026**
+- The **current fiscal year is FY2027**, which started February 1, 2026
+- Today (March 11, 2026) is in **Q1 FY2027**
+- Always label quarters as "Q1 FY2027", "Q2 FY2027", etc. — never use calendar quarter labels
+
+### Fiscal Year Calculation Rule
+```
+getFiscalYear(date):
+  if date.month >= 2:  return date.calendarYear + 1   // Feb–Dec: forward label
+  if date.month == 1:  return date.calendarYear        // January: still in prior FY
+
+getFiscalQuarter(date):
+  month = date.month
+  if month in [2, 3, 4]:   return 1   // Q1: Feb, Mar, Apr
+  if month in [5, 6, 7]:   return 2   // Q2: May, Jun, Jul
+  if month in [8, 9, 10]:  return 3   // Q3: Aug, Sep, Oct
+  if month in [11, 12, 1]: return 4   // Q4: Nov, Dec, Jan
+```
 
 ### Implementation Note
-- Store a `fiscal_config` table in Supabase with `fy_start_month = 2` (February)
-- All date utility functions must accept and apply the fiscal offset
-- Build a shared `getFiscalQuarter(date)` and `getFiscalYear(date)` utility used everywhere
-- Never use JavaScript's native `getMonth()` for quarter logic without the fiscal offset applied
+- Store a `fiscal_config` table in Supabase with `fy_start_month = 2` (February) and `fy_label_offset = 1` (forward-labeled)
+- All date utility functions must use the above `getFiscalYear()` and `getFiscalQuarter()` logic — never raw calendar year/quarter
+- Build these as shared utilities used **everywhere** in the codebase — no inline date math
+- Never use JavaScript's native `getMonth()` or `getFullYear()` for fiscal logic without applying the offset
+- Write unit tests for `getFiscalYear()` and `getFiscalQuarter()` covering: January edge case, February boundary, December, and a full FY cycle
 
 ---
 
 ## 5. Authentication & Authorization
 
+### Architecture Overview
+Supabase's native SSO and SCIM features are **not used**. Supabase serves purely as a PostgreSQL database. All authentication, session management, and user provisioning are handled at the **Next.js backend layer**, communicating with Supabase via the service role key.
+
+```
+User Browser
+    │
+    ▼
+Okta (OIDC login / SCIM push)
+    │
+    ▼
+Next.js Backend
+  ├─ Validates Okta JWT (via next-auth or jose)
+  ├─ Manages user sessions (signed cookies / app JWT)
+  ├─ Exposes /api/scim endpoint for Okta SCIM provisioning
+  └─ All Supabase queries via service role key (server-side only)
+    │
+    ▼
+Supabase (PostgreSQL — data storage only)
+```
+
 ### Authentication Flow
 1. User navigates to TD RevenueIQ
-2. Redirect to Okta for OIDC login
-3. Okta returns JWT with user identity and group membership
-4. Supabase Auth validates JWT and maps to internal user record
-5. User session established with role and hierarchy context
+2. Next.js redirects to Okta for OIDC login
+3. Okta returns a signed JWT containing user identity and group membership
+4. Next.js backend validates the JWT using Okta's public keys (via `next-auth` Okta provider or `jose`)
+5. Next.js checks if the user exists in the Supabase `users` table — creates a record if not (JIT)
+6. Next.js issues a session cookie (or app-level JWT) scoped to the user's role and id
+7. All subsequent API requests are authenticated via this session — Supabase never handles auth directly
 
-### User Provisioning via SCIM
-- Okta SCIM pushes user creates, updates, and deactivations to Supabase
-- SCIM maps Okta groups → RevenueIQ roles (`ae`, `manager`, `vp`, `cro`, `c_level`)
-- Deprovisioned users are soft-deleted (historical data preserved, login disabled)
-- Manager-to-AE relationships are synced from Okta group hierarchy or Salesforce role hierarchy
+### User Provisioning via Okta SCIM
+- Okta SCIM pushes user creates, updates, and deactivations to a custom **`/api/scim/v2`** endpoint in Next.js
+- This endpoint is a lightweight SCIM 2.0 receiver that writes directly to the Supabase `users` and `user_hierarchy` tables
+- SCIM maps Okta groups → RevenueIQ roles (`ae`, `manager`, `avp`, `vp`, `cro`, `c_level`, `revops_ro`, `revops_rw`, `enterprise_ro`)
+- Deprovisioned users are **soft-deleted** in Supabase (historical data preserved, `is_active = false`)
+- No Supabase Enterprise license required — SCIM is implemented entirely in Next.js application code
 
-> **Open Question:** Which is the source of truth for the user-to-manager hierarchy — Okta groups or Salesforce role hierarchy? See Section 18, item #1.
+**Reporting Hierarchy via Okta Manager Attribute:**
+- The reporting hierarchy is constructed from the **`manager` attribute** on each Okta user profile — not from group membership
+- **Every Okta-provisioned user gets a hierarchy record** regardless of their role or title — AEs, Managers, AVPs, VPs, CRO, C-Level, RevOps, Enterprise App Group, ICs, and any future roles. The `user_hierarchy` table is a complete mirror of the Okta org, not just the sales org.
+- On every SCIM user create or update, the `/api/scim/v2` endpoint reads the `manager` attribute (Okta user ID of the user's manager) and writes the relationship into the `user_hierarchy` table as `user_id → manager_id`
+- Users with no manager attribute (e.g., the CEO or CRO at the root of the tree) are written to `users` with no corresponding `user_hierarchy` row — they are the root nodes
+- When a manager changes in Okta, Okta pushes a SCIM update and the `user_hierarchy` table is updated automatically — the old row is end-dated (`effective_to = today`) and a new row is inserted
+- On user deprovisioning, the `user_hierarchy` record is end-dated (`effective_to = today`) rather than deleted, preserving historical reporting relationships for commission and performance history
+- **Retry/queue mechanism required:** If a user is provisioned before their manager exists in Supabase (common in bulk imports), the SCIM handler must queue the hierarchy write and retry once the manager is provisioned. Log unresolved relationships to `sync_log` with a warning.
+- Okta is the **single source of truth** for the reporting hierarchy
 
 ### Salesforce Authorization
 - Salesforce is also used as a source for authorization data: territory assignments, opportunity ownership, account ownership
@@ -160,9 +230,57 @@ C-Level / RevOps (full company visibility)
 - If a Salesforce user does not exist in RevenueIQ, log a warning and skip (do not fail the sync)
 
 ### Session & Security
-- JWT expiry: follow Okta session policy
-- All API routes require authenticated session
-- Supabase RLS enforces data access at the database level — API-level filtering is a secondary defense, not the primary one
+- Session managed by Next.js — Supabase Auth is not used
+- JWT/session expiry follows Okta session policy
+- All API routes require a valid session — enforced in Next.js middleware
+- All Supabase queries use the **service role key** server-side only — never exposed to the browser
+- Access control (role + org hierarchy scoping) is enforced at the Next.js API layer on every request
+
+### Development Backdoor Admin Account
+A local admin account for development and debugging purposes, bypassing Okta entirely. This account must **never be accessible in production**.
+
+#### Behavior
+- Authenticates via a dedicated endpoint `/api/auth/dev-login` — completely separate from the Okta OIDC flow
+- Grants `revops_rw` level access — full read + write across all data, all dashboards, all settings
+- Not provisioned via SCIM — exists only as a session construct, no entry in the `users` table required (or insert a seeded dev user row)
+- When logged in as dev admin, display a persistent **red "DEV ADMIN" banner** across the top of every page so it is always visually obvious during development
+
+#### Security Constraints — strictly enforced
+- **Production guard:** The `/api/auth/dev-login` endpoint must return `HTTP 404` (not 403) when `NODE_ENV=production` or `ENABLE_DEV_ADMIN=false`. The route effectively does not exist in production.
+- **Environment-gated activation:** The account is only active when both conditions are true:
+  - `NODE_ENV=development` (or `NODE_ENV=test`)
+  - `ENABLE_DEV_ADMIN=true` in environment variables
+- **Password via environment variable only:** Password is set via `DEV_ADMIN_PASSWORD` in `.env.local` — never hardcoded in source code, never committed to git
+- **`.env.local` in `.gitignore`:** Must be confirmed in the repository setup — this file must never be committed
+- **Password generation:** Generate a strong random password on first project setup (e.g., using `openssl rand -base64 32`). Document this in the project `README.md` under "Local Development Setup"
+- **No password reset UI:** The dev admin password can only be changed by updating `DEV_ADMIN_PASSWORD` in `.env.local` — there is no in-app reset flow
+- **Session expiry:** Dev admin sessions expire after 8 hours — no persistent sessions
+
+#### Implementation Notes
+```
+/api/auth/dev-login (POST)
+  1. Check NODE_ENV !== 'production' AND ENABLE_DEV_ADMIN === 'true'
+     → If either fails: return 404 immediately
+  2. Compare request password against DEV_ADMIN_PASSWORD env var (bcrypt or timing-safe compare)
+     → If mismatch: return 401
+  3. Issue a signed session cookie with role = 'revops_rw', user_id = 'dev-admin'
+  4. Return 200 + redirect to Home dashboard
+```
+
+#### Local Development Setup (add to project README.md)
+```bash
+# 1. Generate a random password
+openssl rand -base64 32
+
+# 2. Add to .env.local (never commit this file)
+ENABLE_DEV_ADMIN=true
+DEV_ADMIN_PASSWORD=<paste generated password here>
+
+# 3. Confirm .env.local is in .gitignore
+echo ".env.local" >> .gitignore
+```
+
+> **⚠️ Critical:** Any code review or PR that touches `/api/auth/dev-login` must require explicit approval from a senior engineer. Add a `CODEOWNERS` rule for this file.
 
 ---
 
@@ -176,7 +294,7 @@ id                  uuid PRIMARY KEY
 okta_id             text UNIQUE NOT NULL
 email               text UNIQUE NOT NULL
 full_name           text NOT NULL
-role                text NOT NULL  -- ae | manager | vp | cro | c_level
+role                text NOT NULL  -- ae | manager | avp | vp | cro | c_level | revops_ro | revops_rw | enterprise_ro
 salesforce_user_id  text           -- SF User ID for mapping
 region              text
 is_active           boolean DEFAULT true
@@ -192,13 +310,13 @@ manager_id      uuid REFERENCES users(id)
 effective_from  date NOT NULL
 effective_to    date           -- null = currently active
 ```
-> Used for recursive org-tree RLS queries. Index on `manager_id` and `user_id`.
+> Used by Next.js API routes to resolve each user's full org subtree for query scoping. Index on `manager_id` and `user_id`.
 
 #### `quotas`
 ```sql
 id              uuid PRIMARY KEY
 user_id         uuid REFERENCES users(id)
-fiscal_year     integer NOT NULL   -- e.g., 2026
+fiscal_year     integer NOT NULL   -- e.g., 2027 (forward-labeled; FY2027 = Feb 2026 – Jan 2027)
 fiscal_quarter  integer            -- 1-4, NULL = annual quota
 quota_amount    numeric(18,2) NOT NULL
 quota_type      text NOT NULL      -- revenue | pilots | pipeline | activities
@@ -308,13 +426,15 @@ created_at          timestamptz DEFAULT now()
 #### `sync_log`
 ```sql
 id              uuid PRIMARY KEY
-sync_type       text NOT NULL    -- salesforce | looker
-triggered_by    uuid REFERENCES users(id)
+sync_type       text NOT NULL    -- salesforce | looker | scim
+triggered_by    uuid REFERENCES users(id) NULL  -- NULL for SCIM (Okta-initiated)
+target_user_id  uuid REFERENCES users(id) NULL  -- populated for SCIM events (which user was synced)
 started_at      timestamptz
 completed_at    timestamptz
-status          text             -- running | success | partial | failed
+status          text             -- running | success | partial | failed | warning
 records_synced  integer
 error_message   text
+raw_payload     jsonb NULL       -- stores raw SCIM payload for debugging (scim sync_type only)
 ```
 
 #### `fiscal_config`
@@ -332,6 +452,21 @@ user_id     uuid PRIMARY KEY REFERENCES users(id)
 theme       text DEFAULT 'light'    -- light | dark
 updated_at  timestamptz
 ```
+
+#### `permission_overrides`
+```sql
+id                  uuid PRIMARY KEY
+user_id             uuid REFERENCES users(id)        -- the IC/specialist receiving elevated access
+granted_by          uuid REFERENCES users(id)        -- RevOps RW or CRO/C-Level who granted it
+effective_role      text NOT NULL                    -- manager | vp | cro | c_level (role whose data scope is granted)
+allow_writes        boolean DEFAULT false            -- false = read-only; true = inherits write permissions of effective_role
+notes               text                             -- reason for grant (e.g., "Strategic overlay for Q1 FY2027")
+is_active           boolean DEFAULT true
+created_at          timestamptz DEFAULT now()
+revoked_at          timestamptz NULL                 -- set when manually revoked, NULL = still active
+revoked_by          uuid REFERENCES users(id) NULL
+```
+> Overrides are **permanent until manually revoked** — no expiry date. When revoked, `is_active` is set to false and `revoked_at` / `revoked_by` are recorded for audit purposes. A user may have at most one active override at a time.
 
 ---
 
@@ -478,23 +613,25 @@ TD RevenueIQ
 ├── 🏆  Leaderboard                  (4 boards: Revenue, Pipeline, Pilots, Activities)
 ├── 📡  Usage                        (Looker usage data — account & opp level)
 ├── 👥  Team View                    (Managers+ only)
-└── ⚙️  Settings                     (Quotas, commission rates, sync, preferences)
+└── ⚙️  Settings                     (Quotas, commission rates, sync, preferences, hierarchy, permission overrides)
 ```
 
 ### Navigation Access by Role
-| Nav Item | AE | Manager | VP | CRO | C-Level |
-|----------|:--:|:-------:|:--:|:---:|:-------:|
-| Home / My Dashboard | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Pipeline | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Paid Pilots | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Activities | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Performance (4Q) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Leaderboard | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Usage | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Team View | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Settings → Quotas | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Settings → Commission Rates | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Settings → Sync | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Nav Item | AE | Manager | AVP | VP | CRO | C-Level | RevOps RO | RevOps RW | Enterprise RO |
+|----------|:--:|:-------:|:---:|:--:|:---:|:-------:|:---------:|:---------:|:-------------:|
+| Home / My Dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Pipeline | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Paid Pilots | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Activities | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Performance (4Q) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Leaderboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Usage | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Team View | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Settings → Quotas | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (read) | ✅ | ❌ (read) |
+| Settings → Commission Rates | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (read) | ✅ | ❌ (read) |
+| Settings → Sync | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Settings → Hierarchy Viewer | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Settings → Permission Overrides | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
 
 ### Global Header (Persistent — All Pages)
 - TD RevenueIQ logo + wordmark (left)
@@ -552,6 +689,7 @@ Focused view of open pipeline health and deal progression.
 - Fiscal Quarter (multi-select, defaults to current)
 - Stage (multi-select)
 - Deal Type (new business / renewal / expansion / all)
+- Opportunity Source (Sales / Marketing / Partner / All) — derived from Salesforce `LeadSource`
 - Paid Pilot (yes / no / all)
 - AE (dropdown — Managers+ only; defaults to own AEs for managers, all for CRO+)
 
@@ -644,7 +782,7 @@ Provides a rolling 4-quarter comparison view, fully aligned to TD's fiscal year.
 
 #### Quarter Window
 - Default: current fiscal quarter + 3 trailing fiscal quarters
-- Each quarter labeled as "Q1 FY2026", etc.
+- Each quarter labeled as "Q1 FY2027", etc.
 - Navigation arrows to shift the window back to view older quarters
 
 #### Performance Summary Table
@@ -692,6 +830,113 @@ Columns: AE Name | Region | ARR Closed QTD | ARR Closed YTD | Annual Quota | Att
 #### Org Tree Navigation *(VP and above)*
 - Breadcrumb navigation when drilling into a sub-team (e.g., Company → Region West → Manager Smith → AE Jones)
 - Toggle: "My Direct Team" / "Full Org Tree" / individual manager's sub-team
+
+---
+
+### 11.7 Settings — Hierarchy Viewer *(Managers and above, RevOps, Enterprise RO)*
+
+A dedicated Settings page showing the full org reporting structure as provisioned by Okta SCIM. Contains **three tabs**: Org Tree View, Tabular View, and Debug View.
+
+#### Tab 1: Org Tree View
+- Expandable/collapsible tree starting from the root node (CRO or highest provisioned user) 
+- Each node shows: name, role badge, region, direct report count
+- Nodes with active permission overrides show a distinct icon indicator
+- Search bar to highlight/jump to a specific user in the tree
+- Managers and AVPs see their own subtree only; VP and above see full company tree
+
+#### Tab 2: Tabular View
+Flat, sortable table of all users and their position in the hierarchy.
+
+| Column | Description |
+|--------|-------------|
+| Name | Full name + avatar initial |
+| Email | Work email |
+| Role | Current role badge (`ae`, `manager`, `avp`, `vp`, etc.) |
+| Manager | Direct manager's name (linked — clicking filters table to that manager's subtree) |
+| Region | Region assignment |
+| Direct Reports | Count of direct reports |
+| Permission Override | Badge if an active override exists — shows effective role |
+| Status | Active / Inactive (soft-deleted) |
+
+#### Tab 3: Debug View *(RevOps RW and C-Level only)*
+A raw, unprocessed view of the `user_hierarchy` table records exactly as stored in Supabase — no tree resolution, no recursion. Designed exclusively for troubleshooting SCIM provisioning issues.
+
+**Purpose:** Instantly identify provisioning errors such as:
+- Missing manager relationships (orphan users with no `user_hierarchy` row)
+- Duplicate active rows for the same user (`effective_to IS NULL` appearing twice)
+- Stale rows that were not end-dated correctly after a manager change
+- Users provisioned before their manager (unresolved hierarchy queue entries)
+
+**Debug View Table Columns:**
+| Column | Description |
+|--------|-------------|
+| User | Full name + email |
+| User Role | Role from `users.role` |
+| Manager | Manager's name + email (raw FK — shown even if manager is inactive) |
+| Effective From | Date this relationship became active |
+| Effective To | Date this relationship ended — `NULL` = currently active |
+| Status | Active (effective_to IS NULL) / Historical / ⚠️ Orphan (no manager row found) |
+| SCIM Last Updated | Timestamp of last SCIM push for this user |
+
+**Debug View Filters:**
+- Show: All / Active only / Historical only / ⚠️ Orphans only / ⚠️ Duplicates only
+- Search by user name or email
+
+**Debug View Actions** *(RevOps RW only):*
+- **Flag for re-sync:** Mark a user record to be re-processed on the next SCIM sync
+- **View raw SCIM payload:** Show the last raw SCIM payload received for this user (stored in `sync_log`) for comparison against what was written to `user_hierarchy`
+
+#### Access Rules
+- **Tab 1 & 2 (Org Tree + Tabular):** All Managers and above, RevOps RO, RevOps RW, Enterprise RO — scoped to own subtree for Manager/AVP, full company for VP and above
+- **Tab 3 (Debug View):** RevOps RW and C-Level only — always shows full company, never scoped
+- Only RevOps RW and CRO/C-Level can navigate to the Permission Overrides page from here
+
+---
+
+### 11.8 Settings — Permission Overrides *(RevOps RW and CRO/C-Level only)*
+
+Allows RevOps RW and CRO/C-Level to grant high-level ICs and specialists elevated data visibility beyond what their org position would normally provide — without changing their role or reporting line in the hierarchy.
+
+#### Concept
+A permission override assigns a user an **effective role** for data access purposes only. Their actual role and manager in the hierarchy remain unchanged. This mirrors Salesforce's manual sharing and role-based visibility override model.
+
+Examples:
+- A Strategic Account Director (reporting to CRO, role = `ae`) is granted effective role of `vp` → they can now see all data within a specific VP's org
+- A Sales Engineer Overlay (role = `ae`) is granted effective role of `cro` → company-wide read-only visibility
+- Write access can optionally be enabled per override if the IC needs to manage quotas or commission rates
+
+#### Active Overrides Table
+Columns: User | Their Role | Effective Role Granted | Scope | Write Access | Granted By | Granted On | Notes | Actions
+
+- **Actions:** Edit (change effective role or write toggle) | Revoke
+- Revoked overrides are soft-deleted — `is_active = false`, preserved in audit log
+- A user can have at most **one active override** at a time
+
+#### Grant New Override — Form Fields
+| Field | Type | Description |
+|-------|------|-------------|
+| User | Searchable dropdown | Select the IC/specialist to receive the override |
+| Effective Role | Dropdown | `manager` \| `avp` \| `vp` \| `cro` \| `c_level` — the role whose data scope they will inherit |
+| Allow Write Access | Toggle | Default OFF (read-only); enable to grant write permissions of the effective role |
+| Notes | Text field | Required — reason for grant (e.g., "Strategic overlay for EMEA Q1 FY2027") |
+
+#### Permission Resolution Logic (for engineering)
+When resolving what data a user can access, the Next.js API middleware checks in this order:
+```
+1. Does an active permission_override exist for this user?
+   YES → use effective_role + allow_writes from the override
+   NO  → use the user's actual role from users.role + hierarchy from user_hierarchy
+```
+This means the override **fully replaces** the user's normal access scope for all data queries. The user's actual role is preserved in `users.role` and is unaffected.
+
+#### Audit Log
+All override grants, edits, and revocations are logged with:
+- Who granted/changed/revoked
+- Timestamp
+- Before and after state (effective role, write access)
+- Notes
+
+Audit log is visible to RevOps RW and CRO/C-Level in the Permission Overrides page (last 90 days).
 
 ---
 
@@ -818,7 +1063,7 @@ Modern, data-dense enterprise dashboard — comparable in feel and density to **
 ### Loading, Empty, and Error States
 Every data section must implement all three states — never leave blank white space:
 - **Loading:** Skeleton placeholder (same layout as loaded state)
-- **Empty:** Centered illustration + descriptive message (e.g., "No opportunities found for Q1 FY2026")
+- **Empty:** Centered illustration + descriptive message (e.g., "No opportunities found for Q1 FY2027")
 - **Error:** Error message + "Retry" button
 
 ### Data Visualization Standards
@@ -888,6 +1133,46 @@ Columns: Date/Time | Type (SF/Looker) | Triggered By | Duration | Records Synced
 - Scheduled weekly email digest (performance summary)
 - Commission dispute / correction workflow (AE flags discrepancy → manager reviews → CRO approves correction)
 
+### Phase 2: IC / Contributor Dashboard
+For GTM/Sales ICs who are part of the sales team but not tied to individual accounts or opportunities (e.g., overlay specialists, BD leads, partner/alliances managers, GTM strategy leads, pre-sales leaders). These users have quota but it is measured at a group, region, geo, or global level rather than per-deal.
+
+**New role to introduce in v2:** `ic` (Individual Contributor) — distinct dashboard experience from `ae`.
+
+**Data model additions required (define tables in v1 migration as stubs, do not build UI):**
+
+`opportunity_contributors` — tracks IC influence/contribution on opportunities:
+```sql
+id                  uuid PRIMARY KEY
+opportunity_id      uuid REFERENCES opportunities(id)
+contributor_id      uuid REFERENCES users(id)
+contribution_type   text    -- influenced | supported | led_demo | technical_win | other
+created_at          timestamptz DEFAULT now()
+```
+
+`quota_scopes` — defines the aggregate scope an IC's quota is measured against:
+```sql
+id              uuid PRIMARY KEY
+scope_type      text NOT NULL   -- global | geo | region | group
+scope_name      text NOT NULL   -- e.g., "EMEA", "West Region", "AI Specialist Group"
+parent_scope_id uuid REFERENCES quota_scopes(id) NULL  -- for nested scopes
+created_at      timestamptz DEFAULT now()
+```
+
+Extend `quotas` table with:
+```sql
+quota_scope_type  text NULL   -- global | geo | region | group | individual (NULL = individual/AE default)
+quota_scope_id    uuid REFERENCES quota_scopes(id) NULL
+```
+
+**v2 IC Dashboard will include:**
+- Quota attainment at their assigned scope level (group/region/geo/global)
+- Aggregate ARR, pipeline, and activity metrics for their assigned scope
+- Influenced opportunities — deals they are tagged on as a contributor
+- Their own commission calculation (based on scope-level attainment + Looker usage)
+- Separate IC leaderboard category (does not compete with AE individual deal leaderboards)
+
+> **Developer Note:** Create `opportunity_contributors` and `quota_scopes` tables in the v1 initial migration as stubs. Add `quota_scope_type` and `quota_scope_id` columns to the `quotas` table as nullable. All values will be NULL in v1. This avoids a schema migration when v2 IC dashboard is built.
+
 ### Phase 3: Partner Portal
 > Schema stubs are defined in Section 6. Tables `partners` and `opportunity_partners` must be created in the v1 initial migration with all values NULL.
 
@@ -911,7 +1196,7 @@ Columns: Date/Time | Type (SF/Looker) | Triggered By | Duration | Records Synced
 ### Security
 - All data in transit: HTTPS / TLS 1.2+
 - All data at rest: encrypted (Supabase default)
-- Supabase RLS is the **primary** data access enforcement layer — not just API-level filtering
+- Next.js API layer is the **sole** data access enforcement layer — every route applies role and org-hierarchy scoping before querying Supabase
 - All API routes require valid authenticated session JWT
 - Salesforce OAuth credentials and Looker API credentials stored as **server-side environment variables only** — never in client code or browser storage
 - No direct database access from client — all queries via API layer
@@ -932,7 +1217,7 @@ Columns: Date/Time | Type (SF/Looker) | Triggered By | Duration | Records Synced
 
 | # | Question | Status | Notes / Recommendation |
 |---|----------|--------|----------------------|
-| 1 | Source of truth for user-to-manager hierarchy: Okta groups or Salesforce role hierarchy? | **OPEN** | Recommend Okta SCIM as primary (synced on user provisioning), Salesforce as secondary reference |
+| 1 | Source of truth for user-to-manager hierarchy | **RESOLVED** | Okta SCIM `manager` attribute is the single source of truth. Hierarchy is constructed from the manager attribute on each user profile, not from group membership. Written to `user_hierarchy` on every SCIM sync. |
 | 2 | What Looker metrics and formula define "usage score" for the commission multiplier? | **RESOLVED** | Interaction counts per product type (Navigator, Autopilot, etc.). Multiplier = actual interactions ÷ target interactions. Targets configured in Supabase per product type. |
 | 3 | Exact commission rate tiers per AE, deal type, and fiscal period | **RESOLVED** | Quotas and base commission rates managed natively in Supabase via `commission_rates` table. Configured by CRO/VP in Settings UI. |
 | 4 | Should "Sync Now" trigger Salesforce + Looker simultaneously or separately? | **OPEN** | Recommend: single button triggers both sequentially; Settings page allows independent triggers |

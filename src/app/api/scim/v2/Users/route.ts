@@ -78,7 +78,8 @@ export async function POST(request: NextRequest) {
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
     const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
     const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
-    const role = validateRole(talkdeskExt?.role) || mapOktaGroupToRole(payload.groups);
+    const roleExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:role'];
+    const role = validateRole(roleExt?.role) || validateRole(talkdeskExt?.role) || mapOktaGroupToRole(payload.groups);
     const region = talkdeskExt?.region || null;
     const managerId = enterprise?.manager?.value;
     const department = enterprise?.department || payload.department || null;
@@ -183,7 +184,8 @@ export async function PUT(request: NextRequest) {
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
     const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
     const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
-    const role = validateRole(talkdeskExt?.role) || mapOktaGroupToRole(payload.groups);
+    const roleExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:role'];
+    const role = validateRole(roleExt?.role) || validateRole(talkdeskExt?.role) || mapOktaGroupToRole(payload.groups);
     const region = talkdeskExt?.region || null;
     const managerId = enterprise?.manager?.value;
     const department = enterprise?.department || payload.department || null;

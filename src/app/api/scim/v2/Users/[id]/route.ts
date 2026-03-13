@@ -85,6 +85,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
     const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
+    const roleExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:role'];
+    const role = validateRole(roleExt?.role) || validateRole(talkdeskExt?.role) || null;
     const region = talkdeskExt?.region || null;
     const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
@@ -96,6 +98,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         email,
         full_name: fullName,
         is_active: isActive,
+        ...(role && { role }),
         region,
         department,
         title,
@@ -193,7 +196,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           if (op.value.addresses?.[0]?.country) updates.country_code = op.value.addresses[0].country;
           const tdExt = op.value['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
           if (tdExt?.region) updates.region = tdExt.region;
-          if (tdExt?.role) { const r = validateRole(tdExt.role); if (r) updates.role = r; }
+          const tdRoleExt = op.value['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:role'];
+          const roleVal = validateRole(tdRoleExt?.role) || validateRole(tdExt?.role);
+          if (roleVal) updates.role = roleVal;
           const ent = op.value['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
           const mgrExt = op.value['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
           if (ent?.department) updates.department = ent.department;

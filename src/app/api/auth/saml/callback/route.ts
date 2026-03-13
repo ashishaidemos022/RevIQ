@@ -5,13 +5,19 @@ import { createSession } from '@/lib/auth/session';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { UserRole } from '@/types';
 
+// Use 303 See Other for all redirects from this POST handler
+// so the browser follows up with GET (not POST)
+function redirectWithGet(url: URL): NextResponse {
+  return NextResponse.redirect(url, 303);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const samlResponse = formData.get('SAMLResponse') as string;
 
     if (!samlResponse) {
-      return NextResponse.redirect(
+      return redirectWithGet(
         new URL('/login?error=no_saml_response', process.env.NEXT_PUBLIC_APP_URL!)
       );
     }
@@ -20,7 +26,7 @@ export async function POST(request: NextRequest) {
     const { profile } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
 
     if (!profile) {
-      return NextResponse.redirect(
+      return redirectWithGet(
         new URL('/login?error=invalid_saml', process.env.NEXT_PUBLIC_APP_URL!)
       );
     }
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
     const role = (profile['role'] || 'ae') as UserRole;
 
     if (!oktaId || !email) {
-      return NextResponse.redirect(
+      return redirectWithGet(
         new URL('/login?error=missing_attributes', process.env.NEXT_PUBLIC_APP_URL!)
       );
     }
@@ -59,7 +65,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('JIT provisioning error:', error);
-        return NextResponse.redirect(
+        return redirectWithGet(
           new URL('/login?error=provisioning_failed', process.env.NEXT_PUBLIC_APP_URL!)
         );
       }
@@ -73,10 +79,10 @@ export async function POST(request: NextRequest) {
       full_name: user.full_name,
     });
 
-    return NextResponse.redirect(new URL('/home', process.env.NEXT_PUBLIC_APP_URL!));
+    return redirectWithGet(new URL('/home', process.env.NEXT_PUBLIC_APP_URL!));
   } catch (error) {
     console.error('SAML callback error:', error);
-    return NextResponse.redirect(
+    return redirectWithGet(
       new URL('/login?error=saml_validation_failed', process.env.NEXT_PUBLIC_APP_URL!)
     );
   }

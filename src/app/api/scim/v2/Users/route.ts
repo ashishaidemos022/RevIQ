@@ -76,7 +76,13 @@ export async function POST(request: NextRequest) {
     const fullName = payload.displayName ||
       `${payload.name?.givenName || ''} ${payload.name?.familyName || ''}`.trim();
     const role = mapOktaGroupToRole(payload.groups);
-    const managerId = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User']?.manager?.value;
+    const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
+    const managerId = enterprise?.manager?.value;
+    const department = enterprise?.department || payload.department || null;
+    const title = payload.title || null;
+    const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
+    const managerEmail = enterprise?.manager?.email || null;
+    const managerDisplayName = enterprise?.manager?.displayName || null;
 
     // Create user
     const { data: user, error } = await db
@@ -86,6 +92,11 @@ export async function POST(request: NextRequest) {
         email,
         full_name: fullName,
         role,
+        department,
+        title,
+        country_code: countryCode,
+        manager_email: managerEmail,
+        manager_display_name: managerDisplayName,
       })
       .select('id')
       .single();
@@ -166,7 +177,13 @@ export async function PUT(request: NextRequest) {
       `${payload.name?.givenName || ''} ${payload.name?.familyName || ''}`.trim();
     const role = mapOktaGroupToRole(payload.groups);
     const isActive = payload.active !== false;
-    const managerId = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User']?.manager?.value;
+    const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
+    const managerId = enterprise?.manager?.value;
+    const department = enterprise?.department || payload.department || null;
+    const title = payload.title || null;
+    const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
+    const managerEmail = enterprise?.manager?.email || null;
+    const managerDisplayName = enterprise?.manager?.displayName || null;
 
     // Update user
     const { data: user, error } = await db
@@ -176,6 +193,11 @@ export async function PUT(request: NextRequest) {
         full_name: fullName,
         role,
         is_active: isActive,
+        department,
+        title,
+        country_code: countryCode,
+        manager_email: managerEmail,
+        manager_display_name: managerDisplayName,
         updated_at: new Date().toISOString(),
       })
       .eq('okta_id', oktaId)

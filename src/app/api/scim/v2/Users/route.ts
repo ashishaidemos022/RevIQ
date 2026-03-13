@@ -8,6 +8,59 @@ function validateScimToken(request: NextRequest): boolean {
   return token === process.env.SCIM_BEARER_TOKEN;
 }
 
+// GET /api/scim/v2/Users — List/search users (Okta uses this to test connection)
+export async function GET(request: NextRequest) {
+  if (!validateScimToken(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const db = getSupabaseClient();
+  const url = request.nextUrl;
+  const filter = url.searchParams.get('filter');
+  const startIndex = parseInt(url.searchParams.get('startIndex') || '1');
+  const count = parseInt(url.searchParams.get('count') || '100');
+
+  try {
+    let query = db.from('users').select('*', { count: 'exact' });
+
+    // Handle SCIM filter (e.g., userName eq "user@example.com")
+    if (filter) {
+      const match = filter.match(/userName\s+eq\s+"(.+?)"/);
+      if (match) {
+        query = query.eq('email', match[1]);
+      }
+    }
+
+    const { data: users, count: totalCount, error } = await query
+      .range(startIndex - 1, startIndex - 1 + count - 1)
+      .order('created_at');
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      schemas: ['urn:ietf:params:scim:api:messages:2.0:ListResponse'],
+      totalResults: totalCount || 0,
+      startIndex,
+      itemsPerPage: count,
+      Resources: (users || []).map(u => ({
+        schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+        id: u.id,
+        externalId: u.okta_id,
+        userName: u.email,
+        name: { formatted: u.full_name },
+        displayName: u.full_name,
+        emails: [{ primary: true, value: u.email, type: 'work' }],
+        active: u.is_active,
+      })),
+    });
+  } catch (error) {
+    console.error('SCIM GET Users error:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}
+
 // POST /api/scim/v2/Users — Create user
 export async function POST(request: NextRequest) {
   if (!validateScimToken(request)) {

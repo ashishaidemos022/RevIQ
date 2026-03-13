@@ -25,8 +25,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const oktaId = profile.nameID || profile['okta_id'];
-    const email = profile.email || profile['email'];
+    // nameID is the email when NameID format is emailAddress (Okta default)
+    const email = profile.email || profile['email'] || profile.nameID;
+    const oktaId = profile['okta_id'] || profile.nameID;
     const fullName = profile['full_name'] || profile['displayName'] || email;
     const role = (profile['role'] || 'ae') as UserRole;
 

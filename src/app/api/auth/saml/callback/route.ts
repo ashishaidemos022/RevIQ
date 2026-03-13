@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // JIT provisioning: look up or create user
+    // Look up user: try okta_id first, then fall back to email
+    // (SCIM stores the real Okta ID, but SAML nameID may be the email)
     const db = getSupabaseClient();
     let { data: user } = await db
       .from('users')
@@ -52,6 +53,17 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!user) {
+      // Fall back to email lookup (covers SCIM-provisioned users)
+      const { data: userByEmail } = await db
+        .from('users')
+        .select('id, role, email, full_name')
+        .eq('email', email)
+        .single();
+      user = userByEmail;
+    }
+
+    if (!user) {
+      // JIT provisioning: create user if not found by either lookup
       const { data: newUser, error } = await db
         .from('users')
         .insert({

@@ -82,7 +82,8 @@ export async function POST(request: NextRequest) {
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const region = payload.addresses?.[0]?.region || null;
+    const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
+    const region = talkdeskExt?.region || null;
     const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
 
@@ -186,7 +187,8 @@ export async function PUT(request: NextRequest) {
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const region = payload.addresses?.[0]?.region || null;
+    const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
+    const region = talkdeskExt?.region || null;
     const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
 

@@ -72,10 +72,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       `${payload.name?.givenName || ''} ${payload.name?.familyName || ''}`.trim();
     const isActive = payload.active !== false;
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
+    const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const managerEmail = enterprise?.manager?.email || null;
+    const region = payload.addresses?.[0]?.region || null;
+    const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
     const managerId = enterprise?.manager?.value;
 
@@ -85,6 +87,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         email,
         full_name: fullName,
         is_active: isActive,
+        region,
         department,
         title,
         country_code: countryCode,
@@ -179,9 +182,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           if (op.value.name?.formatted) updates.full_name = op.value.name.formatted;
           if (op.value.emails?.[0]?.value) updates.email = op.value.emails[0].value;
           if (op.value.addresses?.[0]?.country) updates.country_code = op.value.addresses[0].country;
+          if (op.value.addresses?.[0]?.region) updates.region = op.value.addresses[0].region;
           const ent = op.value['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
+          const mgrExt = op.value['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
           if (ent?.department) updates.department = ent.department;
-          if (ent?.manager?.email) updates.manager_email = ent.manager.email;
+          if (mgrExt?.managerEmail) updates.manager_email = mgrExt.managerEmail;
+          else if (ent?.manager?.email) updates.manager_email = ent.manager.email;
           if (ent?.manager?.displayName) updates.manager_display_name = ent.manager.displayName;
           continue;
         }
@@ -208,6 +214,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
             break;
           case 'addresses[type eq "work"].country':
             updates.country_code = op.value;
+            break;
+          case 'addresses[type eq "work"].region':
+            updates.region = op.value;
             break;
           case 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department':
             updates.department = op.value;

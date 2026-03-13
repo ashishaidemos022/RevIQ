@@ -77,11 +77,13 @@ export async function POST(request: NextRequest) {
       `${payload.name?.givenName || ''} ${payload.name?.familyName || ''}`.trim();
     const role = mapOktaGroupToRole(payload.groups);
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
+    const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
     const managerId = enterprise?.manager?.value;
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const managerEmail = enterprise?.manager?.email || null;
+    const region = payload.addresses?.[0]?.region || null;
+    const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
 
     // Create user
@@ -92,6 +94,7 @@ export async function POST(request: NextRequest) {
         email,
         full_name: fullName,
         role,
+        region,
         department,
         title,
         country_code: countryCode,
@@ -178,11 +181,13 @@ export async function PUT(request: NextRequest) {
     const role = mapOktaGroupToRole(payload.groups);
     const isActive = payload.active !== false;
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
+    const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
     const managerId = enterprise?.manager?.value;
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const managerEmail = enterprise?.manager?.email || null;
+    const region = payload.addresses?.[0]?.region || null;
+    const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
 
     // Update user
@@ -193,6 +198,7 @@ export async function PUT(request: NextRequest) {
         full_name: fullName,
         role,
         is_active: isActive,
+        region,
         department,
         title,
         country_code: countryCode,

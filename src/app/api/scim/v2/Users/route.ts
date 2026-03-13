@@ -112,12 +112,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Create hierarchy record if manager specified
-    if (managerId) {
-      const { data: manager } = await db
-        .from('users')
-        .select('id')
-        .eq('okta_id', managerId)
-        .single();
+    // Look up manager by email first (most reliable), then by okta_id
+    if (managerId || managerEmail) {
+      let managerRecord = null;
+      if (managerEmail) {
+        const { data } = await db.from('users').select('id').eq('email', managerEmail).single();
+        managerRecord = data;
+      }
+      if (!managerRecord && managerId) {
+        const { data } = await db.from('users').select('id').eq('okta_id', managerId).single();
+        managerRecord = data;
+      }
+      const manager = managerRecord;
 
       if (manager) {
         await db.from('user_hierarchy').insert({
@@ -218,13 +224,18 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Handle manager change
-    if (managerId) {
-      const { data: manager } = await db
-        .from('users')
-        .select('id')
-        .eq('okta_id', managerId)
-        .single();
+    // Handle manager change — look up by email first, then okta_id
+    if (managerId || managerEmail) {
+      let managerRecord = null;
+      if (managerEmail) {
+        const { data } = await db.from('users').select('id').eq('email', managerEmail).single();
+        managerRecord = data;
+      }
+      if (!managerRecord && managerId) {
+        const { data } = await db.from('users').select('id').eq('okta_id', managerId).single();
+        managerRecord = data;
+      }
+      const manager = managerRecord;
 
       if (manager) {
         // End-date current hierarchy

@@ -119,13 +119,18 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       }, { status: 404 });
     }
 
-    // Handle manager hierarchy change
-    if (managerId) {
-      const { data: manager } = await db
-        .from('users')
-        .select('id')
-        .eq('okta_id', managerId)
-        .single();
+    // Handle manager hierarchy change — look up by email first, then okta_id
+    if (managerId || managerEmail) {
+      let managerRecord = null;
+      if (managerEmail) {
+        const { data } = await db.from('users').select('id').eq('email', managerEmail).single();
+        managerRecord = data;
+      }
+      if (!managerRecord && managerId) {
+        const { data } = await db.from('users').select('id').eq('okta_id', managerId).single();
+        managerRecord = data;
+      }
+      const manager = managerRecord;
 
       if (manager) {
         const today = new Date().toISOString().split('T')[0];

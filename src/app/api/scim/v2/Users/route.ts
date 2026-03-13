@@ -75,15 +75,15 @@ export async function POST(request: NextRequest) {
     const email = payload.emails?.[0]?.value || payload.userName;
     const fullName = payload.displayName ||
       `${payload.name?.givenName || ''} ${payload.name?.familyName || ''}`.trim();
-    const role = mapOktaGroupToRole(payload.groups);
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
     const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
+    const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
+    const role = validateRole(talkdeskExt?.role) || mapOktaGroupToRole(payload.groups);
+    const region = talkdeskExt?.region || null;
     const managerId = enterprise?.manager?.value;
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
-    const region = talkdeskExt?.region || null;
     const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
 
@@ -179,16 +179,16 @@ export async function PUT(request: NextRequest) {
     const email = payload.emails?.[0]?.value || payload.userName;
     const fullName = payload.displayName ||
       `${payload.name?.givenName || ''} ${payload.name?.familyName || ''}`.trim();
-    const role = mapOktaGroupToRole(payload.groups);
     const isActive = payload.active !== false;
     const enterprise = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
     const managerExt = payload['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
+    const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
+    const role = validateRole(talkdeskExt?.role) || mapOktaGroupToRole(payload.groups);
+    const region = talkdeskExt?.region || null;
     const managerId = enterprise?.manager?.value;
     const department = enterprise?.department || payload.department || null;
     const title = payload.title || null;
     const countryCode = payload.addresses?.[0]?.country || payload.locale || null;
-    const talkdeskExt = payload['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
-    const region = talkdeskExt?.region || null;
     const managerEmail = managerExt?.managerEmail || enterprise?.manager?.email || null;
     const managerDisplayName = enterprise?.manager?.displayName || null;
 
@@ -315,6 +315,14 @@ export async function PATCH(request: NextRequest) {
     console.error('SCIM PATCH error:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
+}
+
+const VALID_ROLES = ['ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+
+function validateRole(role?: string): string | null {
+  if (!role) return null;
+  const normalized = role.toLowerCase().trim();
+  return VALID_ROLES.includes(normalized) ? normalized : null;
 }
 
 function mapOktaGroupToRole(groups?: Array<{ display: string }>): string {

@@ -10,6 +10,14 @@ function validateScimToken(request: NextRequest): boolean {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+const VALID_ROLES = ['ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+
+function validateRole(role?: string): string | null {
+  if (!role) return null;
+  const normalized = role.toLowerCase().trim();
+  return VALID_ROLES.includes(normalized) ? normalized : null;
+}
+
 function toScimUser(user: Record<string, unknown>) {
   return {
     schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
@@ -185,6 +193,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           if (op.value.addresses?.[0]?.country) updates.country_code = op.value.addresses[0].country;
           const tdExt = op.value['urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User'];
           if (tdExt?.region) updates.region = tdExt.region;
+          if (tdExt?.role) { const r = validateRole(tdExt.role); if (r) updates.role = r; }
           const ent = op.value['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'];
           const mgrExt = op.value['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email'];
           if (ent?.department) updates.department = ent.department;
@@ -219,6 +228,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
             break;
           case 'urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:region':
             updates.region = op.value;
+            break;
+          case 'urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:role':
+            { const r = validateRole(op.value); if (r) updates.role = r; }
             break;
           case 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department':
             updates.department = op.value;

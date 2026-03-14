@@ -71,7 +71,7 @@ export interface Opportunity {
   name: string;
   stage: string;
   amount: number | null;
-  arr: number | null;
+  acv: number | null;
   close_date: string | null;
   is_closed_won: boolean;
   is_closed_lost: boolean;

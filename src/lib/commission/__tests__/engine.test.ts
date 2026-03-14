@@ -100,7 +100,7 @@ describe('calculateCommission', () => {
     expect(result.commission_amount).toBe(5000);
   });
 
-  it('returns 0 for zero ARR', () => {
+  it('returns 0 for zero ACV', () => {
     const result = calculateCommission(0, 0.10, 1.0);
     expect(result.commission_amount).toBe(0);
   });

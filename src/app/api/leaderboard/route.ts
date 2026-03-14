@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     if (board === 'revenue') {
       let query = db
         .from('opportunities')
-        .select('owner_user_id, arr')
+        .select('owner_user_id, acv')
         .eq('is_closed_won', true)
         .in('owner_user_id', aeIds);
       if (startStr) query = query.gte('close_date', startStr);
@@ -66,11 +66,11 @@ export async function GET(request: NextRequest) {
       const { data: opps } = await query;
 
       // Aggregate per AE
-      const aeData: Record<string, { arr: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; arr: number | null }) => {
+      const aeData: Record<string, { acv: number; deals: number }> = {};
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null }) => {
         const id = o.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { arr: 0, deals: 0 };
-        aeData[id].arr += o.arr || 0;
+        if (!aeData[id]) aeData[id] = { acv: 0, deals: 0 };
+        aeData[id].acv += o.acv || 0;
         aeData[id].deals++;
       });
 
@@ -89,17 +89,17 @@ export async function GET(request: NextRequest) {
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { arr: 0, deals: 0 };
+        const data = aeData[ae.id] || { acv: 0, deals: 0 };
         const quota = quotaMap[ae.id] || 0;
         entries.push({
           rank: 0,
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
-          primary_metric: data.arr,
+          primary_metric: data.acv,
           secondary_metrics: {
             deals_closed: data.deals,
-            quota_attainment: quota > 0 ? (data.arr / quota) * 100 : 0,
+            quota_attainment: quota > 0 ? (data.acv / quota) * 100 : 0,
           },
           is_current_user: ae.id === user.user_id,
         });
@@ -109,33 +109,33 @@ export async function GET(request: NextRequest) {
     } else if (board === 'pipeline') {
       let query = db
         .from('opportunities')
-        .select('owner_user_id, arr, probability')
+        .select('owner_user_id, acv, probability')
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false)
         .in('owner_user_id', aeIds);
       const { data: opps } = await query;
 
-      const aeData: Record<string, { arr: number; weighted: number; deals: number }> = {};
+      const aeData: Record<string, { acv: number; weighted: number; deals: number }> = {};
       (opps || []).forEach((o: { owner_user_id: string | null; arr: number | null; probability: number | null }) => {
         const id = o.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { arr: 0, weighted: 0, deals: 0 };
-        aeData[id].arr += o.arr || 0;
-        aeData[id].weighted += (o.arr || 0) * ((o.probability || 0) / 100);
+        if (!aeData[id]) aeData[id] = { acv: 0, weighted: 0, deals: 0 };
+        aeData[id].acv += o.acv || 0;
+        aeData[id].weighted += (o.acv || 0) * ((o.probability || 0) / 100);
         aeData[id].deals++;
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { arr: 0, weighted: 0, deals: 0 };
+        const data = aeData[ae.id] || { acv: 0, weighted: 0, deals: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
-          primary_metric: data.arr,
+          primary_metric: data.acv,
           secondary_metrics: {
             weighted_pipeline: data.weighted,
             open_deals: data.deals,
-            avg_deal_size: data.deals > 0 ? data.arr / data.deals : 0,
+            avg_deal_size: data.deals > 0 ? data.acv / data.deals : 0,
           },
           is_current_user: ae.id === user.user_id,
         });
@@ -145,15 +145,15 @@ export async function GET(request: NextRequest) {
     } else if (board === 'pilots') {
       let query = db
         .from('opportunities')
-        .select('owner_user_id, arr, is_closed_won, paid_pilot_start_date, close_date')
+        .select('owner_user_id, acv, is_closed_won, paid_pilot_start_date, close_date')
         .eq('is_paid_pilot', true)
         .in('owner_user_id', aeIds);
       const { data: opps } = await query;
 
-      const aeData: Record<string, { active: number; arr: number; converted: number; total: number; totalDuration: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; arr: number | null; is_closed_won: boolean; paid_pilot_start_date: string | null; close_date: string | null }) => {
+      const aeData: Record<string, { active: number; acv: number; converted: number; total: number; totalDuration: number }> = {};
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; is_closed_won: boolean; paid_pilot_start_date: string | null; close_date: string | null }) => {
         const id = o.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { active: 0, arr: 0, converted: 0, total: 0, totalDuration: 0 };
+        if (!aeData[id]) aeData[id] = { active: 0, acv: 0, converted: 0, total: 0, totalDuration: 0 };
         aeData[id].total++;
         if (o.is_closed_won) {
           aeData[id].converted++;
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
         }
         if (!o.is_closed_won) {
           aeData[id].active++;
-          aeData[id].arr += o.arr || 0;
+          aeData[id].acv += o.acv || 0;
         }
       });
 
@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
           region: ae.region,
           primary_metric: data.active,
           secondary_metrics: {
-            pilot_arr: data.arr,
+            pilot_arr: data.acv,
             conversion_rate: data.total > 0 ? (data.converted / data.total) * 100 : 0,
             avg_duration: data.converted > 0 ? Math.round(data.totalDuration / data.converted) : 0,
           },

@@ -79,7 +79,7 @@ function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
         <span>Rank</span>
         <span className="col-span-2">AE Name</span>
         <span>Region</span>
-        <span className="text-right">ARR Closed</span>
+        <span className="text-right">ACV Closed</span>
         <span className="text-right">Deals</span>
         <span className="text-right">Attainment %</span>
       </div>
@@ -113,7 +113,7 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
       <div className="grid grid-cols-7 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
         <span>Rank</span>
         <span className="col-span-2">AE Name</span>
-        <span className="text-right">Pipeline ARR</span>
+        <span className="text-right">Pipeline ACV</span>
         <span className="text-right">Weighted</span>
         <span className="text-right">Deals</span>
         <span className="text-right">Avg Size</span>
@@ -149,7 +149,7 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
         <span>Rank</span>
         <span className="col-span-2">AE Name</span>
         <span className="text-right">Active Pilots</span>
-        <span className="text-right">Pilot ARR</span>
+        <span className="text-right">Pilot ACV</span>
         <span className="text-right">Conv. Rate</span>
         <span className="text-right">Avg Duration</span>
       </div>
@@ -168,7 +168,7 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
             {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
           </span>
           <span className="text-right font-medium">{e.primary_metric}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.pilot_arr || 0)}</span>
+          <span className="text-right">{formatCurrency(e.secondary_metrics.pilot_acv || 0)}</span>
           <span className="text-right">{(e.secondary_metrics.conversion_rate || 0).toFixed(1)}%</span>
           <span className="text-right">{e.secondary_metrics.avg_duration || 0}d</span>
         </div>

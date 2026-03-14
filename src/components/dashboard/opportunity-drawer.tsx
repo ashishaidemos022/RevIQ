@@ -93,8 +93,8 @@ export function OpportunityDrawer({
                 </p>
               </div>
               <div>
-                <p className="text-muted-foreground">ARR</p>
-                <p className="font-medium">{formatCurrency(opp.arr)}</p>
+                <p className="text-muted-foreground">ACV</p>
+                <p className="font-medium">{formatCurrency(opp.acv)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Amount</p>

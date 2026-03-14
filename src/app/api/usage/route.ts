@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       // Get linked opportunities
       const { data: opps } = await db
         .from('opportunities')
-        .select('id, name, stage, arr, close_date, is_closed_won, is_closed_lost')
+        .select('id, name, stage, acv, close_date, is_closed_won, is_closed_lost')
         .eq('account_id', accountId)
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false)
@@ -80,18 +80,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Get linked ARR per account
-    let arrQuery = db
+    let acvQuery = db
       .from('opportunities')
-      .select('account_id, arr')
+      .select('account_id, acv')
       .eq('is_closed_won', true)
       .in('account_id', accountIds);
-    const { data: arrData } = await arrQuery;
+    const { data: acvData } = await acvQuery;
 
     // Aggregate
-    const arrMap: Record<string, number> = {};
-    (arrData || []).forEach((o: { account_id: string | null; arr: number | null }) => {
+    const acvMap: Record<string, number> = {};
+    (acvData || []).forEach((o: { account_id: string | null; acv: number | null }) => {
       if (o.account_id) {
-        arrMap[o.account_id] = (arrMap[o.account_id] || 0) + (o.arr || 0);
+        acvMap[o.account_id] = (acvMap[o.account_id] || 0) + (o.acv || 0);
       }
     });
 
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     const enrichedAccounts = (accounts || []).map((a) => ({
       ...a,
-      linked_arr: arrMap[a.id] || 0,
+      linked_acv: acvMap[a.id] || 0,
       usage: usageMap[a.id] || {},
       last_updated: Object.values(usageMap[a.id] || {}).reduce(
         (latest: string, u: { date: string }) => (u.date > latest ? u.date : latest),

@@ -11,11 +11,11 @@ import {
 } from "recharts";
 import { Opportunity } from "@/types";
 
-interface ArrByMonthChartProps {
+interface AcvByMonthChartProps {
   opportunities: Opportunity[];
 }
 
-export function ArrByMonthChart({ opportunities }: ArrByMonthChartProps) {
+export function AcvByMonthChart({ opportunities }: AcvByMonthChartProps) {
   const data = useMemo(() => {
     const months: Record<string, number> = {};
     const now = new Date();
@@ -36,7 +36,7 @@ export function ArrByMonthChart({ opportunities }: ArrByMonthChartProps) {
         const d = new Date(o.close_date!);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         if (key in months) {
-          months[key] += o.arr || 0;
+          months[key] += o.acv || 0;
         }
       });
 
@@ -44,7 +44,7 @@ export function ArrByMonthChart({ opportunities }: ArrByMonthChartProps) {
       .filter(([key]) => !key.startsWith("_label_"))
       .map(([key, value]) => ({
         month: (months as Record<string, unknown>)[`_label_${key}`] as string,
-        arr: value,
+        acv: value,
       }));
   }, [opportunities]);
 
@@ -65,7 +65,7 @@ export function ArrByMonthChart({ opportunities }: ArrByMonthChartProps) {
             }).format(Number(val))
           }
         />
-        <Bar dataKey="arr" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="acv" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

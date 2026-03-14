@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const { data: aes } = await usersQuery;
     if (!aes || aes.length === 0) {
-      return NextResponse.json({ data: { aes: [], summary: { arrClosedQTD: 0, avgAttainment: 0, activePilots: 0, activitiesQTD: 0 } } });
+      return NextResponse.json({ data: { aes: [], summary: { acvClosedQTD: 0, avgAttainment: 0, activePilots: 0, activitiesQTD: 0 } } });
     }
 
     const aeIds = aes.map(ae => ae.id);
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     // Get opportunities for all AEs
     const { data: allOpps } = await db
       .from('opportunities')
-      .select('owner_user_id, arr, is_closed_won, is_closed_lost, is_paid_pilot, close_date')
+      .select('owner_user_id, acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date')
       .in('owner_user_id', aeIds);
 
     // Get quotas
@@ -100,18 +100,18 @@ export async function GET(request: NextRequest) {
         o.is_closed_won && o.close_date && o.close_date >= fyStartStr && o.close_date <= fyEndStr
       );
 
-      const arrClosedQTD = closedWonQTD.reduce((s: number, o: { arr: number | null }) => s + (o.arr || 0), 0);
-      const arrClosedYTD = closedWonYTD.reduce((s: number, o: { arr: number | null }) => s + (o.arr || 0), 0);
+      const acvClosedQTD = closedWonQTD.reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
+      const acvClosedYTD = closedWonYTD.reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
       const quota = quotaMap[ae.id] || 0;
-      const attainment = quota > 0 ? (arrClosedYTD / quota) * 100 : 0;
+      const attainment = quota > 0 ? (acvClosedYTD / quota) * 100 : 0;
       const activePilots = aeOpps.filter((o: { is_paid_pilot: boolean; is_closed_won: boolean; is_closed_lost: boolean }) =>
         o.is_paid_pilot && !o.is_closed_won && !o.is_closed_lost
       ).length;
 
       return {
         ...ae,
-        arr_closed_qtd: arrClosedQTD,
-        arr_closed_ytd: arrClosedYTD,
+        acv_closed_qtd: acvClosedQTD,
+        acv_closed_ytd: acvClosedYTD,
         annual_quota: quota,
         attainment,
         active_pilots: activePilots,
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Team summary
-    const totalArrQTD = aeData.reduce((s, ae) => s + ae.arr_closed_qtd, 0);
+    const totalAcvQTD = aeData.reduce((s, ae) => s + ae.acv_closed_qtd, 0);
     const avgAttainment = aeData.length > 0
       ? aeData.reduce((s, ae) => s + ae.attainment, 0) / aeData.length
       : 0;
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       data: {
         aes: aeData,
         summary: {
-          arrClosedQTD: totalArrQTD,
+          acvClosedQTD: totalAcvQTD,
           avgAttainment,
           activePilots: totalPilots,
           activitiesQTD: totalActivities,

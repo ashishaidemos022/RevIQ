@@ -32,7 +32,7 @@ interface AccountUsage {
   name: string;
   owner_user_id: string | null;
   users?: { id: string; full_name: string };
-  linked_arr: number;
+  linked_acv: number;
   usage: Record<string, { count: number; date: string }>;
   last_updated: string;
 }
@@ -56,7 +56,7 @@ interface AccountDetail {
     id: string;
     name: string;
     stage: string;
-    arr: number | null;
+    acv: number | null;
     close_date: string | null;
   }>;
 }
@@ -117,9 +117,9 @@ export default function UsagePage() {
           (row.users as { full_name: string } | undefined)?.full_name || "—",
       },
       {
-        key: "linked_arr",
-        header: "Linked ARR",
-        render: (row) => formatCurrency(row.linked_arr as number),
+        key: "linked_acv",
+        header: "Linked ACV",
+        render: (row) => formatCurrency(row.linked_acv as number),
       },
     ];
 
@@ -256,7 +256,7 @@ export default function UsagePage() {
                           <span className="font-medium">{opp.name}</span>
                           <div className="flex items-center gap-3">
                             <Badge variant="secondary">{opp.stage}</Badge>
-                            <span>{opp.arr ? formatCurrency(opp.arr) : "—"}</span>
+                            <span>{opp.acv ? formatCurrency(opp.acv) : "—"}</span>
                           </div>
                         </div>
                       ))}

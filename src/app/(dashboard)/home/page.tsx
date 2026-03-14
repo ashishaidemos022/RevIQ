@@ -16,7 +16,7 @@ import { DataTable, Column } from "@/components/dashboard/data-table";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
-import { ArrByMonthChart } from "@/components/charts/arr-by-month";
+import { AcvByMonthChart } from "@/components/charts/arr-by-month";
 import { PipelineByStageChart } from "@/components/charts/pipeline-by-stage";
 import { QuotaGauge } from "@/components/charts/quota-gauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,8 +72,8 @@ export default function HomePage() {
       (o) => o.is_closed_won && o.close_date && inYear(o.close_date)
     );
 
-    const arrClosedQTD = closedWonQTD.reduce((s, o) => s + (o.arr || 0), 0);
-    const arrClosedYTD = closedWonYTD.reduce((s, o) => s + (o.arr || 0), 0);
+    const acvClosedQTD = closedWonQTD.reduce((s, o) => s + (o.acv || 0), 0);
+    const acvClosedYTD = closedWonYTD.reduce((s, o) => s + (o.acv || 0), 0);
     const dealsClosedQTD = closedWonQTD.length;
 
     const commissionEarnedQTD = commissions
@@ -88,12 +88,12 @@ export default function HomePage() {
       (q) => q.fiscal_quarter === null || q.fiscal_quarter === undefined
     );
     const quotaAttainment = annualQuota
-      ? (arrClosedYTD / annualQuota.quota_amount) * 100
+      ? (acvClosedYTD / annualQuota.quota_amount) * 100
       : 0;
 
     return {
-      arrClosedQTD,
-      arrClosedYTD,
+      acvClosedQTD,
+      acvClosedYTD,
       dealsClosedQTD,
       commissionEarnedQTD,
       commissionProjectedQTD,
@@ -132,15 +132,15 @@ export default function HomePage() {
       ),
     },
     {
-      key: "arr",
-      header: "ARR",
+      key: "acv",
+      header: "ACV",
       render: (row) =>
-        row.arr
+        row.acv
           ? new Intl.NumberFormat("en-US", {
               style: "currency",
               currency: "USD",
               maximumFractionDigits: 0,
-            }).format(row.arr as number)
+            }).format(row.acv as number)
           : "—",
     },
     { key: "close_date", header: "Close Date" },
@@ -167,13 +167,13 @@ export default function HomePage() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard
-          label="ARR Closed QTD"
-          value={kpis?.arrClosedQTD || 0}
+          label="ACV Closed QTD"
+          value={kpis?.acvClosedQTD || 0}
           format="currency"
         />
         <KpiCard
-          label="ARR Closed YTD"
-          value={kpis?.arrClosedYTD || 0}
+          label="ACV Closed YTD"
+          value={kpis?.acvClosedYTD || 0}
           format="currency"
         />
         <KpiCard
@@ -201,10 +201,10 @@ export default function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">ARR by Month</CardTitle>
+            <CardTitle className="text-sm font-medium">ACV by Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <ArrByMonthChart opportunities={oppsData?.data || []} />
+            <AcvByMonthChart opportunities={oppsData?.data || []} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">

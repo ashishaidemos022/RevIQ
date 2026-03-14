@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       fiscalYear: number;
       fiscalQuarter: number;
       label: string;
-      arrClosed: number;
+      acvClosed: number;
       dealsClosed: number;
       quotaAttainment: number;
       activePilots: number;
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       // Closed-won opportunities in quarter
       let oppsQuery = db
         .from('opportunities')
-        .select('arr, is_paid_pilot, is_closed_won')
+        .select('acv, is_paid_pilot, is_closed_won')
         .eq('is_closed_won', true)
         .gte('close_date', startStr)
         .lte('close_date', endStr);
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       else if (!scope.allAccess) oppsQuery = oppsQuery.in('owner_user_id', scope.userIds);
       const { data: closedOpps } = await oppsQuery;
 
-      const arrClosed = (closedOpps || []).reduce((s: number, o: { arr: number | null }) => s + (o.arr || 0), 0);
+      const acvClosed = (closedOpps || []).reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
       const dealsClosed = (closedOpps || []).length;
 
       // Active pilots at quarter end
@@ -114,31 +114,31 @@ export async function GET(request: NextRequest) {
       );
 
       // Get YTD ARR for attainment (all quarters in same FY up to current quarter)
-      let ytdArrClosed = 0;
+      let ytdAcvClosed = 0;
       for (let qi = 1; qi <= q; qi++) {
         const qiStart = getQuarterStartDate(fy, qi);
         const qiEnd = getQuarterEndDate(fy, qi);
         let ytdQuery = db
           .from('opportunities')
-          .select('arr')
+          .select('acv')
           .eq('is_closed_won', true)
           .gte('close_date', qiStart.toISOString().split('T')[0])
           .lte('close_date', qiEnd.toISOString().split('T')[0]);
         if (ownerId) ytdQuery = ytdQuery.eq('owner_user_id', ownerId);
         else if (!scope.allAccess) ytdQuery = ytdQuery.in('owner_user_id', scope.userIds);
         const { data: ytdOpps } = await ytdQuery;
-        ytdArrClosed += (ytdOpps || []).reduce(
-          (s: number, o: { arr: number | null }) => s + (o.arr || 0), 0
+        ytdAcvClosed += (ytdOpps || []).reduce(
+          (s: number, o: { acv: number | null }) => s + (o.acv || 0), 0
         );
       }
 
-      const quotaAttainment = totalQuota > 0 ? (ytdArrClosed / totalQuota) * 100 : 0;
+      const quotaAttainment = totalQuota > 0 ? (ytdAcvClosed / totalQuota) * 100 : 0;
 
       results[label] = {
         fiscalYear: fy,
         fiscalQuarter: q,
         label,
-        arrClosed,
+        acvClosed,
         dealsClosed,
         quotaAttainment,
         activePilots,

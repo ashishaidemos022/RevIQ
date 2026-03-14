@@ -111,17 +111,20 @@ Access control is enforced **exclusively at the Next.js API layer**. Supabase ha
 
 ### Backend & Database
 - **Database:** Supabase (PostgreSQL only — used purely as a managed Postgres database)
-- **Auth:** Handled entirely in Next.js backend via Okta OIDC JWT validation — Supabase Auth is NOT used
-- **User Provisioning:** Okta SCIM → custom `/api/scim` endpoint in Next.js → Supabase `users` table
-- **Session Management:** Next.js manages sessions via signed cookies or app-issued JWTs (e.g., using `next-auth` with Okta provider or `jose` for JWT validation)
+- **Supabase Project ID:** `oafnglneavvvsvvybfbv`
+- **Auth:** Handled entirely in Next.js backend via **Okta SAML 2.0** — Supabase Auth is NOT used
+- **SAML Library:** `@node-saml/node-saml` — validates SAML assertions server-side
+- **User Provisioning:** Okta SCIM 2.0 → custom `/api/scim/v2` endpoint in Next.js → Supabase `users` table
+- **Session Management:** Next.js manages sessions via signed JWT cookies using `jose` library (`src/lib/auth/session.ts`)
 - **API Layer:** Next.js API routes (Supabase Edge Functions not used)
 - **Database Access:** All Supabase queries run server-side using the Supabase **service role key** — never exposed to the client
 - **Access Control:** Enforced exclusively at the Next.js API layer — Supabase RLS is not used
+- **Component Library:** shadcn/ui built on **Base UI** (`@base-ui/react`), NOT Radix — uses `render` prop instead of `asChild` for component composition
 
 ### External Integrations
 | System | Purpose | Method |
 |--------|---------|--------|
-| **Okta** | SSO Authentication | OIDC / SAML 2.0 |
+| **Okta** | SSO Authentication | **SAML 2.0** (not OIDC) via `@node-saml/node-saml` |
 | **Okta SCIM** | Automated user provisioning & deprovisioning | SCIM 2.0 → custom `/api/scim/v2` endpoint in Next.js |
 | **Salesforce** | Accounts, Opportunities, Activities, Authorization | MCP (Model Context Protocol) |
 | **Looker** | Product usage data per account | Looker API (direct, server-side) |
@@ -185,43 +188,80 @@ Supabase's native SSO and SCIM features are **not used**. Supabase serves purely
 User Browser
     │
     ▼
-Okta (OIDC login / SCIM push)
+Okta (SAML 2.0 login / SCIM push)
     │
     ▼
 Next.js Backend
-  ├─ Validates Okta JWT (via next-auth or jose)
-  ├─ Manages user sessions (signed cookies / app JWT)
-  ├─ Exposes /api/scim endpoint for Okta SCIM provisioning
+  ├─ Validates SAML assertions via @node-saml/node-saml
+  ├─ Manages user sessions (signed JWT cookies via jose)
+  ├─ Exposes /api/scim/v2 endpoint for Okta SCIM provisioning
   └─ All Supabase queries via service role key (server-side only)
     │
     ▼
 Supabase (PostgreSQL — data storage only)
 ```
 
-### Authentication Flow
-1. User navigates to TD RevenueIQ
-2. Next.js redirects to Okta for OIDC login
-3. Okta returns a signed JWT containing user identity and group membership
-4. Next.js backend validates the JWT using Okta's public keys (via `next-auth` Okta provider or `jose`)
-5. Next.js checks if the user exists in the Supabase `users` table — creates a record if not (JIT)
-6. Next.js issues a session cookie (or app-level JWT) scoped to the user's role and id
-7. All subsequent API requests are authenticated via this session — Supabase never handles auth directly
+### Authentication Flow (SAML 2.0)
+1. User navigates to TD RevenueIQ → clicks "Sign in with Okta"
+2. Next.js (`/api/auth/saml/login`) generates a SAML AuthnRequest and redirects to Okta
+3. Okta authenticates the user and POSTs a signed SAML assertion to `/api/auth/saml/callback`
+4. Next.js validates the SAML assertion using `@node-saml/node-saml` with the Okta IdP certificate
+5. Okta's NameID (emailAddress format) is used as the primary user identifier
+6. Next.js looks up the user: first by `okta_id`, then by `email` (to match SCIM-provisioned users whose `okta_id` is the Okta user ID, not the email)
+7. If no user found, JIT provisioning creates a new user record
+8. Next.js issues a signed JWT session cookie (8-hour expiry) via `jose`
+9. All redirects from the SAML callback use **HTTP 303** (not 302) to force GET on redirect
+
+> **IMPORTANT:** Okta's SAML assertion does NOT include AttributeStatements by default. The NameID (email) is the only guaranteed field. Custom attributes (role, full_name) must be configured in Okta's SAML app attribute statements, or are populated via SCIM provisioning.
+
+### SAML Configuration
+- **Config file:** `src/lib/auth/saml-config.ts`
+- **SP Entity ID:** `td-revenueiq` (env: `SAML_SP_ENTITY_ID`)
+- **Callback URL:** `https://revenue-iq-opal.vercel.app/api/auth/saml/callback` (env: `OKTA_SAML_CALLBACK_URL`)
+- **IdP Certificate:** stored in `OKTA_SAML_CERT` env var
+- **Okta Issuer:** `http://www.okta.com/exk10y26aq97Zg4eM698`
+
+### SAML Routes
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/auth/saml/login` | GET | Generates AuthnRequest, redirects to Okta |
+| `/api/auth/saml/callback` | POST | Receives SAML assertion from Okta, validates, creates session |
+| `/api/auth/saml/metadata` | GET | Returns SP metadata XML |
 
 ### User Provisioning via Okta SCIM
-- Okta SCIM pushes user creates, updates, and deactivations to a custom **`/api/scim/v2`** endpoint in Next.js
-- This endpoint is a lightweight SCIM 2.0 receiver that writes directly to the Supabase `users` and `user_hierarchy` tables
-- SCIM maps Okta groups → RevenueIQ roles (`ae`, `manager`, `avp`, `vp`, `cro`, `c_level`, `revops_ro`, `revops_rw`, `enterprise_ro`)
+- Okta SCIM pushes user creates, updates, and deactivations to custom **`/api/scim/v2`** endpoints in Next.js
+- SCIM bearer token authentication via `SCIM_BEARER_TOKEN` env var
+- Role is provisioned via a **custom SCIM schema extension** (not Okta groups)
 - Deprovisioned users are **soft-deleted** in Supabase (historical data preserved, `is_active = false`)
-- No Supabase Enterprise license required — SCIM is implemented entirely in Next.js application code
+
+### SCIM Routes
+| Route | Methods | Purpose |
+|-------|---------|---------|
+| `/api/scim/v2` | GET | ServiceProviderConfig (Okta connection test) |
+| `/api/scim/v2/Users` | GET, POST | List/search users, create user |
+| `/api/scim/v2/Users/[id]` | GET, PUT, PATCH | Get, full update, partial update individual user |
+
+### SCIM Custom Schema Extensions
+Okta sends user attributes across multiple SCIM schema namespaces:
+
+| Namespace | Attributes |
+|-----------|-----------|
+| `urn:ietf:params:scim:schemas:core:2.0:User` | `userName`, `displayName`, `title`, `emails`, `addresses` (includes `country`, but NOT `region`) |
+| `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User` | `department`, `employeeNumber`, `manager.value`, `manager.displayName` |
+| `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.email` | `managerEmail` (separate namespace from enterprise extension) |
+| `urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User` | `region` (custom — NOT from `addresses`) |
+| `urn:ietf:params:scim:schemas:extension:talkdesk:1.0:User:role` | `role` (custom — one of: `ae`, `manager`, `avp`, `vp`, `cro`, `c_level`, `revops_ro`, `revops_rw`, `enterprise_ro`) |
+
+> **CRITICAL:** Okta's manager `value` field contains a **Workday/HR system ID** (e.g., `7cc1250a952a...`), NOT the Okta user ID (`00u...`). The SCIM handler must look up managers by **email first** (`manager_email` field), then fall back to `okta_id`. Never rely solely on the manager `value` for hierarchy resolution.
 
 **Reporting Hierarchy via Okta Manager Attribute:**
-- The reporting hierarchy is constructed from the **`manager` attribute** on each Okta user profile — not from group membership
-- **Every Okta-provisioned user gets a hierarchy record** regardless of their role or title — AEs, Managers, AVPs, VPs, CRO, C-Level, RevOps, Enterprise App Group, ICs, and any future roles. The `user_hierarchy` table is a complete mirror of the Okta org, not just the sales org.
-- On every SCIM user create or update, the `/api/scim/v2` endpoint reads the `manager` attribute (Okta user ID of the user's manager) and writes the relationship into the `user_hierarchy` table as `user_id → manager_id`
-- Users with no manager attribute (e.g., the CEO or CRO at the root of the tree) are written to `users` with no corresponding `user_hierarchy` row — they are the root nodes
-- When a manager changes in Okta, Okta pushes a SCIM update and the `user_hierarchy` table is updated automatically — the old row is end-dated (`effective_to = today`) and a new row is inserted
-- On user deprovisioning, the `user_hierarchy` record is end-dated (`effective_to = today`) rather than deleted, preserving historical reporting relationships for commission and performance history
-- **Retry/queue mechanism required:** If a user is provisioned before their manager exists in Supabase (common in bulk imports), the SCIM handler must queue the hierarchy write and retry once the manager is provisioned. Log unresolved relationships to `sync_log` with a warning.
+- The reporting hierarchy is constructed from the **manager email** on each Okta user profile — not from group membership
+- **Every Okta-provisioned user gets a hierarchy record** regardless of their role or title
+- On every SCIM user create or update, the `/api/scim/v2` endpoint reads the manager info and resolves the manager by **email lookup** against the `users` table, then writes the relationship into `user_hierarchy` as `user_id → manager_id`
+- Users with no manager attribute (e.g., the CEO at the root of the tree) are written to `users` with no corresponding `user_hierarchy` row — they are the root nodes
+- When a manager changes in Okta, the `user_hierarchy` table is updated automatically — the old row is end-dated (`effective_to = today`) and a new row is inserted
+- On user deprovisioning, the `user_hierarchy` record is end-dated rather than deleted
+- If a user is provisioned before their manager exists in Supabase, a warning is logged to `sync_log`
 - Okta is the **single source of truth** for the reporting hierarchy
 
 ### Salesforce Authorization
@@ -240,7 +280,7 @@ Supabase (PostgreSQL — data storage only)
 A local admin account for development and debugging purposes, bypassing Okta entirely. This account must **never be accessible in production**.
 
 #### Behavior
-- Authenticates via a dedicated endpoint `/api/auth/dev-login` — completely separate from the Okta OIDC flow
+- Authenticates via a dedicated endpoint `/api/auth/dev-login` — completely separate from the Okta SAML flow
 - Grants `revops_rw` level access — full read + write across all data, all dashboards, all settings
 - Not provisioned via SCIM — exists only as a session construct, no entry in the `users` table required (or insert a seeded dev user row)
 - When logged in as dev admin, display a persistent **red "DEV ADMIN" banner** across the top of every page so it is always visually obvious during development
@@ -290,16 +330,21 @@ echo ".env.local" >> .gitignore
 
 #### `users`
 ```sql
-id                  uuid PRIMARY KEY
-okta_id             text UNIQUE NOT NULL
-email               text UNIQUE NOT NULL
-full_name           text NOT NULL
-role                text NOT NULL  -- ae | manager | avp | vp | cro | c_level | revops_ro | revops_rw | enterprise_ro
-salesforce_user_id  text           -- SF User ID for mapping
-region              text
-is_active           boolean DEFAULT true
-created_at          timestamptz DEFAULT now()
-updated_at          timestamptz DEFAULT now()
+id                    uuid PRIMARY KEY
+okta_id               text UNIQUE NOT NULL
+email                 text UNIQUE NOT NULL
+full_name             text NOT NULL
+role                  text NOT NULL  -- ae | manager | avp | vp | cro | c_level | revops_ro | revops_rw | enterprise_ro
+salesforce_user_id    text           -- SF User ID for mapping
+region                text           -- from custom SCIM extension (urn:...talkdesk:1.0:User), NOT from addresses
+department            text           -- from enterprise SCIM extension
+title                 text           -- from core SCIM schema
+country_code          text           -- from addresses[0].country
+manager_email         text           -- from custom SCIM extension (urn:...enterprise:2.0:User:manager.email)
+manager_display_name  text           -- from enterprise SCIM extension manager.displayName
+is_active             boolean DEFAULT true
+created_at            timestamptz DEFAULT now()
+updated_at            timestamptz DEFAULT now()
 ```
 
 #### `user_hierarchy`
@@ -346,7 +391,7 @@ owner_user_id             uuid REFERENCES users(id)
 name                      text NOT NULL
 stage                     text NOT NULL
 amount                    numeric(18,2)
-arr                       numeric(18,2)
+acv                       numeric(18,2)
 close_date                date
 is_closed_won             boolean DEFAULT false
 is_closed_lost            boolean DEFAULT false
@@ -413,10 +458,10 @@ user_id             uuid REFERENCES users(id)
 opportunity_id      uuid REFERENCES opportunities(id)
 fiscal_year         integer NOT NULL
 fiscal_quarter      integer NOT NULL
-base_amount         numeric(18,2)   -- from opportunity ARR
+base_amount         numeric(18,2)   -- from opportunity ACV
 usage_multiplier    numeric(6,4)    -- derived from Looker usage data
 commission_rate     numeric(6,4)    -- e.g., 0.08 for 8%
-commission_amount   numeric(18,2)   -- calculated: arr × rate × usage_multiplier
+commission_amount   numeric(18,2)   -- calculated: acv × rate × usage_multiplier
 calculation_date    timestamptz
 is_finalized        boolean DEFAULT false
 notes               text
@@ -508,7 +553,7 @@ created_at          timestamptz DEFAULT now()
 | SF Object | Fields to Sync | Destination Table |
 |-----------|---------------|-------------------|
 | `Account` | Id, Name, Industry, OwnerId, Region__c | `accounts` |
-| `Opportunity` | Id, Name, AccountId, OwnerId, StageName, Amount, ARR__c, CloseDate, IsClosed, IsWon, Pilot_Type__c, Pilot_Start_Date__c, Pilot_End_Date__c, ForecastCategory, Probability, Type, LastStageChangeDate | `opportunities` |
+| `Opportunity` | Id, Name, AccountId, OwnerId, StageName, Amount, ACV__c, CloseDate, IsClosed, IsWon, Pilot_Type__c, Pilot_Start_Date__c, Pilot_End_Date__c, ForecastCategory, Probability, Type, LastStageChangeDate | `opportunities` |
 | `Task` / `Event` | Id, WhoId, WhatId, OwnerId, Type, ActivityDate, Subject, Description | `activities` |
 | `User` | Id, Email, Name, UserRoleId | used for `users` mapping |
 
@@ -563,13 +608,13 @@ created_at          timestamptz DEFAULT now()
 
 ### Overview
 Commission is **calculated natively in RevenueIQ** using three inputs:
-1. Opportunity ARR (from Salesforce)
+1. Opportunity ACV (from Salesforce)
 2. Commission rate (manually configured per AE/period in RevenueIQ)
 3. Usage multiplier (derived from Looker usage data for the associated account)
 
 ### Commission Formula
 ```
-commission_amount = arr × commission_rate × usage_multiplier
+commission_amount = acv × commission_rate × usage_multiplier
 ```
 
 ### Commission Rate Configuration
@@ -589,7 +634,7 @@ commission_amount = arr × commission_rate × usage_multiplier
 
 ### Calculation Trigger
 - Commissions are recalculated automatically on every Looker sync
-- Commissions are also recalculated when an opportunity's ARR, stage, or close date changes
+- Commissions are also recalculated when an opportunity's ACV, stage, or close date changes
 - `is_finalized = false` until a Manager or CRO explicitly finalizes the period
 - **Finalized commissions are locked** — they cannot be recalculated or overwritten
 
@@ -654,20 +699,20 @@ Default landing page for all roles. AEs see only their own performance data. Man
 #### KPI Cards (top row)
 | Card | Metric | Description |
 |------|--------|-------------|
-| ARR Closed QTD | `sum(arr) WHERE is_closed_won AND close_date IN current_fiscal_quarter` | |
-| ARR Closed YTD | `sum(arr) WHERE is_closed_won AND close_date IN current_fiscal_year` | |
+| ACV Closed QTD | `sum(acv) WHERE is_closed_won AND close_date IN current_fiscal_quarter` | |
+| ACV Closed YTD | `sum(acv) WHERE is_closed_won AND close_date IN current_fiscal_year` | |
 | Deals Closed QTD | `count(*) WHERE is_closed_won AND close_date IN current_fiscal_quarter` | |
 | Commission Earned QTD | Sum of finalized `commission_amount` this fiscal quarter | |
 | Commission Projected QTD | Sum of unfinalized `commission_amount` this fiscal quarter | |
-| Quota Attainment % | `ARR Closed YTD ÷ Annual Quota × 100` | Shown as percentage with color indicator |
+| Quota Attainment % | `ACV Closed YTD ÷ Annual Quota × 100` | Shown as percentage with color indicator |
 
 #### Charts Section
-- **ARR by Month (Bar Chart):** Last 12 months, FY-aligned, closed-won ARR per fiscal month
-- **Pipeline by Stage (Horizontal Bar):** Current open opportunities grouped by stage, sized by ARR
+- **ACV by Month (Bar Chart):** Last 12 months, FY-aligned, closed-won ACV per fiscal month
+- **Pipeline by Stage (Horizontal Bar):** Current open opportunities grouped by stage, sized by ACV
 - **Quota Attainment Gauge (Radial):** % to annual quota — green ≥ 75%, amber 50–74%, red < 50%
 
 #### Recent Opportunities Table
-Columns: Account Name | Opportunity Name | Stage | ARR | Close Date | Paid Pilot | Last Activity Date
+Columns: Account Name | Opportunity Name | Stage | ACV | Close Date | Paid Pilot | Last Activity Date
 - Paginated (25 per page), sortable on all columns
 - Clicking a row opens the **Opportunity Detail Panel** (slide-out drawer)
 
@@ -696,14 +741,14 @@ Focused view of open pipeline health and deal progression.
 #### KPI Cards
 | Card | Description |
 |------|-------------|
-| Total Pipeline ARR | Sum of ARR on all open opportunities (matching filters) |
-| Weighted Pipeline ARR | Sum of ARR × Probability |
+| Total Pipeline ACV | Sum of ACV on all open opportunities (matching filters) |
+| Weighted Pipeline ACV | Sum of ACV × Probability |
 | Deals in Pipeline | Count of open opportunities |
-| Avg Deal Size | Total Pipeline ARR ÷ Deals in Pipeline |
+| Avg Deal Size | Total Pipeline ACV ÷ Deals in Pipeline |
 | Closing This Quarter | Count of open opps with close_date in current fiscal quarter |
 
 #### Pipeline by Stage Table
-Columns: Stage | # Deals | Total ARR | Weighted ARR | Avg Days in Stage
+Columns: Stage | # Deals | Total ACV | Weighted ACV | Avg Days in Stage
 - Clicking a stage row expands inline to show individual opportunities at that stage
 
 #### Open Opportunities Table
@@ -719,7 +764,7 @@ Filtered view of all opportunities where `is_paid_pilot = true`.
 | Card | Description |
 |------|-------------|
 | Active Pilots | Count of open paid pilot opportunities |
-| Total Pilot ARR | Sum of ARR on active pilot opportunities |
+| Total Pilot ACV | Sum of ACV on active pilot opportunities |
 | Pilot Conversion Rate | Closed-won pilots ÷ Total all-time pilots (for selected period) |
 | Avg Pilot Duration | Avg days between `paid_pilot_start_date` and `close_date` (converted pilots only) |
 | Expiring Within 30 Days | Count of pilots where `paid_pilot_end_date` ≤ today + 30 days AND not closed |
@@ -727,12 +772,12 @@ Filtered view of all opportunities where `is_paid_pilot = true`.
 #### Pilots at Risk Section (Amber Alert Panel)
 Displayed when any pilots have `paid_pilot_end_date` within 30 days and stage is not closed.
 
-Columns: Account | AE | ARR | Start Date | End Date | Days Remaining | Stage
+Columns: Account | AE | ACV | Start Date | End Date | Days Remaining | Stage
 - Rows sorted by Days Remaining (ascending)
 - Row background color: amber (≤ 30 days), red (≤ 7 days)
 
 #### All Pilots Table
-Columns: Account | AE | ARR | Pilot Start | Pilot End | Stage | Duration (days) | Status
+Columns: Account | AE | ACV | Pilot Start | Pilot End | Stage | Duration (days) | Status
 
 Status values:
 - **Active** — `is_paid_pilot = true`, not closed, end date in the future
@@ -790,7 +835,7 @@ Rows = Metrics | Columns = Q (current) | Q–1 | Q–2 | Q–3
 
 | Metric Row |
 |-----------|
-| ARR Closed |
+| ACV Closed |
 | Deals Closed |
 | Quota Attainment % |
 | Active Pilots (at quarter end) |
@@ -801,7 +846,7 @@ Rows = Metrics | Columns = Q (current) | Q–1 | Q–2 | Q–3
 - Delta indicators (▲▼) comparing each quarter to the prior quarter
 
 #### Trend Charts
-- **ARR Closed — Bar Chart** across 4 quarters with quota line overlay
+- **ACV Closed — Bar Chart** across 4 quarters with quota line overlay
 - **Activity Volume — Line Chart** across 4 quarters
 - **Quota Attainment % — Line Chart** across 4 quarters
 
@@ -816,13 +861,13 @@ Rows = Metrics | Columns = Q (current) | Q–1 | Q–2 | Q–3
 Allows managers to compare performance across all AEs within their org tree.
 
 #### Team Overview KPI Cards
-- Total ARR Closed (team, QTD)
+- Total ACV Closed (team, QTD)
 - Avg Quota Attainment % (team)
 - Total Active Pilots (team)
 - Total Activities QTD (team)
 
 #### AE Roster Table
-Columns: AE Name | Region | ARR Closed QTD | ARR Closed YTD | Annual Quota | Attainment % | Active Pilots | Activities QTD | Commission QTD
+Columns: AE Name | Region | ACV Closed QTD | ACV Closed YTD | Annual Quota | Attainment % | Active Pilots | Activities QTD | Commission QTD
 - Sortable by any column
 - Clicking an AE row opens a full AE detail page (all dashboards rendered from that AE's data perspective)
 - Color-code Attainment %: green ≥ 75%, amber 50–74%, red < 50%
@@ -949,27 +994,27 @@ The Leaderboard section contains **4 separate boards** accessed via horizontal t
 ---
 
 ### Board 1: Revenue Leaderboard
-**Primary Ranking Metric:** ARR Closed Won (QTD, default)
+**Primary Ranking Metric:** ACV Closed Won (QTD, default)
 
-Columns: Rank | AE Name | Region | ARR Closed | Deals Closed | Quota Attainment %
+Columns: Rank | AE Name | Region | ACV Closed | Deals Closed | Quota Attainment %
 
 Period Toggle: QTD / YTD / Custom Quarter
 
 ---
 
 ### Board 2: Pipeline Leaderboard
-**Primary Ranking Metric:** Total Open Pipeline ARR
+**Primary Ranking Metric:** Total Open Pipeline ACV
 
-Columns: Rank | AE Name | Region | Pipeline ARR | Weighted Pipeline | # Open Deals | Avg Deal Size
+Columns: Rank | AE Name | Region | Pipeline ACV | Weighted Pipeline | # Open Deals | Avg Deal Size
 
 Period Toggle: Current Quarter / All Open
 
 ---
 
 ### Board 3: Paid Pilots Leaderboard
-**Primary Ranking Metric:** Count of Active Pilots (secondary: Pilot ARR)
+**Primary Ranking Metric:** Count of Active Pilots (secondary: Pilot ACV)
 
-Columns: Rank | AE Name | Region | Active Pilots | Pilot ARR | Conversion Rate | Avg Duration (days)
+Columns: Rank | AE Name | Region | Active Pilots | Pilot ACV | Conversion Rate | Avg Duration (days)
 
 Period Toggle: QTD / YTD
 
@@ -998,7 +1043,7 @@ Period Toggle: MTD / QTD / YTD
 Dedicated top-level section surfacing Looker product usage data for all accounts and opportunities in the user's data scope.
 
 ### Account Usage Table (Default View)
-Columns: Account Name | AE Owner | Linked ARR | Navigator Interactions | Autopilot Interactions | [other product types] | Usage Trend (sparkline) | Last Updated
+Columns: Account Name | AE Owner | Linked ACV | Navigator Interactions | Autopilot Interactions | [other product types] | Usage Trend (sparkline) | Last Updated
 
 - Product type columns are dynamic — rendered based on distinct `product_type` values in `usage_metrics`
 
@@ -1007,7 +1052,7 @@ Columns: Account Name | AE Owner | Linked ARR | Navigator Interactions | Autopil
 
 ### Account Usage Detail Panel
 - Account header: Name, AE owner, Industry, Region
-- All linked open opportunities (with stage, ARR, close date)
+- All linked open opportunities (with stage, ACV, close date)
 - **Usage Over Time:** Line chart showing interaction counts per product type for last 12 months — one line per product type (Navigator, Autopilot, etc.)
 - **Commission Multiplier:** Explicit display of the usage multiplier per product type (actual interactions ÷ target interactions), and the blended multiplier applied to the commission calculation
 - **Raw Interactions Table:** All `usage_metrics` records for this account, grouped by `product_type`, sorted by `metric_date` descending
@@ -1069,7 +1114,7 @@ Every data section must implement all three states — never leave blank white s
 ### Data Visualization Standards
 | Chart Type | Used For |
 |-----------|---------|
-| Bar Chart | ARR by period, activity counts, pipeline by stage |
+| Bar Chart | ACV by period, activity counts, pipeline by stage |
 | Line Chart | Trends over time (QoQ, MoM, usage over time) |
 | Radial / Gauge | Quota attainment % |
 | Stacked Bar | Activity breakdown by type |
@@ -1166,7 +1211,7 @@ quota_scope_id    uuid REFERENCES quota_scopes(id) NULL
 
 **v2 IC Dashboard will include:**
 - Quota attainment at their assigned scope level (group/region/geo/global)
-- Aggregate ARR, pipeline, and activity metrics for their assigned scope
+- Aggregate ACV, pipeline, and activity metrics for their assigned scope
 - Influenced opportunities — deals they are tagged on as a contributor
 - Their own commission calculation (based on scope-level attainment + Looker usage)
 - Separate IC leaderboard category (does not compete with AE individual deal leaderboards)
@@ -1179,7 +1224,7 @@ quota_scope_id    uuid REFERENCES quota_scopes(id) NULL
 - New role: `partner` — scoped to opportunities attributed to their organization only
 - Full attribution model: sourced / influenced / referred / fulfilled / resold
 - Up to **4 partners per opportunity** with weighted attribution splits (must sum to 100%)
-- Partner-facing dashboards: attributed pipeline, ARR, pilot count
+- Partner-facing dashboards: attributed pipeline, ACV, pilot count
 - Partner login via Okta (separate Okta app integration or dedicated group)
 - Partner tier management (gold / silver / bronze)
 

@@ -28,7 +28,7 @@ interface QuarterData {
   fiscalYear: number;
   fiscalQuarter: number;
   label: string;
-  arrClosed: number;
+  acvClosed: number;
   dealsClosed: number;
   quotaAttainment: number;
   activePilots: number;
@@ -38,7 +38,7 @@ interface QuarterData {
 }
 
 const METRICS = [
-  { key: "arrClosed", label: "ARR Closed", format: "currency" },
+  { key: "acvClosed", label: "ACV Closed", format: "currency" },
   { key: "dealsClosed", label: "Deals Closed", format: "number" },
   { key: "quotaAttainment", label: "Quota Attainment %", format: "percent" },
   { key: "activePilots", label: "Active Pilots", format: "number" },
@@ -190,7 +190,7 @@ export default function PerformancePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">ARR Closed</CardTitle>
+            <CardTitle className="text-sm font-medium">ACV Closed</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
@@ -204,7 +204,7 @@ export default function PerformancePage() {
                     )
                   }
                 />
-                <Bar dataKey="arrClosed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="acvClosed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

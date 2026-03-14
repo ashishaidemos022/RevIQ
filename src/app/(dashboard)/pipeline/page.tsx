@@ -89,13 +89,13 @@ export default function PipelinePage() {
 
   // KPIs
   const kpis = useMemo(() => {
-    const totalPipelineArr = filteredOpps.reduce((s, o) => s + (o.arr || 0), 0);
-    const weightedPipelineArr = filteredOpps.reduce(
-      (s, o) => s + (o.arr || 0) * ((o.probability || 0) / 100),
+    const totalPipelineAcv = filteredOpps.reduce((s, o) => s + (o.acv || 0), 0);
+    const weightedPipelineAcv = filteredOpps.reduce(
+      (s, o) => s + (o.acv || 0) * ((o.probability || 0) / 100),
       0
     );
     const dealCount = filteredOpps.length;
-    const avgDealSize = dealCount > 0 ? totalPipelineArr / dealCount : 0;
+    const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
 
     const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
     const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
@@ -105,21 +105,21 @@ export default function PipelinePage() {
       return d >= qStart && d <= qEnd;
     }).length;
 
-    return { totalPipelineArr, weightedPipelineArr, dealCount, avgDealSize, closingThisQuarter };
+    return { totalPipelineAcv, weightedPipelineAcv, dealCount, avgDealSize, closingThisQuarter };
   }, [filteredOpps, opps, fiscalYear, fiscalQuarter]);
 
   // Pipeline by stage aggregation
   const stageData = useMemo(() => {
     const stages: Record<
       string,
-      { deals: typeof filteredOpps; totalArr: number; weightedArr: number }
+      { deals: typeof filteredOpps; totalAcv: number; weightedAcv: number }
     > = {};
     filteredOpps.forEach((o) => {
       const stage = o.stage || "Other";
-      if (!stages[stage]) stages[stage] = { deals: [], totalArr: 0, weightedArr: 0 };
+      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, weightedAcv: 0 };
       stages[stage].deals.push(o);
-      stages[stage].totalArr += o.arr || 0;
-      stages[stage].weightedArr += (o.arr || 0) * ((o.probability || 0) / 100);
+      stages[stage].totalAcv += o.acv || 0;
+      stages[stage].weightedAcv += (o.acv || 0) * ((o.probability || 0) / 100);
     });
 
     const stageOrder = [...STAGES, "Other"];
@@ -132,8 +132,8 @@ export default function PipelinePage() {
       .map(([stage, data]) => ({
         stage,
         deals: data.deals.length,
-        totalArr: data.totalArr,
-        weightedArr: data.weightedArr,
+        totalAcv: data.totalAcv,
+        weightedAcv: data.weightedAcv,
         avgDaysInStage: Math.round(
           data.deals.reduce((s, o) => {
             if (!o.last_stage_changed_at) return s;
@@ -167,9 +167,9 @@ export default function PipelinePage() {
       render: (row) => <Badge variant="secondary">{row.stage as string}</Badge>,
     },
     {
-      key: "arr",
-      header: "ARR",
-      render: (row) => (row.arr ? formatCurrency(row.arr as number) : "—"),
+      key: "acv",
+      header: "ACV",
+      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
     },
     {
       key: "probability",
@@ -250,8 +250,8 @@ export default function PipelinePage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <KpiCard label="Total Pipeline ARR" value={kpis.totalPipelineArr} format="currency" />
-        <KpiCard label="Weighted Pipeline" value={kpis.weightedPipelineArr} format="currency" />
+        <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
+        <KpiCard label="Weighted Pipeline" value={kpis.weightedPipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
         <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />
@@ -283,8 +283,8 @@ export default function PipelinePage() {
               <div className="grid grid-cols-5 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
                 <span>Stage</span>
                 <span className="text-right"># Deals</span>
-                <span className="text-right">Total ARR</span>
-                <span className="text-right">Weighted ARR</span>
+                <span className="text-right">Total ACV</span>
+                <span className="text-right">Weighted ACV</span>
                 <span className="text-right">Avg Days in Stage</span>
               </div>
               {stageData.map((row) => (
@@ -304,8 +304,8 @@ export default function PipelinePage() {
                       {row.stage}
                     </span>
                     <span className="text-right">{row.deals}</span>
-                    <span className="text-right">{formatCurrency(row.totalArr)}</span>
-                    <span className="text-right">{formatCurrency(row.weightedArr)}</span>
+                    <span className="text-right">{formatCurrency(row.totalAcv)}</span>
+                    <span className="text-right">{formatCurrency(row.weightedAcv)}</span>
                     <span className="text-right">{row.avgDaysInStage}d</span>
                   </button>
                   {expandedStage === row.stage && (

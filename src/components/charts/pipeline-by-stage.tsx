@@ -34,7 +34,7 @@ export function PipelineByStageChart({
       .filter((o) => !o.is_closed_won && !o.is_closed_lost)
       .forEach((o) => {
         const stage = o.stage || "Other";
-        stageMap[stage] = (stageMap[stage] || 0) + (o.arr || 0);
+        stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
       });
 
     return Object.entries(stageMap)
@@ -43,7 +43,7 @@ export function PipelineByStageChart({
         const bi = STAGE_ORDER.indexOf(b);
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       })
-      .map(([stage, arr]) => ({ stage, arr }));
+      .map(([stage, acv]) => ({ stage, acv }));
   }, [opportunities]);
 
   const formatCurrency = (val: number) =>
@@ -64,7 +64,7 @@ export function PipelineByStageChart({
           }
         />
         <Bar
-          dataKey="arr"
+          dataKey="acv"
           fill="hsl(var(--chart-2))"
           radius={[0, 4, 4, 0]}
         />

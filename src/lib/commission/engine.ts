@@ -11,7 +11,7 @@ interface CommissionRateRecord {
 interface OpportunityForCommission {
   id: string;
   owner_user_id: string;
-  arr: number;
+  acv: number;
   type: string | null;
   account_id: string | null;
 }
@@ -115,10 +115,10 @@ export function calculateUsageMultiplier(
 /**
  * Calculate commission for a single opportunity.
  *
- * commission_amount = arr × commission_rate × usage_multiplier
+ * commission_amount = acv × commission_rate × usage_multiplier
  */
 export function calculateCommission(
-  arr: number,
+  acv: number,
   commissionRate: number,
   usageMultiplier: number
 ): {
@@ -127,9 +127,9 @@ export function calculateCommission(
   usage_multiplier: number;
   commission_amount: number;
 } {
-  const commissionAmount = arr * commissionRate * usageMultiplier;
+  const commissionAmount = acv * commissionRate * usageMultiplier;
   return {
-    base_amount: arr,
+    base_amount: acv,
     commission_rate: commissionRate,
     usage_multiplier: usageMultiplier,
     commission_amount: Math.round(commissionAmount * 100) / 100,
@@ -161,7 +161,7 @@ export async function recalculateCommissions(
   // Get non-finalized commissions
   let commQuery = db
     .from('commissions')
-    .select('*, opportunities(id, arr, type, account_id, owner_user_id)')
+    .select('*, opportunities(id, acv, type, account_id, owner_user_id)')
     .eq('fiscal_year', fiscalYear)
     .eq('fiscal_quarter', fiscalQuarter)
     .eq('is_finalized', false);
@@ -212,7 +212,7 @@ export async function recalculateCommissions(
         }
       }
 
-      const result = calculateCommission(opp.arr || 0, rate, usageMultiplier);
+      const result = calculateCommission(opp.acv || 0, rate, usageMultiplier);
 
       const { error: updateError } = await db
         .from('commissions')

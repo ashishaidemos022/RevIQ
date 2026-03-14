@@ -62,7 +62,7 @@ export default function PilotsPage() {
     const active = pilots.filter(
       (o) => !o.is_closed_won && !o.is_closed_lost && getPilotStatus(o as unknown as Record<string, unknown>) === "Active"
     );
-    const totalPilotArr = active.reduce((s, o) => s + (o.arr || 0), 0);
+    const totalPilotAcv = active.reduce((s, o) => s + (o.acv || 0), 0);
 
     const converted = pilots.filter((o) => o.is_closed_won);
     const conversionRate = pilots.length > 0 ? (converted.length / pilots.length) * 100 : 0;
@@ -86,7 +86,7 @@ export default function PilotsPage() {
 
     return {
       activePilots: active.length,
-      totalPilotArr,
+      totalPilotAcv,
       conversionRate,
       avgDuration,
       expiringCount,
@@ -130,9 +130,9 @@ export default function PilotsPage() {
       render: (row) => (row.users as { full_name: string } | undefined)?.full_name || "—",
     },
     {
-      key: "arr",
-      header: "ARR",
-      render: (row) => (row.arr ? formatCurrency(row.arr as number) : "—"),
+      key: "acv",
+      header: "ACV",
+      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
     },
     { key: "paid_pilot_start_date", header: "Start Date" },
     { key: "paid_pilot_end_date", header: "End Date" },
@@ -172,9 +172,9 @@ export default function PilotsPage() {
       render: (row) => (row.users as { full_name: string } | undefined)?.full_name || "—",
     },
     {
-      key: "arr",
-      header: "ARR",
-      render: (row) => (row.arr ? formatCurrency(row.arr as number) : "—"),
+      key: "acv",
+      header: "ACV",
+      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
     },
     { key: "paid_pilot_start_date", header: "Pilot Start" },
     { key: "paid_pilot_end_date", header: "Pilot End" },
@@ -216,7 +216,7 @@ export default function PilotsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard label="Active Pilots" value={kpis.activePilots} format="number" />
-        <KpiCard label="Total Pilot ARR" value={kpis.totalPilotArr} format="currency" />
+        <KpiCard label="Total Pilot ACV" value={kpis.totalPilotAcv} format="currency" />
         <KpiCard label="Conversion Rate" value={kpis.conversionRate} format="percent" />
         <KpiCard label="Avg Pilot Duration" value={`${kpis.avgDuration}d`} />
         <KpiCard label="Expiring Within 30 Days" value={kpis.expiringCount} format="number" />

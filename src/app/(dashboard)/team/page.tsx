@@ -20,8 +20,8 @@ interface AeData {
   email: string;
   role: string;
   region: string | null;
-  arr_closed_qtd: number;
-  arr_closed_ytd: number;
+  acv_closed_qtd: number;
+  acv_closed_ytd: number;
   annual_quota: number;
   attainment: number;
   active_pilots: number;
@@ -33,7 +33,7 @@ interface TeamResponse {
   data: {
     aes: AeData[];
     summary: {
-      arrClosedQTD: number;
+      acvClosedQTD: number;
       avgAttainment: number;
       activePilots: number;
       activitiesQTD: number;
@@ -71,14 +71,14 @@ export default function TeamPage() {
       render: (row) => (row.region as string) || "—",
     },
     {
-      key: "arr_closed_qtd",
-      header: "ARR Closed QTD",
-      render: (row) => formatCurrency(row.arr_closed_qtd as number),
+      key: "acv_closed_qtd",
+      header: "ACV Closed QTD",
+      render: (row) => formatCurrency(row.acv_closed_qtd as number),
     },
     {
-      key: "arr_closed_ytd",
-      header: "ARR Closed YTD",
-      render: (row) => formatCurrency(row.arr_closed_ytd as number),
+      key: "acv_closed_ytd",
+      header: "ACV Closed YTD",
+      render: (row) => formatCurrency(row.acv_closed_ytd as number),
     },
     {
       key: "annual_quota",
@@ -136,7 +136,7 @@ export default function TeamPage() {
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load team data" onRetry={refetch} />;
 
-  const { aes, summary } = teamData?.data || { aes: [], summary: { arrClosedQTD: 0, avgAttainment: 0, activePilots: 0, activitiesQTD: 0 } };
+  const { aes, summary } = teamData?.data || { aes: [], summary: { acvClosedQTD: 0, avgAttainment: 0, activePilots: 0, activitiesQTD: 0 } };
 
   return (
     <div className="space-y-6">
@@ -147,7 +147,7 @@ export default function TeamPage() {
 
       {/* Team KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total ARR Closed (QTD)" value={summary.arrClosedQTD} format="currency" />
+        <KpiCard label="Total ACV Closed (QTD)" value={summary.acvClosedQTD} format="currency" />
         <KpiCard label="Avg Quota Attainment" value={summary.avgAttainment} format="percent" />
         <KpiCard label="Total Active Pilots" value={summary.activePilots} format="number" />
         <KpiCard label="Total Activities QTD" value={summary.activitiesQTD} format="number" />

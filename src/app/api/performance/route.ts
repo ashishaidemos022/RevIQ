@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
         (s: number, q: { quota_amount: number }) => s + q.quota_amount, 0
       );
 
-      // Get YTD ARR for attainment (all quarters in same FY up to current quarter)
+      // Get YTD ACV for attainment (all quarters in same FY up to current quarter)
       let ytdAcvClosed = 0;
       for (let qi = 1; qi <= q; qi++) {
         const qiStart = getQuarterStartDate(fy, qi);

@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
       const { data: opps } = await query;
 
       const aeData: Record<string, { acv: number; weighted: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; arr: number | null; probability: number | null }) => {
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; probability: number | null }) => {
         const id = o.owner_user_id || '';
         if (!aeData[id]) aeData[id] = { acv: 0, weighted: 0, deals: 0 };
         aeData[id].acv += o.acv || 0;
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { active: 0, arr: 0, converted: 0, total: 0, totalDuration: 0 };
+        const data = aeData[ae.id] || { active: 0, acv: 0, converted: 0, total: 0, totalDuration: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
           region: ae.region,
           primary_metric: data.active,
           secondary_metrics: {
-            pilot_arr: data.acv,
+            pilot_acv: data.acv,
             conversion_rate: data.total > 0 ? (data.converted / data.total) * 100 : 0,
             avg_duration: data.converted > 0 ? Math.round(data.totalDuration / data.converted) : 0,
           },

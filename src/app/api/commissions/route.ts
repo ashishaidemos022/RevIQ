@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     let query = db
       .from('commissions')
-      .select('*, opportunities(id, name, arr, stage, account_id, accounts(name)), users!commissions_user_id_fkey(id, full_name, email)');
+      .select('*, opportunities(id, name, acv, stage, account_id, accounts(name)), users!commissions_user_id_fkey(id, full_name, email)');
 
     if (!scope.allAccess) {
       query = query.in('user_id', scope.userIds);

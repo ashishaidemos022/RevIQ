@@ -16,7 +16,7 @@ import { DataTable, Column } from "@/components/dashboard/data-table";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
-import { AcvByMonthChart } from "@/components/charts/arr-by-month";
+import { AcvByMonthChart } from "@/components/charts/acv-by-month";
 import { PipelineByStageChart } from "@/components/charts/pipeline-by-stage";
 import { QuotaGauge } from "@/components/charts/quota-gauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       usageData = metrics || [];
     }
 
-    // Get linked ARR per account
+    // Get linked ACV per account
     let acvQuery = db
       .from('opportunities')
       .select('account_id, acv')

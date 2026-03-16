@@ -3,6 +3,7 @@ import { SAML } from '@node-saml/node-saml';
 import { getSamlOptions } from '@/lib/auth/saml-config';
 import { createSession } from '@/lib/auth/session';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { logAuthEvent, extractRequestMeta } from '@/lib/auth/auth-log';
 import { UserRole } from '@/types';
 
 // Use 303 See Other for all redirects from this POST handler
@@ -12,11 +13,14 @@ function redirectWithGet(url: URL): NextResponse {
 }
 
 export async function POST(request: NextRequest) {
+  const reqMeta = extractRequestMeta(request);
+
   try {
     const formData = await request.formData();
     const samlResponse = formData.get('SAMLResponse') as string;
 
     if (!samlResponse) {
+      await logAuthEvent({ event_type: 'login_failed', auth_method: 'saml', failure_reason: 'no_saml_response', ...reqMeta });
       return redirectWithGet(
         new URL('/login?error=no_saml_response', process.env.NEXT_PUBLIC_APP_URL!)
       );
@@ -26,6 +30,7 @@ export async function POST(request: NextRequest) {
     const { profile } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
 
     if (!profile) {
+      await logAuthEvent({ event_type: 'login_failed', auth_method: 'saml', failure_reason: 'invalid_saml', ...reqMeta });
       return redirectWithGet(
         new URL('/login?error=invalid_saml', process.env.NEXT_PUBLIC_APP_URL!)
       );
@@ -38,6 +43,7 @@ export async function POST(request: NextRequest) {
     const role = (profile['role'] || 'ae') as UserRole;
 
     if (!oktaId || !email) {
+      await logAuthEvent({ event_type: 'login_failed', auth_method: 'saml', failure_reason: 'missing_attributes', ...reqMeta });
       return redirectWithGet(
         new URL('/login?error=missing_attributes', process.env.NEXT_PUBLIC_APP_URL!)
       );
@@ -77,11 +83,13 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('JIT provisioning error:', error);
+        await logAuthEvent({ event_type: 'login_failed', auth_method: 'saml', email, failure_reason: 'provisioning_failed', ...reqMeta });
         return redirectWithGet(
           new URL('/login?error=provisioning_failed', process.env.NEXT_PUBLIC_APP_URL!)
         );
       }
       user = newUser;
+      await logAuthEvent({ event_type: 'jit_provision', auth_method: 'saml', user_id: newUser!.id, email, ...reqMeta });
     }
 
     await createSession({
@@ -91,9 +99,12 @@ export async function POST(request: NextRequest) {
       full_name: user.full_name,
     });
 
+    await logAuthEvent({ event_type: 'login_success', auth_method: 'saml', user_id: user.id, email: user.email, ...reqMeta });
+
     return redirectWithGet(new URL('/home', process.env.NEXT_PUBLIC_APP_URL!));
   } catch (error) {
     console.error('SAML callback error:', error);
+    await logAuthEvent({ event_type: 'login_failed', auth_method: 'saml', failure_reason: 'saml_validation_failed', ...reqMeta });
     return redirectWithGet(
       new URL('/login?error=saml_validation_failed', process.env.NEXT_PUBLIC_APP_URL!)
     );

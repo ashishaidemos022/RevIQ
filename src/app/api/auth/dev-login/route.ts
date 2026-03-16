@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSession } from '@/lib/auth/session';
+import { logAuthEvent, extractRequestMeta } from '@/lib/auth/auth-log';
 import { timingSafeEqual } from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -11,6 +12,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 404 });
   }
 
+  const reqMeta = extractRequestMeta(request);
   const devPassword = process.env.DEV_ADMIN_PASSWORD;
   if (!devPassword) {
     return NextResponse.json(
@@ -31,6 +33,7 @@ export async function POST(request: NextRequest) {
     const a = Buffer.from(password);
     const b = Buffer.from(devPassword);
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      await logAuthEvent({ event_type: 'login_failed', auth_method: 'dev_login', email: 'admin@td.com', failure_reason: 'invalid_password', ...reqMeta });
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
 
@@ -40,6 +43,8 @@ export async function POST(request: NextRequest) {
       email: 'admin@td.com',
       full_name: 'Dev Admin',
     });
+
+    await logAuthEvent({ event_type: 'login_success', auth_method: 'dev_login', email: 'admin@td.com', ...reqMeta });
 
     return NextResponse.json({ success: true, redirect: '/home' });
   } catch {

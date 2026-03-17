@@ -50,23 +50,26 @@ const BOARDS = [
 
 const REVENUE_PERIODS = [
   { value: "qtd", label: "QTD" },
-  { value: "prev_qtd", label: "Previous Quarter" },
+  { value: "prev_qtd", label: "PQ" },
   { value: "ytd", label: "YTD" },
 ];
 
 const PIPELINE_PERIODS = [
   { value: "qtd", label: "Current Quarter" },
+  { value: "prev_qtd", label: "PQ" },
   { value: "all_open", label: "All Open" },
 ];
 
 const PILOT_PERIODS = [
   { value: "qtd", label: "QTD" },
+  { value: "prev_qtd", label: "PQ" },
   { value: "ytd", label: "YTD" },
 ];
 
 const ACTIVITY_PERIODS = [
   { value: "mtd", label: "MTD" },
   { value: "qtd", label: "QTD" },
+  { value: "prev_qtd", label: "PQ" },
   { value: "ytd", label: "YTD" },
 ];
 
@@ -218,7 +221,7 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
               <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.open_pilots || 0}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.avg_duration || 0}d</td>
-              <td className="py-2 px-2 text-right">{e.secondary_metrics.created_in_quarter || 0}</td>
+              <td className="py-2 px-2 text-right whitespace-nowrap">{e.secondary_labels?.created_in_quarter || "—"}</td>
             </tr>
           ))}
         </tbody>

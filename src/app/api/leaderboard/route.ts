@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
       manager_name: string | null;
       primary_metric: number;
       secondary_metrics: Record<string, number>;
+      secondary_labels?: Record<string, string>;
       is_current_user: boolean;
     }> = [];
 
@@ -255,6 +256,21 @@ export async function GET(request: NextRequest) {
 
       allAEs.forEach(ae => {
         const data = aeData[ae.id] || { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, quarterCounts: {} };
+
+        // Build "Created in Quarter" label, e.g. "FY27Q1: 2, FY27Q2: 1"
+        // Format quarter labels as FY27Q1 (compact) from "Q1 FY2027"
+        const quarterEntries = Object.entries(data.quarterCounts)
+          .map(([label, count]) => {
+            // Convert "Q1 FY2027" → "FY27Q1"
+            const match = label.match(/Q(\d)\s+FY(\d{4})/);
+            const compact = match ? `FY${match[2].slice(2)}Q${match[1]}` : label;
+            return { compact, count };
+          })
+          .sort((a, b) => b.compact.localeCompare(a.compact)); // newest first
+        const createdLabel = quarterEntries.length > 0
+          ? quarterEntries.map(q => q.count > 1 ? `${q.compact}: ${q.count}` : q.compact).join(', ')
+          : '—';
+
         entries.push({
           rank: 0,
           user_id: ae.id,
@@ -265,7 +281,9 @@ export async function GET(request: NextRequest) {
           secondary_metrics: {
             open_pilots: data.open,
             avg_duration: data.bookedCount > 0 ? Math.round(data.totalDuration / data.bookedCount) : 0,
-            created_in_quarter: data.quarterCounts[currentQLabel] || 0,
+          },
+          secondary_labels: {
+            created_in_quarter: createdLabel,
           },
           is_current_user: ae.id === user.user_id,
         });

@@ -36,6 +36,7 @@ export interface LeaderboardEntry {
   manager_name: string | null;
   primary_metric: number;
   secondary_metrics: Record<string, number>;
+  secondary_labels?: Record<string, string>;
   is_current_user: boolean;
 }
 

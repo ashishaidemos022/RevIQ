@@ -1,0 +1,23 @@
+-- TD RevenueIQ — Extend Opportunities with Salesforce custom fields
+
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS reporting_acv numeric(18,2);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS ai_acv numeric(18,2);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS pilot_status text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS parent_pilot_opportunity_sf_id text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS account_temperature text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS tcv numeric(18,2);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS csm_sf_id text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS record_type_name text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS sub_type text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS primary_quote_status text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS opportunity_source text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS created_by_sf_id text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS estimated_monthly_paygo numeric(18,2);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS estimated_acv_paygo numeric(18,2);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS cxa_committed_arr numeric(18,2);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS sales_led_renewal boolean;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS ae_forecast_category text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS mgmt_forecast_category text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS next_steps text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS manager_notes text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS sf_created_date timestamptz;

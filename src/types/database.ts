@@ -59,6 +59,31 @@ export interface Account {
   industry: string | null;
   region: string | null;
   owner_user_id: string | null;
+  sales_region: string | null;
+  account_arr: number | null;
+  customer_status: string | null;
+  sales_segment: string | null;
+  segment_industry: string | null;
+  td_industry: string | null;
+  td_subindustry: string | null;
+  customer_success_manager_sf_id: string | null;
+  sdr_sf_id: string | null;
+  exec_sponsor_sf_id: string | null;
+  parent_account_sf_id: string | null;
+  vmo_support_sf_id: string | null;
+  rv_account_sf_id: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export interface RVAccount {
+  id: string;
+  salesforce_rv_id: string;
+  name: string;
+  sf_account_id: string | null;
+  partner_subtype: string | null;
+  region: string | null;
+  owner_sf_id: string | null;
   last_synced_at: string | null;
   created_at: string;
 }
@@ -87,6 +112,27 @@ export interface Opportunity {
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;
+  reporting_acv: number | null;
+  ai_acv: number | null;
+  pilot_status: string | null;
+  parent_pilot_opportunity_sf_id: string | null;
+  account_temperature: string | null;
+  tcv: number | null;
+  csm_sf_id: string | null;
+  record_type_name: string | null;
+  sub_type: string | null;
+  primary_quote_status: string | null;
+  opportunity_source: string | null;
+  created_by_sf_id: string | null;
+  estimated_monthly_paygo: number | null;
+  estimated_acv_paygo: number | null;
+  cxa_committed_arr: number | null;
+  sales_led_renewal: boolean | null;
+  ae_forecast_category: string | null;
+  mgmt_forecast_category: string | null;
+  next_steps: string | null;
+  manager_notes: string | null;
+  sf_created_date: string | null;
 }
 
 export interface Activity {

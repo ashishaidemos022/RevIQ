@@ -223,14 +223,12 @@ export async function GET(request: NextRequest) {
         .in('owner_user_id', aeIds);
       const { data: opps } = await query;
 
-      // Track per-quarter booked counts for each AE
-      const aeData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; quarterCounts: Record<string, number> }> = {};
+      const aeData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; numCreated: number }> = {};
       (opps || []).forEach((o: { owner_user_id: string | null; is_closed_won: boolean; is_closed_lost: boolean; paid_pilot_start_date: string | null; close_date: string | null; sf_created_date: string | null; created_at: string }) => {
         const id = o.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, quarterCounts: {} };
+        if (!aeData[id]) aeData[id] = { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0 };
 
         if (o.is_closed_won) {
-          // Booked Paid Pilot = paid pilot + won
           aeData[id].booked++;
           aeData[id].bookedCount++;
           if (o.paid_pilot_start_date && o.close_date) {
@@ -239,38 +237,21 @@ export async function GET(request: NextRequest) {
             );
           }
         } else if (!o.is_closed_lost) {
-          // Open Pilot = paid pilot + not closed (won or lost)
           aeData[id].open++;
         }
 
-        // Track created-in-quarter using sf_created_date or fallback to created_at
-        const createdDate = o.sf_created_date || o.created_at;
+        // Count pilots created within the selected period
+        const createdDate = (o.sf_created_date || o.created_at || '').split('T')[0];
         if (createdDate) {
-          const qLabel = getQuarterLabel(new Date(createdDate));
-          aeData[id].quarterCounts[qLabel] = (aeData[id].quarterCounts[qLabel] || 0) + 1;
+          const inRange = (!startStr || createdDate >= startStr) && (!endStr || createdDate <= endStr);
+          if (inRange) {
+            aeData[id].numCreated++;
+          }
         }
       });
 
-      // Find the current fiscal quarter label for the "Created in Quarter" column
-      const currentQLabel = `Q${fiscalQuarter} FY${fiscalYear}`;
-
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, quarterCounts: {} };
-
-        // Build "Created in Quarter" label, e.g. "FY27Q1: 2, FY27Q2: 1"
-        // Format quarter labels as FY27Q1 (compact) from "Q1 FY2027"
-        const quarterEntries = Object.entries(data.quarterCounts)
-          .map(([label, count]) => {
-            // Convert "Q1 FY2027" → "FY27Q1"
-            const match = label.match(/Q(\d)\s+FY(\d{4})/);
-            const compact = match ? `FY${match[2].slice(2)}Q${match[1]}` : label;
-            return { compact, count };
-          })
-          .sort((a, b) => b.compact.localeCompare(a.compact)); // newest first
-        const createdLabel = quarterEntries.length > 0
-          ? quarterEntries.map(q => q.count > 1 ? `${q.compact}: ${q.count}` : q.compact).join(', ')
-          : '—';
-
+        const data = aeData[ae.id] || { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
@@ -281,9 +262,7 @@ export async function GET(request: NextRequest) {
           secondary_metrics: {
             open_pilots: data.open,
             avg_duration: data.bookedCount > 0 ? Math.round(data.totalDuration / data.bookedCount) : 0,
-          },
-          secondary_labels: {
-            created_in_quarter: createdLabel,
+            num_created: data.numCreated,
           },
           is_current_user: ae.id === user.user_id,
         });

@@ -199,7 +199,7 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <th className="text-right py-2 px-2 whitespace-nowrap">Booked Paid Pilots</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Open Pilots</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Avg Duration</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Created in Quarter</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Number Created</th>
           </tr>
         </thead>
         <tbody>
@@ -221,7 +221,7 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
               <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.open_pilots || 0}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.avg_duration || 0}d</td>
-              <td className="py-2 px-2 text-right whitespace-nowrap">{e.secondary_labels?.created_in_quarter || "—"}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.num_created || 0}</td>
             </tr>
           ))}
         </tbody>

@@ -137,6 +137,21 @@ export interface Opportunity {
   sf_created_date: string | null;
 }
 
+export interface OpportunitySplit {
+  id: string;
+  salesforce_split_id: string;
+  opportunity_id: string | null;
+  salesforce_opportunity_id: string;
+  split_owner_user_id: string | null;
+  split_owner_sf_id: string | null;
+  split_amount: number | null;
+  split_percentage: number | null;
+  split_type: string | null;
+  sf_created_date: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
 export interface Activity {
   id: string;
   salesforce_activity_id: string;

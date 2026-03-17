@@ -6,6 +6,7 @@ import { syncSalesforceUsers } from '@/lib/salesforce/sync-users';
 import { syncSalesforceAccounts } from '@/lib/salesforce/sync-accounts';
 import { syncRVAccounts } from '@/lib/salesforce/sync-rv-accounts';
 import { syncSalesforceOpportunities } from '@/lib/salesforce/sync-opportunities';
+import { syncOpportunitySplits } from '@/lib/salesforce/sync-opportunity-splits';
 
 export async function POST() {
   try {
@@ -42,14 +43,18 @@ export async function POST() {
       // Step 4: Sync Opportunities (requires accounts from step 2)
       const oppResult = await syncSalesforceOpportunities();
 
+      // Step 5: Sync Opportunity Splits (requires opportunities from step 4)
+      const splitResult = await syncOpportunitySplits();
+
       // TODO: Sync Activities
 
-      const totalRecords = userResult.matched + accountResult.synced + rvAccountResult.synced + oppResult.synced;
+      const totalRecords = userResult.matched + accountResult.synced + rvAccountResult.synced + oppResult.synced + splitResult.synced;
       const allErrors = [
         ...userResult.errors,
         ...accountResult.errors,
         ...rvAccountResult.errors,
         ...oppResult.errors,
+        ...splitResult.errors,
       ];
       const hasErrors = allErrors.length > 0;
 
@@ -71,6 +76,7 @@ export async function POST() {
         accounts: accountResult,
         rv_accounts: rvAccountResult,
         opportunities: oppResult,
+        opportunity_splits: splitResult,
       });
     } catch (syncError) {
       // Update sync log with failure

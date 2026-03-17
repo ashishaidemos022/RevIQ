@@ -1,10 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncSalesforceOpportunities } from '@/lib/salesforce/sync-opportunities';
+import { syncOpportunitySplits } from '@/lib/salesforce/sync-opportunity-splits';
 
 function verifyCronSecret(request: NextRequest): boolean {
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '');
-  return secret === process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    console.error('CRON_SECRET env var is not set');
+    return false;
+  }
+
+  if (!authHeader) {
+    console.error('No Authorization header received from cron request');
+    return false;
+  }
+
+  if (authHeader === `Bearer ${cronSecret}`) return true;
+  if (authHeader === cronSecret) return true;
+
+  console.error('CRON_SECRET mismatch — header length:', authHeader.length, 'expected length:', `Bearer ${cronSecret}`.length);
+  return false;
 }
 
 // Hourly sync: Opportunities
@@ -28,15 +45,20 @@ export async function GET(request: NextRequest) {
 
   try {
     const oppResult = await syncSalesforceOpportunities();
+    const splitResult = await syncOpportunitySplits();
+
+    const totalRecords = oppResult.synced + splitResult.synced;
+    const allErrors = [...oppResult.errors, ...splitResult.errors];
+    const hasErrors = allErrors.length > 0;
 
     if (logEntry) {
       await db
         .from('sync_log')
         .update({
           completed_at: new Date().toISOString(),
-          status: oppResult.errors.length > 0 ? 'partial' : 'success',
-          records_synced: oppResult.synced,
-          error_message: oppResult.errors.length > 0 ? JSON.stringify({ errors: oppResult.errors }) : null,
+          status: hasErrors ? 'partial' : 'success',
+          records_synced: totalRecords,
+          error_message: hasErrors ? JSON.stringify({ errors: allErrors }) : null,
         })
         .eq('id', logEntry.id);
     }
@@ -44,6 +66,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       message: 'Hourly opportunity sync completed',
       opportunities: oppResult,
+      opportunity_splits: splitResult,
     });
   } catch (error) {
     if (logEntry) {

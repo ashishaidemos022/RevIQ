@@ -5,8 +5,24 @@ import { syncSalesforceAccounts } from '@/lib/salesforce/sync-accounts';
 import { syncRVAccounts } from '@/lib/salesforce/sync-rv-accounts';
 
 function verifyCronSecret(request: NextRequest): boolean {
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '');
-  return secret === process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    console.error('CRON_SECRET env var is not set');
+    return false;
+  }
+
+  if (!authHeader) {
+    console.error('No Authorization header received from cron request');
+    return false;
+  }
+
+  if (authHeader === `Bearer ${cronSecret}`) return true;
+  if (authHeader === cronSecret) return true;
+
+  console.error('CRON_SECRET mismatch — header length:', authHeader.length, 'expected length:', `Bearer ${cronSecret}`.length);
+  return false;
 }
 
 // Daily sync: Users, Accounts, RV Accounts

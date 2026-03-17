@@ -35,11 +35,11 @@ export async function GET(request: NextRequest) {
       endStr = now.toISOString().split('T')[0];
     }
 
-    // Determine which AE roles to include
+    // Determine which AE roles to include (combined = both commercial + enterprise only)
     const aeRoles =
       aeType === 'commercial' ? ['commercial_ae'] :
       aeType === 'enterprise' ? ['enterprise_ae'] :
-      ['ae', 'commercial_ae', 'enterprise_ae']; // combined
+      ['commercial_ae', 'enterprise_ae']; // combined
 
     // Get AEs filtered by role type and optionally region
     let aeQuery = db

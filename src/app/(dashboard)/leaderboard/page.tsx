@@ -96,33 +96,35 @@ function RankBadge({ rank }: { rank: number }) {
 
 function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-7 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
+    <div className="space-y-1 overflow-x-auto">
+      <div className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto_auto] min-w-[700px] text-xs font-medium text-muted-foreground px-3 py-2 border-b gap-x-4">
         <span>Rank</span>
-        <span className="col-span-2">AE Name</span>
+        <span>AE Name</span>
+        <span>Manager</span>
         <span>Region</span>
+        <span className="text-right">ACV Closed w/ Multiplier</span>
         <span className="text-right">ACV Closed</span>
         <span className="text-right">Deals</span>
-        <span className="text-right">Attainment %</span>
       </div>
       {entries.map((e) => (
         <div
           key={e.user_id}
           className={cn(
-            "grid grid-cols-7 text-sm px-3 py-2.5 rounded-md items-center",
+            "grid grid-cols-[auto_1fr_1fr_auto_auto_auto_auto] min-w-[700px] text-sm px-3 py-2.5 rounded-md items-center gap-x-4",
             e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
             e.is_current_user && "bg-primary/5 border border-primary/20"
           )}
         >
           <span className="flex items-center gap-2"><RankBadge rank={e.rank} /></span>
-          <span className="col-span-2 font-medium">
+          <span className="font-medium truncate">
             {e.full_name}
             {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
           </span>
+          <span className="text-muted-foreground truncate">{e.manager_name || "—"}</span>
           <span className="text-muted-foreground">{e.region || "—"}</span>
           <span className="text-right font-medium">{formatCurrency(e.primary_metric)}</span>
+          <span className="text-right">{formatCurrency(e.secondary_metrics.acv_closed || 0)}</span>
           <span className="text-right">{e.secondary_metrics.deals_closed || 0}</span>
-          <span className="text-right">{(e.secondary_metrics.quota_attainment || 0).toFixed(1)}%</span>
         </div>
       ))}
     </div>
@@ -131,12 +133,15 @@ function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
 
 function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-7 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
+    <div className="space-y-1 overflow-x-auto">
+      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] min-w-[900px] text-xs font-medium text-muted-foreground px-3 py-2 border-b gap-x-4">
         <span>Rank</span>
-        <span className="col-span-2">AE Name</span>
-        <span className="text-right">Pipeline ACV</span>
-        <span className="text-right">Weighted</span>
+        <span>AE Name</span>
+        <span className="text-right">Total ACV Created</span>
+        <span className="text-right">AE Sourced</span>
+        <span className="text-right">Sales Sourced</span>
+        <span className="text-right">Mktg Sourced</span>
+        <span className="text-right">Partner Sourced</span>
         <span className="text-right">Deals</span>
         <span className="text-right">Avg Size</span>
       </div>
@@ -144,18 +149,21 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
         <div
           key={e.user_id}
           className={cn(
-            "grid grid-cols-7 text-sm px-3 py-2.5 rounded-md items-center",
+            "grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] min-w-[900px] text-sm px-3 py-2.5 rounded-md items-center gap-x-4",
             e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
             e.is_current_user && "bg-primary/5 border border-primary/20"
           )}
         >
           <span className="flex items-center gap-2"><RankBadge rank={e.rank} /></span>
-          <span className="col-span-2 font-medium">
+          <span className="font-medium truncate">
             {e.full_name}
             {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
           </span>
           <span className="text-right font-medium">{formatCurrency(e.primary_metric)}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.weighted_pipeline || 0)}</span>
+          <span className="text-right">{formatCurrency(e.secondary_metrics.ae_sourced || 0)}</span>
+          <span className="text-right">{formatCurrency(e.secondary_metrics.sales_sourced || 0)}</span>
+          <span className="text-right">{formatCurrency(e.secondary_metrics.marketing_sourced || 0)}</span>
+          <span className="text-right">{formatCurrency(e.secondary_metrics.partner_sourced || 0)}</span>
           <span className="text-right">{e.secondary_metrics.open_deals || 0}</span>
           <span className="text-right">{formatCurrency(e.secondary_metrics.avg_deal_size || 0)}</span>
         </div>

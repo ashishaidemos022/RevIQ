@@ -33,6 +33,7 @@ export interface LeaderboardEntry {
   user_id: string;
   full_name: string;
   region: string | null;
+  manager_name: string | null;
   primary_metric: number;
   secondary_metrics: Record<string, number>;
   is_current_user: boolean;

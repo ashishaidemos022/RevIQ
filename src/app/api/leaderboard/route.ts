@@ -90,11 +90,33 @@ export async function GET(request: NextRequest) {
     }
 
     const aeIds = allAEs.map(ae => ae.id);
+
+    // Resolve manager names for all AEs via user_hierarchy
+    const { data: hierarchyRows } = await db
+      .from('user_hierarchy')
+      .select('user_id, manager_id')
+      .in('user_id', aeIds)
+      .is('effective_to', null);
+
+    const managerIdSet = new Set((hierarchyRows ?? []).map(r => r.manager_id).filter(Boolean));
+    const { data: managerUsers } = managerIdSet.size > 0
+      ? await db.from('users').select('id, full_name').in('id', [...managerIdSet])
+      : { data: [] };
+
+    const managerNameMap: Record<string, string> = {};
+    (managerUsers ?? []).forEach((m: { id: string; full_name: string }) => { managerNameMap[m.id] = m.full_name; });
+
+    const aeManagerMap: Record<string, string | null> = {};
+    (hierarchyRows ?? []).forEach((r: { user_id: string; manager_id: string }) => {
+      aeManagerMap[r.user_id] = managerNameMap[r.manager_id] ?? null;
+    });
+
     const entries: Array<{
       rank: number;
       user_id: string;
       full_name: string;
       region: string | null;
+      manager_name: string | null;
       primary_metric: number;
       secondary_metrics: Record<string, number>;
       is_current_user: boolean;
@@ -119,32 +141,20 @@ export async function GET(request: NextRequest) {
         aeData[id].deals++;
       });
 
-      // Get quotas for attainment
-      const { data: quotas } = await db
-        .from('quotas')
-        .select('user_id, quota_amount')
-        .eq('fiscal_year', fiscalYear)
-        .eq('quota_type', 'revenue')
-        .is('fiscal_quarter', null)
-        .in('user_id', aeIds);
-
-      const quotaMap: Record<string, number> = {};
-      (quotas || []).forEach((q: { user_id: string; quota_amount: number }) => {
-        quotaMap[q.user_id] = q.quota_amount;
-      });
-
       allAEs.forEach(ae => {
         const data = aeData[ae.id] || { acv: 0, deals: 0 };
-        const quota = quotaMap[ae.id] || 0;
+        // For now, ACV with multiplier = same as ACV closed (multiplier logic TBD)
+        const acvWithMultiplier = data.acv;
         entries.push({
           rank: 0,
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
-          primary_metric: data.acv,
+          manager_name: aeManagerMap[ae.id] ?? null,
+          primary_metric: acvWithMultiplier,
           secondary_metrics: {
+            acv_closed: data.acv,
             deals_closed: data.deals,
-            quota_attainment: quota > 0 ? (data.acv / quota) * 100 : 0,
           },
           is_current_user: ae.id === user.user_id,
         });
@@ -154,33 +164,50 @@ export async function GET(request: NextRequest) {
     } else if (board === 'pipeline') {
       let query = db
         .from('opportunities')
-        .select('owner_user_id, acv, probability')
+        .select('owner_user_id, acv, opportunity_source')
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false)
+        .gt('acv', 0)
         .in('owner_user_id', aeIds);
       const { data: opps } = await query;
 
-      const aeData: Record<string, { acv: number; weighted: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; probability: number | null }) => {
+      const aeData: Record<string, { total: number; ae_sourced: number; sales_sourced: number; marketing_sourced: number; partner_sourced: number; deals: number }> = {};
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; opportunity_source: string | null }) => {
         const id = o.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { acv: 0, weighted: 0, deals: 0 };
-        aeData[id].acv += o.acv || 0;
-        aeData[id].weighted += (o.acv || 0) * ((o.probability || 0) / 100);
+        const acv = o.acv || 0;
+        if (!aeData[id]) aeData[id] = { total: 0, ae_sourced: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
+        aeData[id].total += acv;
         aeData[id].deals++;
+        // Categorize by opportunity source
+        const src = (o.opportunity_source || '').toLowerCase();
+        if (src.includes('ae') || src.includes('account executive')) {
+          aeData[id].ae_sourced += acv;
+        } else if (src.includes('marketing')) {
+          aeData[id].marketing_sourced += acv;
+        } else if (src.includes('partner') || src.includes('channel')) {
+          aeData[id].partner_sourced += acv;
+        } else {
+          // Default bucket: sales sourced (SDR, outbound, sales, etc.)
+          aeData[id].sales_sourced += acv;
+        }
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { acv: 0, weighted: 0, deals: 0 };
+        const data = aeData[ae.id] || { total: 0, ae_sourced: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
-          primary_metric: data.acv,
+          manager_name: aeManagerMap[ae.id] ?? null,
+          primary_metric: data.total,
           secondary_metrics: {
-            weighted_pipeline: data.weighted,
+            ae_sourced: data.ae_sourced,
+            sales_sourced: data.sales_sourced,
+            marketing_sourced: data.marketing_sourced,
+            partner_sourced: data.partner_sourced,
             open_deals: data.deals,
-            avg_deal_size: data.deals > 0 ? data.acv / data.deals : 0,
+            avg_deal_size: data.deals > 0 ? data.total / data.deals : 0,
           },
           is_current_user: ae.id === user.user_id,
         });
@@ -221,6 +248,7 @@ export async function GET(request: NextRequest) {
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
+          manager_name: aeManagerMap[ae.id] ?? null,
           primary_metric: data.active,
           secondary_metrics: {
             pilot_acv: data.acv,
@@ -257,6 +285,7 @@ export async function GET(request: NextRequest) {
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
+          manager_name: aeManagerMap[ae.id] ?? null,
           primary_metric: data.total,
           secondary_metrics: {
             calls: data.call,

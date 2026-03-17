@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
-
-const SYNC_ROLES = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_rw'];
+import { SYNC_ROLES } from '@/lib/constants';
 
 export async function POST() {
   try {

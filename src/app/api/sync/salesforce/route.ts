@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
+import { SYNC_ROLES } from '@/lib/constants';
 import { syncSalesforceUsers } from '@/lib/salesforce/sync-users';
 import { syncSalesforceAccounts } from '@/lib/salesforce/sync-accounts';
 import { syncRVAccounts } from '@/lib/salesforce/sync-rv-accounts';
 import { syncSalesforceOpportunities } from '@/lib/salesforce/sync-opportunities';
-
-const SYNC_ROLES = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_rw'];
 
 export async function POST() {
   try {

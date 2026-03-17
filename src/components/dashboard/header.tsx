@@ -2,6 +2,8 @@
 
 import { useAuthStore } from "@/stores/auth-store";
 import { useTheme } from "@/providers/theme-provider";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { SYNC_ROLES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -15,12 +17,48 @@ import {
 import { Sun, Moon, Bell, RefreshCw, LogOut } from "lucide-react";
 import { UserRole } from "@/types";
 
+function formatRelativeTime(dateStr: string | null): { text: string; stale: "ok" | "warn" | "error" } {
+  if (!dateStr) return { text: "Never", stale: "error" };
+
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = diff / (1000 * 60 * 60);
+
+  let text: string;
+  if (hours < 1) {
+    const mins = Math.floor(diff / (1000 * 60));
+    text = mins <= 1 ? "just now" : `${mins}m ago`;
+  } else if (hours < 24) {
+    text = `${Math.floor(hours)}h ago`;
+  } else {
+    const days = Math.floor(hours / 24);
+    text = `${days}d ago`;
+  }
+
+  const stale = hours < 24 ? "ok" : hours < 72 ? "warn" : "error";
+  return { text, stale };
+}
+
+const staleStyles = {
+  ok: "text-muted-foreground",
+  warn: "text-amber-500",
+  error: "text-red-500",
+};
+
 export function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { theme, toggleTheme } = useTheme();
   const isDevAdmin = user?.user_id === "dev-admin";
   const canSync = user && SYNC_ROLES.includes(user.role as UserRole);
+
+  const { data: lastSync } = useQuery({
+    queryKey: ["sync-last"],
+    queryFn: () => apiFetch<{ salesforce: string | null; looker: string | null }>("/api/sync/last"),
+    refetchInterval: 60_000,
+  });
+
+  const sf = formatRelativeTime(lastSync?.salesforce ?? null);
+  const looker = formatRelativeTime(lastSync?.looker ?? null);
 
   const initials = user?.full_name
     ?.split(" ")
@@ -43,10 +81,10 @@ export function Header() {
           </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground">
-          <span>SF: 1 hour ago</span>
+        <div className="hidden md:flex items-center gap-2 text-xs">
+          <span className={staleStyles[sf.stale]}>SF: {sf.text}</span>
           <span className="text-border">|</span>
-          <span>Looker: 1 hour ago</span>
+          <span className={staleStyles[looker.stale]}>Looker: {looker.text}</span>
         </div>
 
         <div className="flex items-center gap-2">

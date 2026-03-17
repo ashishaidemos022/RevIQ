@@ -17,7 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Trophy, Medal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Trophy, Medal, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeaderboardEntry } from "@/types";
 
@@ -43,6 +50,7 @@ const BOARDS = [
 
 const REVENUE_PERIODS = [
   { value: "qtd", label: "QTD" },
+  { value: "prev_qtd", label: "Previous Quarter" },
   { value: "ytd", label: "YTD" },
 ];
 
@@ -234,6 +242,22 @@ export default function LeaderboardPage() {
   const [period, setPeriod] = useState("qtd");
   const [aeType, setAeType] = useState("combined");
   const [region, setRegion] = useState("combined");
+  const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]);
+
+  // Fetch available managers
+  const { data: managersData } = useQuery({
+    queryKey: ["leaderboard-managers"],
+    queryFn: () =>
+      apiFetch<{ data: Array<{ id: string; full_name: string; region: string | null }> }>(
+        "/api/leaderboard/managers"
+      ),
+  });
+  const managers = managersData?.data || [];
+
+  // Build manager_ids param: empty = all managers (no filter)
+  const managerIdsParam = selectedManagerIds.length > 0 && selectedManagerIds.length < managers.length
+    ? selectedManagerIds.join(",")
+    : "";
 
   const {
     data,
@@ -241,20 +265,43 @@ export default function LeaderboardPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["leaderboard", board, period, aeType, region],
+    queryKey: ["leaderboard", board, period, aeType, region, managerIdsParam],
     queryFn: () =>
       apiFetch<{ data: LeaderboardEntry[] }>(
-        `/api/leaderboard?board=${board}&period=${period}&ae_type=${aeType}&region=${region}`
+        `/api/leaderboard?board=${board}&period=${period}&ae_type=${aeType}&region=${region}${managerIdsParam ? `&manager_ids=${managerIdsParam}` : ""}`
       ),
   });
 
   const entries = data?.data || [];
-
-  // Ensure current user is visible even if not in top results
-  const currentUserEntry = entries.find((e) => e.is_current_user);
   const visibleEntries = entries;
 
   const periods = getPeriods(board);
+
+  // When specific managers are selected, reset AE type and region to combined
+  const handleManagerToggle = (managerId: string) => {
+    setSelectedManagerIds((prev) => {
+      const next = prev.includes(managerId)
+        ? prev.filter((id) => id !== managerId)
+        : [...prev, managerId];
+      // If specific managers are now selected (not all), reset filters
+      if (next.length > 0 && next.length < managers.length) {
+        setAeType("combined");
+        setRegion("combined");
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllManagers = () => {
+    setSelectedManagerIds([]);
+  };
+
+  const isAllManagersSelected = selectedManagerIds.length === 0 || selectedManagerIds.length === managers.length;
+  const managerLabel = isAllManagersSelected
+    ? "All Managers"
+    : selectedManagerIds.length === 1
+      ? managers.find((m) => m.id === selectedManagerIds[0])?.full_name || "1 Manager"
+      : `${selectedManagerIds.length} Managers`;
 
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load leaderboard" onRetry={refetch} />;
@@ -281,7 +328,7 @@ export default function LeaderboardPage() {
           </Select>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
           <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
             {AE_TYPES.map((t) => (
               <Button
@@ -295,7 +342,7 @@ export default function LeaderboardPage() {
               </Button>
             ))}
           </div>
-          <div className="hidden sm:block w-px bg-border" />
+          <div className="hidden sm:block w-px h-6 bg-border" />
           <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
             {REGIONS.map((r) => (
               <Button
@@ -309,6 +356,34 @@ export default function LeaderboardPage() {
               </Button>
             ))}
           </div>
+          <div className="hidden sm:block w-px h-6 bg-border" />
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 h-7 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              {managerLabel}
+              <ChevronDown className="h-3 w-3 opacity-50" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuCheckboxItem
+                checked={isAllManagersSelected}
+                onCheckedChange={handleSelectAllManagers}
+              >
+                All Managers
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {managers.map((m) => (
+                <DropdownMenuCheckboxItem
+                  key={m.id}
+                  checked={selectedManagerIds.includes(m.id)}
+                  onCheckedChange={() => handleManagerToggle(m.id)}
+                >
+                  {m.full_name}
+                  {m.region && <span className="ml-auto text-xs text-muted-foreground">{m.region}</span>}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

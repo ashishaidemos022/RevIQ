@@ -11,9 +11,10 @@ export async function GET(request: NextRequest) {
     const url = request.nextUrl;
 
     const board = url.searchParams.get('board') || 'revenue'; // revenue | pipeline | pilots | activities
-    const period = url.searchParams.get('period') || 'qtd'; // qtd | ytd | mtd | all_open | custom
+    const period = url.searchParams.get('period') || 'qtd'; // qtd | ytd | mtd | prev_qtd | all_open | custom
     const aeType = url.searchParams.get('ae_type') || 'combined'; // combined | commercial | enterprise
     const region = url.searchParams.get('region') || 'combined'; // combined | AMER | EMEA | APAC
+    const managerIdsParam = url.searchParams.get('manager_ids'); // comma-separated manager user IDs, empty = all
     const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
 
     // Date range
@@ -23,6 +24,15 @@ export async function GET(request: NextRequest) {
     if (period === 'qtd') {
       const start = getQuarterStartDate(fiscalYear, fiscalQuarter);
       const end = getQuarterEndDate(fiscalYear, fiscalQuarter);
+      startStr = start.toISOString().split('T')[0];
+      endStr = end.toISOString().split('T')[0];
+    } else if (period === 'prev_qtd') {
+      // Previous fiscal quarter
+      let prevQ = fiscalQuarter - 1;
+      let prevFY = fiscalYear;
+      if (prevQ === 0) { prevQ = 4; prevFY--; }
+      const start = getQuarterStartDate(prevFY, prevQ);
+      const end = getQuarterEndDate(prevFY, prevQ);
       startStr = start.toISOString().split('T')[0];
       endStr = end.toISOString().split('T')[0];
     } else if (period === 'ytd') {
@@ -41,6 +51,20 @@ export async function GET(request: NextRequest) {
       aeType === 'enterprise' ? ['enterprise_ae'] :
       ['commercial_ae', 'enterprise_ae']; // combined
 
+    // If manager_ids provided, resolve their direct reports to filter AEs
+    let managerAeIds: string[] | null = null;
+    if (managerIdsParam) {
+      const managerIds = managerIdsParam.split(',').filter(Boolean);
+      if (managerIds.length > 0) {
+        const { data: hierarchyRows } = await db
+          .from('user_hierarchy')
+          .select('user_id')
+          .in('manager_id', managerIds)
+          .is('effective_to', null);
+        managerAeIds = (hierarchyRows ?? []).map(r => r.user_id);
+      }
+    }
+
     // Get AEs filtered by role type and optionally region
     let aeQuery = db
       .from('users')
@@ -50,6 +74,13 @@ export async function GET(request: NextRequest) {
 
     if (region !== 'combined') {
       aeQuery = aeQuery.eq('region', region);
+    }
+
+    if (managerAeIds !== null) {
+      if (managerAeIds.length === 0) {
+        return NextResponse.json({ data: [] });
+      }
+      aeQuery = aeQuery.in('id', managerAeIds);
     }
 
     const { data: allAEs } = await aeQuery;

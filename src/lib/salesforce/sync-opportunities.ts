@@ -61,7 +61,9 @@ export async function syncSalesforceOpportunities(): Promise<OpportunitySyncResu
     FROM Opportunity
     WHERE CloseDate >= 2025-02-01
     AND Record_Type_Name__c IN ('New Business', 'Amendment', 'Renewal')
-    AND StageName != 'Dead-Duplicate'`;
+    AND StageName != 'Dead-Duplicate'
+    AND (NOT Account.Name LIKE '%Test%')
+    AND Account.Sales_Region__c != 'Test Accounts'`;
 
   const query = conn.query<SalesforceOpportunity>(soql);
 
@@ -80,6 +82,7 @@ export async function syncSalesforceOpportunities(): Promise<OpportunitySyncResu
     errors: [],
   };
 
+
   // Build lookups: SF User ID → local user ID, SF Account ID → local account ID
   const { data: localUsers } = await db
     .from('users')
@@ -90,13 +93,28 @@ export async function syncSalesforceOpportunities(): Promise<OpportunitySyncResu
     (localUsers || []).map((u) => [u.salesforce_user_id, u.id])
   );
 
-  const { data: localAccounts } = await db
-    .from('accounts')
-    .select('id, salesforce_account_id');
+  // Paginate account fetch — Supabase defaults to 1,000 row limit
+  const accountMap = new Map<string, string>();
+  const pageSize = 1000;
+  let offset = 0;
+  let hasMore = true;
 
-  const accountMap = new Map(
-    (localAccounts || []).map((a) => [a.salesforce_account_id, a.id])
-  );
+  while (hasMore) {
+    const { data: page } = await db
+      .from('accounts')
+      .select('id, salesforce_account_id')
+      .range(offset, offset + pageSize - 1);
+
+    if (!page || page.length === 0) {
+      hasMore = false;
+    } else {
+      for (const a of page) {
+        accountMap.set(a.salesforce_account_id, a.id);
+      }
+      offset += page.length;
+      if (page.length < pageSize) hasMore = false;
+    }
+  }
 
   // Batch upsert
   const now = new Date().toISOString();

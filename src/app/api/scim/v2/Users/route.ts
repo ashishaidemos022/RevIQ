@@ -330,7 +330,7 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-const VALID_ROLES = ['ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+const VALID_ROLES = ['ae', 'commercial_ae', 'enterprise_ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
 function validateRole(role?: string): string | null {
   if (!role) return null;

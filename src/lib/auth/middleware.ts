@@ -46,8 +46,8 @@ export async function resolveDataScope(user: SessionUser): Promise<{
     return { allAccess: true, userIds: [] };
   }
 
-  // For AEs, only their own data
-  if (user.role === 'ae' && !override) {
+  // For AEs (all AE types), only their own data
+  if (['ae', 'commercial_ae', 'enterprise_ae'].includes(user.role) && !override) {
     return { allAccess: false, userIds: [user.user_id] };
   }
 

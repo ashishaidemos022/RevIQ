@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
 
     const board = url.searchParams.get('board') || 'revenue'; // revenue | pipeline | pilots | activities
     const period = url.searchParams.get('period') || 'qtd'; // qtd | ytd | mtd | all_open | custom
+    const aeType = url.searchParams.get('ae_type') || 'combined'; // combined | commercial | enterprise
+    const region = url.searchParams.get('region') || 'combined'; // combined | AMER | EMEA | APAC
     const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
 
     // Date range
@@ -33,12 +35,24 @@ export async function GET(request: NextRequest) {
       endStr = now.toISOString().split('T')[0];
     }
 
-    // Get all AEs (for leaderboard, all AEs are shown company-wide)
-    const { data: allAEs } = await db
+    // Determine which AE roles to include
+    const aeRoles =
+      aeType === 'commercial' ? ['commercial_ae'] :
+      aeType === 'enterprise' ? ['enterprise_ae'] :
+      ['ae', 'commercial_ae', 'enterprise_ae']; // combined
+
+    // Get AEs filtered by role type and optionally region
+    let aeQuery = db
       .from('users')
       .select('id, full_name, region')
-      .eq('role', 'ae')
+      .in('role', aeRoles)
       .eq('is_active', true);
+
+    if (region !== 'combined') {
+      aeQuery = aeQuery.eq('region', region);
+    }
+
+    const { data: allAEs } = await aeQuery;
 
     if (!allAEs || allAEs.length === 0) {
       return NextResponse.json({ data: [] });

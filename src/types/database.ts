@@ -1,5 +1,7 @@
 export type UserRole =
   | 'ae'
+  | 'commercial_ae'
+  | 'enterprise_ae'
   | 'manager'
   | 'avp'
   | 'vp'

@@ -16,9 +16,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Trophy, Medal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeaderboardEntry } from "@/types";
+
+const AE_TYPES = [
+  { value: "combined", label: "Combined" },
+  { value: "commercial", label: "Commercial AE" },
+  { value: "enterprise", label: "Enterprise AE" },
+] as const;
+
+const REGIONS = [
+  { value: "combined", label: "All Regions" },
+  { value: "AMER", label: "AMER" },
+  { value: "EMEA", label: "EMEA" },
+  { value: "APAC", label: "APAC" },
+] as const;
 
 const BOARDS = [
   { id: "revenue", label: "Revenue" },
@@ -218,6 +232,8 @@ export default function LeaderboardPage() {
   const user = useAuthStore((s) => s.user);
   const [board, setBoard] = useState("revenue");
   const [period, setPeriod] = useState("qtd");
+  const [aeType, setAeType] = useState("combined");
+  const [region, setRegion] = useState("combined");
 
   const {
     data,
@@ -225,10 +241,10 @@ export default function LeaderboardPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["leaderboard", board, period],
+    queryKey: ["leaderboard", board, period, aeType, region],
     queryFn: () =>
       apiFetch<{ data: LeaderboardEntry[] }>(
-        `/api/leaderboard?board=${board}&period=${period}`
+        `/api/leaderboard?board=${board}&period=${period}&ae_type=${aeType}&region=${region}`
       ),
   });
 
@@ -245,23 +261,55 @@ export default function LeaderboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Trophy className="h-6 w-6" />
-          Leaderboard
-        </h1>
-        <Select value={period} onValueChange={(v) => v && setPeriod(v)}>
-          <SelectTrigger className="w-[160px] h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {periods.map((p) => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.label}
-              </SelectItem>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Trophy className="h-6 w-6" />
+            Leaderboard
+          </h1>
+          <Select value={period} onValueChange={(v) => v && setPeriod(v)}>
+            <SelectTrigger className="w-[160px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {periods.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
+            {AE_TYPES.map((t) => (
+              <Button
+                key={t.value}
+                variant={aeType === t.value ? "default" : "ghost"}
+                size="sm"
+                className="text-xs h-7 px-3"
+                onClick={() => setAeType(t.value)}
+              >
+                {t.label}
+              </Button>
             ))}
-          </SelectContent>
-        </Select>
+          </div>
+          <div className="hidden sm:block w-px bg-border" />
+          <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
+            {REGIONS.map((r) => (
+              <Button
+                key={r.value}
+                variant={region === r.value ? "default" : "ghost"}
+                size="sm"
+                className="text-xs h-7 px-3"
+                onClick={() => setRegion(r.value)}
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <Tabs value={board} onValueChange={(v) => { setBoard(v); setPeriod(getPeriods(v)[0].value); }}>

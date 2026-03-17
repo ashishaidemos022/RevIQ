@@ -25,6 +25,7 @@ export const MOBILE_NAV_ITEMS = [
   { label: 'More', href: '/settings', icon: 'Menu' },
 ] as const;
 
+export const AE_ROLES: UserRole[] = ['ae', 'commercial_ae', 'enterprise_ae'];
 export const MANAGER_PLUS_ROLES: UserRole[] = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_rw'];
 export const SYNC_ROLES: UserRole[] = ['revops_rw'];
 export const QUOTA_WRITE_ROLES: UserRole[] = ['vp', 'cro', 'c_level', 'revops_rw'];

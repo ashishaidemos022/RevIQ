@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     let usersQuery = db
       .from('users')
       .select('id, full_name, email, role, region')
-      .eq('role', 'ae')
+      .in('role', ['ae', 'commercial_ae', 'enterprise_ae'])
       .eq('is_active', true);
 
     if (!scope.allAccess) {

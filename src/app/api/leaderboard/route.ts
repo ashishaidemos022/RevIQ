@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, handleAuthError } from '@/lib/auth/middleware';
-import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod } from '@/lib/fiscal';
+import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod, getQuarterLabel } from '@/lib/fiscal';
 
 export async function GET(request: NextRequest) {
   try {
@@ -217,43 +217,55 @@ export async function GET(request: NextRequest) {
     } else if (board === 'pilots') {
       let query = db
         .from('opportunities')
-        .select('owner_user_id, acv, is_closed_won, paid_pilot_start_date, close_date')
+        .select('owner_user_id, is_closed_won, is_closed_lost, paid_pilot_start_date, close_date, sf_created_date, created_at')
         .eq('is_paid_pilot', true)
         .in('owner_user_id', aeIds);
       const { data: opps } = await query;
 
-      const aeData: Record<string, { active: number; acv: number; converted: number; total: number; totalDuration: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; is_closed_won: boolean; paid_pilot_start_date: string | null; close_date: string | null }) => {
+      // Track per-quarter booked counts for each AE
+      const aeData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; quarterCounts: Record<string, number> }> = {};
+      (opps || []).forEach((o: { owner_user_id: string | null; is_closed_won: boolean; is_closed_lost: boolean; paid_pilot_start_date: string | null; close_date: string | null; sf_created_date: string | null; created_at: string }) => {
         const id = o.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { active: 0, acv: 0, converted: 0, total: 0, totalDuration: 0 };
-        aeData[id].total++;
+        if (!aeData[id]) aeData[id] = { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, quarterCounts: {} };
+
         if (o.is_closed_won) {
-          aeData[id].converted++;
+          // Booked Paid Pilot = paid pilot + won
+          aeData[id].booked++;
+          aeData[id].bookedCount++;
           if (o.paid_pilot_start_date && o.close_date) {
             aeData[id].totalDuration += Math.ceil(
               (new Date(o.close_date).getTime() - new Date(o.paid_pilot_start_date).getTime()) / (1000 * 60 * 60 * 24)
             );
           }
+        } else if (!o.is_closed_lost) {
+          // Open Pilot = paid pilot + not closed (won or lost)
+          aeData[id].open++;
         }
-        if (!o.is_closed_won) {
-          aeData[id].active++;
-          aeData[id].acv += o.acv || 0;
+
+        // Track created-in-quarter using sf_created_date or fallback to created_at
+        const createdDate = o.sf_created_date || o.created_at;
+        if (createdDate) {
+          const qLabel = getQuarterLabel(new Date(createdDate));
+          aeData[id].quarterCounts[qLabel] = (aeData[id].quarterCounts[qLabel] || 0) + 1;
         }
       });
 
+      // Find the current fiscal quarter label for the "Created in Quarter" column
+      const currentQLabel = `Q${fiscalQuarter} FY${fiscalYear}`;
+
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { active: 0, acv: 0, converted: 0, total: 0, totalDuration: 0 };
+        const data = aeData[ae.id] || { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, quarterCounts: {} };
         entries.push({
           rank: 0,
           user_id: ae.id,
           full_name: ae.full_name,
           region: ae.region,
           manager_name: aeManagerMap[ae.id] ?? null,
-          primary_metric: data.active,
+          primary_metric: data.booked,
           secondary_metrics: {
-            pilot_acv: data.acv,
-            conversion_rate: data.total > 0 ? (data.converted / data.total) * 100 : 0,
-            avg_duration: data.converted > 0 ? Math.round(data.totalDuration / data.converted) : 0,
+            open_pilots: data.open,
+            avg_duration: data.bookedCount > 0 ? Math.round(data.totalDuration / data.bookedCount) : 0,
+            created_in_quarter: data.quarterCounts[currentQLabel] || 0,
           },
           is_current_user: ae.id === user.user_id,
         });
@@ -269,17 +281,20 @@ export async function GET(request: NextRequest) {
       if (endStr) query = query.lte('activity_date', endStr);
       const { data: acts } = await query;
 
-      const aeData: Record<string, { total: number; call: number; email: number; meeting: number; demo: number }> = {};
+      const aeData: Record<string, { total: number; call: number; email: number; meeting: number; linkedin: number }> = {};
       (acts || []).forEach((a: { owner_user_id: string | null; activity_type: string }) => {
         const id = a.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { total: 0, call: 0, email: 0, meeting: 0, demo: 0 };
+        if (!aeData[id]) aeData[id] = { total: 0, call: 0, email: 0, meeting: 0, linkedin: 0 };
         aeData[id].total++;
-        const type = a.activity_type as 'call' | 'email' | 'meeting' | 'demo';
-        if (type in aeData[id]) aeData[id][type]++;
+        const type = a.activity_type?.toLowerCase();
+        if (type === 'call') aeData[id].call++;
+        else if (type === 'email') aeData[id].email++;
+        else if (type === 'meeting') aeData[id].meeting++;
+        else if (type === 'linkedin') aeData[id].linkedin++;
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { total: 0, call: 0, email: 0, meeting: 0, demo: 0 };
+        const data = aeData[ae.id] || { total: 0, call: 0, email: 0, meeting: 0, linkedin: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
@@ -291,7 +306,7 @@ export async function GET(request: NextRequest) {
             calls: data.call,
             emails: data.email,
             meetings: data.meeting,
-            demos: data.demo,
+            linkedin: data.linkedin,
           },
           is_current_user: ae.id === user.user_id,
         });

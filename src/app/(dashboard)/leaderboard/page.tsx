@@ -187,15 +187,16 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
 function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full">
+      <table className="w-full min-w-[700px]">
         <thead>
           <tr className="text-xs font-medium text-muted-foreground border-b">
             <th className="text-left py-2 px-2 w-12">Rank</th>
             <th className="text-left py-2 px-2">AE Name</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Active Pilots</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Pilot ACV</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Conv. Rate</th>
+            <th className="text-left py-2 px-2">Manager</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Booked Paid Pilots</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Open Pilots</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Avg Duration</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Created in Quarter</th>
           </tr>
         </thead>
         <tbody>
@@ -213,10 +214,11 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
                 {e.full_name}
                 {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
               </td>
+              <td className="py-2 px-2 text-muted-foreground">{e.manager_name || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>
-              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.pilot_acv || 0)}</td>
-              <td className="py-2 px-2 text-right">{(e.secondary_metrics.conversion_rate || 0).toFixed(1)}%</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.open_pilots || 0}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.avg_duration || 0}d</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.created_in_quarter || 0}</td>
             </tr>
           ))}
         </tbody>
@@ -228,16 +230,17 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
 function ActivitiesBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full">
+      <table className="w-full min-w-[650px]">
         <thead>
           <tr className="text-xs font-medium text-muted-foreground border-b">
             <th className="text-left py-2 px-2 w-12">Rank</th>
             <th className="text-left py-2 px-2">AE Name</th>
+            <th className="text-left py-2 px-2">Manager</th>
             <th className="text-right py-2 px-2">Total</th>
             <th className="text-right py-2 px-2">Calls</th>
             <th className="text-right py-2 px-2">Emails</th>
             <th className="text-right py-2 px-2">Meetings</th>
-            <th className="text-right py-2 px-2">Demos</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">LinkedIn Activity</th>
           </tr>
         </thead>
         <tbody>
@@ -255,11 +258,12 @@ function ActivitiesBoard({ entries }: { entries: LeaderboardEntry[] }) {
                 {e.full_name}
                 {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
               </td>
+              <td className="py-2 px-2 text-muted-foreground">{e.manager_name || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.calls || 0}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.emails || 0}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.meetings || 0}</td>
-              <td className="py-2 px-2 text-right">{e.secondary_metrics.demos || 0}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.linkedin || 0}</td>
             </tr>
           ))}
         </tbody>

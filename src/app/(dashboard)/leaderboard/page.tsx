@@ -96,150 +96,174 @@ function RankBadge({ rank }: { rank: number }) {
 
 function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
-    <div className="space-y-1 overflow-x-auto">
-      <div className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto_auto] min-w-[700px] text-xs font-medium text-muted-foreground px-3 py-2 border-b gap-x-4">
-        <span>Rank</span>
-        <span>AE Name</span>
-        <span>Manager</span>
-        <span>Region</span>
-        <span className="text-right">ACV Closed w/ Multiplier</span>
-        <span className="text-right">ACV Closed</span>
-        <span className="text-right">Deals</span>
-      </div>
-      {entries.map((e) => (
-        <div
-          key={e.user_id}
-          className={cn(
-            "grid grid-cols-[auto_1fr_1fr_auto_auto_auto_auto] min-w-[700px] text-sm px-3 py-2.5 rounded-md items-center gap-x-4",
-            e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
-            e.is_current_user && "bg-primary/5 border border-primary/20"
-          )}
-        >
-          <span className="flex items-center gap-2"><RankBadge rank={e.rank} /></span>
-          <span className="font-medium truncate">
-            {e.full_name}
-            {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
-          </span>
-          <span className="text-muted-foreground truncate">{e.manager_name || "—"}</span>
-          <span className="text-muted-foreground">{e.region || "—"}</span>
-          <span className="text-right font-medium">{formatCurrency(e.primary_metric)}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.acv_closed || 0)}</span>
-          <span className="text-right">{e.secondary_metrics.deals_closed || 0}</span>
-        </div>
-      ))}
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[750px]">
+        <thead>
+          <tr className="text-xs font-medium text-muted-foreground border-b">
+            <th className="text-left py-2 px-2 w-12">Rank</th>
+            <th className="text-left py-2 px-2">AE Name</th>
+            <th className="text-left py-2 px-2">Manager</th>
+            <th className="text-left py-2 px-2 w-20">Region</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">ACV Closed w/ Multiplier</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">ACV Closed</th>
+            <th className="text-right py-2 px-2 w-16">Deals</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => (
+            <tr
+              key={e.user_id}
+              className={cn(
+                "text-sm",
+                e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
+                e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
+              )}
+            >
+              <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
+              <td className="py-2 px-2 font-medium">
+                {e.full_name}
+                {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
+              </td>
+              <td className="py-2 px-2 text-muted-foreground">{e.manager_name || "—"}</td>
+              <td className="py-2 px-2 text-muted-foreground">{e.region || "—"}</td>
+              <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.primary_metric)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.acv_closed || 0)}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.deals_closed || 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
-    <div className="space-y-1 overflow-x-auto">
-      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] min-w-[900px] text-xs font-medium text-muted-foreground px-3 py-2 border-b gap-x-4">
-        <span>Rank</span>
-        <span>AE Name</span>
-        <span className="text-right">Total ACV Created</span>
-        <span className="text-right">AE Sourced</span>
-        <span className="text-right">Sales Sourced</span>
-        <span className="text-right">Mktg Sourced</span>
-        <span className="text-right">Partner Sourced</span>
-        <span className="text-right">Deals</span>
-        <span className="text-right">Avg Size</span>
-      </div>
-      {entries.map((e) => (
-        <div
-          key={e.user_id}
-          className={cn(
-            "grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] min-w-[900px] text-sm px-3 py-2.5 rounded-md items-center gap-x-4",
-            e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
-            e.is_current_user && "bg-primary/5 border border-primary/20"
-          )}
-        >
-          <span className="flex items-center gap-2"><RankBadge rank={e.rank} /></span>
-          <span className="font-medium truncate">
-            {e.full_name}
-            {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
-          </span>
-          <span className="text-right font-medium">{formatCurrency(e.primary_metric)}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.ae_sourced || 0)}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.sales_sourced || 0)}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.marketing_sourced || 0)}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.partner_sourced || 0)}</span>
-          <span className="text-right">{e.secondary_metrics.open_deals || 0}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.avg_deal_size || 0)}</span>
-        </div>
-      ))}
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[900px]">
+        <thead>
+          <tr className="text-xs font-medium text-muted-foreground border-b">
+            <th className="text-left py-2 px-2 w-12">Rank</th>
+            <th className="text-left py-2 px-2">AE Name</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Total ACV Created</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">AE Sourced</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Sales Sourced</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Mktg Sourced</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Partner Sourced</th>
+            <th className="text-right py-2 px-2 w-16">Deals</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Avg Size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => (
+            <tr
+              key={e.user_id}
+              className={cn(
+                "text-sm",
+                e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
+                e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
+              )}
+            >
+              <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
+              <td className="py-2 px-2 font-medium">
+                {e.full_name}
+                {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
+              </td>
+              <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.primary_metric)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.ae_sourced || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.sales_sourced || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.marketing_sourced || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.partner_sourced || 0)}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.open_deals || 0}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.avg_deal_size || 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-7 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
-        <span>Rank</span>
-        <span className="col-span-2">AE Name</span>
-        <span className="text-right">Active Pilots</span>
-        <span className="text-right">Pilot ACV</span>
-        <span className="text-right">Conv. Rate</span>
-        <span className="text-right">Avg Duration</span>
-      </div>
-      {entries.map((e) => (
-        <div
-          key={e.user_id}
-          className={cn(
-            "grid grid-cols-7 text-sm px-3 py-2.5 rounded-md items-center",
-            e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
-            e.is_current_user && "bg-primary/5 border border-primary/20"
-          )}
-        >
-          <span className="flex items-center gap-2"><RankBadge rank={e.rank} /></span>
-          <span className="col-span-2 font-medium">
-            {e.full_name}
-            {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
-          </span>
-          <span className="text-right font-medium">{e.primary_metric}</span>
-          <span className="text-right">{formatCurrency(e.secondary_metrics.pilot_acv || 0)}</span>
-          <span className="text-right">{(e.secondary_metrics.conversion_rate || 0).toFixed(1)}%</span>
-          <span className="text-right">{e.secondary_metrics.avg_duration || 0}d</span>
-        </div>
-      ))}
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="text-xs font-medium text-muted-foreground border-b">
+            <th className="text-left py-2 px-2 w-12">Rank</th>
+            <th className="text-left py-2 px-2">AE Name</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Active Pilots</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Pilot ACV</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Conv. Rate</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Avg Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => (
+            <tr
+              key={e.user_id}
+              className={cn(
+                "text-sm",
+                e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
+                e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
+              )}
+            >
+              <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
+              <td className="py-2 px-2 font-medium">
+                {e.full_name}
+                {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
+              </td>
+              <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.pilot_acv || 0)}</td>
+              <td className="py-2 px-2 text-right">{(e.secondary_metrics.conversion_rate || 0).toFixed(1)}%</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.avg_duration || 0}d</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function ActivitiesBoard({ entries }: { entries: LeaderboardEntry[] }) {
   return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-8 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
-        <span>Rank</span>
-        <span className="col-span-2">AE Name</span>
-        <span className="text-right">Total</span>
-        <span className="text-right">Calls</span>
-        <span className="text-right">Emails</span>
-        <span className="text-right">Meetings</span>
-        <span className="text-right">Demos</span>
-      </div>
-      {entries.map((e) => (
-        <div
-          key={e.user_id}
-          className={cn(
-            "grid grid-cols-8 text-sm px-3 py-2.5 rounded-md items-center",
-            e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
-            e.is_current_user && "bg-primary/5 border border-primary/20"
-          )}
-        >
-          <span className="flex items-center gap-2"><RankBadge rank={e.rank} /></span>
-          <span className="col-span-2 font-medium">
-            {e.full_name}
-            {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
-          </span>
-          <span className="text-right font-medium">{e.primary_metric}</span>
-          <span className="text-right">{e.secondary_metrics.calls || 0}</span>
-          <span className="text-right">{e.secondary_metrics.emails || 0}</span>
-          <span className="text-right">{e.secondary_metrics.meetings || 0}</span>
-          <span className="text-right">{e.secondary_metrics.demos || 0}</span>
-        </div>
-      ))}
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="text-xs font-medium text-muted-foreground border-b">
+            <th className="text-left py-2 px-2 w-12">Rank</th>
+            <th className="text-left py-2 px-2">AE Name</th>
+            <th className="text-right py-2 px-2">Total</th>
+            <th className="text-right py-2 px-2">Calls</th>
+            <th className="text-right py-2 px-2">Emails</th>
+            <th className="text-right py-2 px-2">Meetings</th>
+            <th className="text-right py-2 px-2">Demos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => (
+            <tr
+              key={e.user_id}
+              className={cn(
+                "text-sm",
+                e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
+                e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
+              )}
+            >
+              <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
+              <td className="py-2 px-2 font-medium">
+                {e.full_name}
+                {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
+              </td>
+              <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.calls || 0}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.emails || 0}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.meetings || 0}</td>
+              <td className="py-2 px-2 text-right">{e.secondary_metrics.demos || 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

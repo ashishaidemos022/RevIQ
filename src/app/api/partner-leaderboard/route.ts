@@ -55,9 +55,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all RV accounts (partners)
+    // Region values are granular (e.g., "Americas Regional East", "EMEA UKI", "APAC")
+    // Map filter values to prefixes
+    const regionPrefixMap: Record<string, string[]> = {
+      AMER: ['Americas'],
+      EMEA: ['EMEA'],
+      APAC: ['APAC', 'LATAM'],
+    };
+
     let rvQuery = db.from('rv_accounts').select('id, salesforce_rv_id, name, region, owner_sf_id');
     if (region !== 'combined') {
-      rvQuery = rvQuery.eq('region', region);
+      const prefixes = regionPrefixMap[region] || [region];
+      // Use OR filter with ilike for prefix matching
+      const orFilter = prefixes.map(p => `region.ilike.${p}%`).join(',');
+      rvQuery = rvQuery.or(orFilter);
     }
     const { data: rvAccounts } = await rvQuery;
     if (!rvAccounts || rvAccounts.length === 0) {

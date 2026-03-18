@@ -26,7 +26,7 @@ export const MOBILE_NAV_ITEMS = [
 ] as const;
 
 export const AE_ROLES: UserRole[] = ['commercial_ae', 'enterprise_ae'];
-export const MANAGER_PLUS_ROLES: UserRole[] = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_rw'];
+export const MANAGER_PLUS_ROLES: UserRole[] = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 export const SYNC_ROLES: UserRole[] = ['revops_rw'];
 export const QUOTA_WRITE_ROLES: UserRole[] = ['vp', 'cro', 'c_level', 'revops_rw'];
 export const COMMISSION_RATE_WRITE_ROLES: UserRole[] = ['cro', 'c_level', 'revops_rw'];

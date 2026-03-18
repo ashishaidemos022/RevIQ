@@ -15,7 +15,6 @@ import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -38,8 +37,7 @@ const ACTIVITY_TYPES = [
   { value: "call", label: "Calls", color: "hsl(var(--chart-1))" },
   { value: "email", label: "Emails", color: "hsl(var(--chart-2))" },
   { value: "meeting", label: "Meetings", color: "hsl(var(--chart-3))" },
-  { value: "demo", label: "Demos", color: "hsl(var(--chart-4))" },
-  { value: "other", label: "Other", color: "hsl(var(--chart-5))" },
+  { value: "linkedin", label: "LinkedIn Activity", color: "hsl(var(--chart-4))" },
 ];
 
 export default function ActivitiesPage() {
@@ -136,37 +134,6 @@ export default function ActivitiesPage() {
     return Object.values(aeMap).sort((a, b) => b.total - a.total);
   }, [activities, isManager]);
 
-  const recentFeed = useMemo(() => activities.slice(0, 50), [activities]);
-
-  const feedColumns: Column<Record<string, unknown>>[] = [
-    { key: "activity_date", header: "Date" },
-    {
-      key: "owner",
-      header: "AE",
-      render: (row) => (row.users as { full_name: string } | undefined)?.full_name || "—",
-    },
-    {
-      key: "account",
-      header: "Account",
-      render: (row) => (row.accounts as { name: string } | undefined)?.name || "—",
-    },
-    {
-      key: "activity_type",
-      header: "Type",
-      render: (row) => (
-        <Badge variant="outline" className="capitalize">
-          {row.activity_type as string}
-        </Badge>
-      ),
-    },
-    { key: "subject", header: "Subject" },
-    {
-      key: "opportunity",
-      header: "Opportunity",
-      render: (row) => (row.opportunities as { name: string } | undefined)?.name || "—",
-    },
-  ];
-
   const aeColumns: Column<Record<string, unknown>>[] = [
     { key: "name", header: "AE Name" },
     { key: "call", header: "Calls" },
@@ -262,27 +229,6 @@ export default function ActivitiesPage() {
         </Card>
       )}
 
-      {/* Recent Activities Feed */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Recent Activities</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentFeed.length === 0 ? (
-            <EmptyState
-              title="No activities"
-              description="No activities found for the selected filters"
-              icon={Zap}
-            />
-          ) : (
-            <DataTable
-              data={recentFeed as unknown as Record<string, unknown>[]}
-              columns={feedColumns}
-              pageSize={25}
-            />
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

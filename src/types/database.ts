@@ -135,6 +135,8 @@ export interface Opportunity {
   mgmt_forecast_category: string | null;
   next_steps: string | null;
   manager_notes: string | null;
+  rv_account_sf_id: string | null;
+  rv_account_type: string | null;
   sf_created_date: string | null;
 }
 

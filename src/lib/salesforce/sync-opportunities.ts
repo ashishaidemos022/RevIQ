@@ -30,6 +30,8 @@ interface SalesforceOpportunity {
   VP_Commit__c: string | null;          // MGMT Forecast Category
   Next_Step__c: string | null;
   Manager_Notes__c: string | null;
+  RV_Account__c: string | null;
+  RV_Account_Type__c: string | null;
   IsClosed: boolean;
   IsWon: boolean;
 }
@@ -42,6 +44,7 @@ const SOQL_FIELDS = [
   'Opportunity_Source__c', 'CreatedById', 'Estimated_Monthly_PAYGO__c',
   'Estimated_ACV_PAYGO__c', 'CXA_Committed_ARR__c', 'Sales_Led_Renewal__c',
   'AE_Forecast_Category__c', 'VP_Commit__c', 'Next_Step__c', 'Manager_Notes__c',
+  'RV_Account__c', 'RV_Account_Type__c',
   'IsClosed', 'IsWon',
 ].join(', ');
 
@@ -155,6 +158,8 @@ export async function syncSalesforceOpportunities(): Promise<OpportunitySyncResu
     mgmt_forecast_category: opp.VP_Commit__c,
     next_steps: opp.Next_Step__c,
     manager_notes: opp.Manager_Notes__c,
+    rv_account_sf_id: opp.RV_Account__c,
+    rv_account_type: opp.RV_Account_Type__c,
     sf_created_date: opp.CreatedDate,
     last_synced_at: now,
   }));

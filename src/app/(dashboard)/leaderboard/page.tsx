@@ -55,9 +55,9 @@ const REVENUE_PERIODS = [
 ];
 
 const PIPELINE_PERIODS = [
-  { value: "qtd", label: "Current Quarter" },
+  { value: "qtd", label: "QTD" },
   { value: "prev_qtd", label: "PQ" },
-  { value: "all_open", label: "All Open" },
+  { value: "ytd", label: "YTD" },
 ];
 
 const PILOT_PERIODS = [

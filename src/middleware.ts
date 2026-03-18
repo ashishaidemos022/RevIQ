@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/', '/api/scim/'];
+const PUBLIC_PATHS = ['/login', '/api/auth/', '/api/scim/', '/api/cron/'];
 const SESSION_COOKIE = 'td-revenueiq-session';
 
 export async function middleware(request: NextRequest) {

@@ -35,12 +35,13 @@ export async function GET(request: NextRequest) {
     return new NextResponse(null, { status: 401 });
   }
 
+  const sfUrl = process.env.SALESFORCE_LOGIN_URL || '';
+  const sfUser = process.env.SALESFORCE_USERNAME || '';
+  const sfPass = process.env.SALESFORCE_PASSWORD || '';
   console.log('[cron/sync-opportunities] Auth OK, checking SF env vars...');
-  console.log('[cron/sync-opportunities] SALESFORCE_LOGIN_URL:', process.env.SALESFORCE_LOGIN_URL ? 'SET' : 'MISSING');
-  console.log('[cron/sync-opportunities] SALESFORCE_USERNAME:', process.env.SALESFORCE_USERNAME ? 'SET' : 'MISSING');
-  console.log('[cron/sync-opportunities] SALESFORCE_PASSWORD:', process.env.SALESFORCE_PASSWORD ? 'SET' : 'MISSING');
-  console.log('[cron/sync-opportunities] SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
-  console.log('[cron/sync-opportunities] SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING');
+  console.log('[cron/sync-opportunities] SALESFORCE_LOGIN_URL:', sfUrl);
+  console.log('[cron/sync-opportunities] SALESFORCE_USERNAME:', sfUser);
+  console.log('[cron/sync-opportunities] SALESFORCE_PASSWORD: length=' + sfPass.length, 'first3=' + sfPass.substring(0, 3), 'last3=' + sfPass.substring(sfPass.length - 3));
 
   const db = getSupabaseClient();
 

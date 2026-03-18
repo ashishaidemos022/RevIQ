@@ -70,7 +70,6 @@ const ACTIVITY_PERIODS = [
   { value: "mtd", label: "MTD" },
   { value: "qtd", label: "QTD" },
   { value: "prev_qtd", label: "PQ" },
-  { value: "ytd", label: "YTD" },
 ];
 
 function getPeriods(board: string) {

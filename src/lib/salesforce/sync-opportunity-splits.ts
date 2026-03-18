@@ -7,13 +7,18 @@ interface SalesforceOpportunitySplit {
   SplitOwnerId: string;
   SplitAmount: number | null;
   SplitPercentage: number | null;
-  SplitType: { Name: string } | null;
+  SplitTypeId: string | null;
   CreatedDate: string;
+}
+
+interface SalesforceSplitType {
+  Id: string;
+  MasterLabel: string;
 }
 
 const SOQL_FIELDS = [
   'Id', 'OpportunityId', 'SplitOwnerId', 'SplitAmount',
-  'SplitPercentage', 'SplitType.Name', 'CreatedDate',
+  'SplitPercentage', 'SplitTypeId', 'CreatedDate',
 ].join(', ');
 
 export interface OpportunitySplitSyncResult {
@@ -84,6 +89,14 @@ export async function syncOpportunitySplits(): Promise<OpportunitySplitSyncResul
     return result;
   }
 
+  // Fetch split type labels
+  const splitTypeQuery = await conn.query<SalesforceSplitType>(
+    'SELECT Id, MasterLabel FROM OpportunitySplitType'
+  );
+  const splitTypeMap = new Map(
+    (splitTypeQuery.records || []).map((t) => [t.Id, t.MasterLabel])
+  );
+
   // Build lookups: SF Opportunity ID → local opportunity ID, SF User ID → local user ID
   const oppMap = new Map<string, string>();
   offset = 0;
@@ -126,7 +139,7 @@ export async function syncOpportunitySplits(): Promise<OpportunitySplitSyncResul
     split_owner_user_id: userMap.get(split.SplitOwnerId) || null,
     split_amount: split.SplitAmount,
     split_percentage: split.SplitPercentage,
-    split_type: split.SplitType?.Name || null,
+    split_type: (split.SplitTypeId && splitTypeMap.get(split.SplitTypeId)) || null,
     sf_created_date: split.CreatedDate,
     last_synced_at: now,
   }));

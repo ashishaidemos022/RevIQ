@@ -7,6 +7,7 @@ export const NAV_ITEMS = [
   { label: 'Activities', href: '/activities', icon: 'Zap', roles: 'all' as const },
   { label: 'Performance', href: '/performance', icon: 'TrendingUp', roles: 'all' as const },
   { label: 'Leaderboard', href: '/leaderboard', icon: 'Trophy', roles: 'all' as const },
+  { label: 'PBM Leaderboard', href: '/pbm-leaderboard', icon: 'Handshake', roles: 'all' as const },
   { label: 'Usage', href: '/usage', icon: 'Radio', roles: 'all' as const },
   {
     label: 'Team View',

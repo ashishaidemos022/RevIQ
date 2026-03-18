@@ -10,7 +10,7 @@ function validateScimToken(request: NextRequest): boolean {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-const VALID_ROLES = ['ae', 'commercial_ae', 'enterprise_ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+const VALID_ROLES = ['ae', 'commercial_ae', 'enterprise_ae', 'pbm', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
 function validateRole(role?: string): string | null {
   if (!role) return null;

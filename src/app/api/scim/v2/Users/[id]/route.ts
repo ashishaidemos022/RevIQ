@@ -296,3 +296,50 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
+
+// DELETE /api/scim/v2/Users/:id — Okta deprovisioning (soft-delete)
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  if (!validateScimToken(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const db = getSupabaseClient();
+
+  try {
+    const { data: user, error } = await db
+      .from('users')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id')
+      .single();
+
+    if (error || !user) {
+      // SCIM spec: return 204 even if user not found
+      return new NextResponse(null, { status: 204 });
+    }
+
+    // End-date hierarchy
+    const today = new Date().toISOString().split('T')[0];
+    await db
+      .from('user_hierarchy')
+      .update({ effective_to: today })
+      .eq('user_id', user.id)
+      .is('effective_to', null);
+
+    await db.from('sync_log').insert({
+      sync_type: 'scim',
+      target_user_id: user.id,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      status: 'success',
+      records_synced: 1,
+      raw_payload: { operation: 'DELETE', user_id: id },
+    });
+
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    console.error('SCIM DELETE error:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}

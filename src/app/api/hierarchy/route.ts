@@ -15,10 +15,11 @@ export async function GET() {
     const scope = await resolveDataScope(user);
     const db = getSupabaseClient();
 
-    // Get all users
+    // Get all active users (inactive/deprovisioned users excluded from hierarchy views)
     const { data: users, error: usersError } = await db
       .from('users')
       .select('id, full_name, email, role, region, is_active')
+      .eq('is_active', true)
       .order('full_name');
 
     if (usersError) {

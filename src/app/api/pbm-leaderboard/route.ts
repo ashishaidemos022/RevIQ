@@ -110,47 +110,43 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     if (board === 'revenue') {
-      // PBM revenue is based on opportunity splits they own
-      let query = db
-        .from('opportunity_splits')
-        .select('split_owner_user_id, split_amount, opportunity_id, salesforce_opportunity_id')
-        .in('split_owner_user_id', pbmIds);
-      const { data: splits } = await query;
+      // PBM revenue is based on Channel Owner (channel_owner_sf_id) on closed-won opportunities
+      // Amount is Reporting ACV (stored as 'acv' in opportunities table)
+      // Resolve PBM salesforce_user_id for matching against channel_owner_sf_id
+      const { data: pbmSfUsers } = await db
+        .from('users')
+        .select('id, salesforce_user_id')
+        .in('id', pbmIds)
+        .not('salesforce_user_id', 'is', null);
 
-      // Get the opportunities to check close_date and is_closed_won
-      const oppSfIds = [...new Set((splits || []).map(s => s.salesforce_opportunity_id))];
-      let closedWonOppSfIds = new Set<string>();
+      const pbmSfIdToLocalId = new Map<string, string>();
+      (pbmSfUsers || []).forEach(u => pbmSfIdToLocalId.set(u.salesforce_user_id, u.id));
+      const pbmSfIds = [...pbmSfIdToLocalId.keys()];
 
-      if (oppSfIds.length > 0) {
-        // Fetch opportunities in batches (Supabase 1000 row limit)
+      // Fetch closed-won opportunities where channel_owner_sf_id matches a PBM
+      const pbmData: Record<string, { acv: number; deals: number }> = {};
+
+      if (pbmSfIds.length > 0) {
         const batchSize = 500;
-        for (let i = 0; i < oppSfIds.length; i += batchSize) {
-          const batch = oppSfIds.slice(i, i + batchSize);
+        for (let i = 0; i < pbmSfIds.length; i += batchSize) {
+          const batch = pbmSfIds.slice(i, i + batchSize);
           let oppQuery = db
             .from('opportunities')
-            .select('salesforce_opportunity_id')
+            .select('channel_owner_sf_id, acv')
             .eq('is_closed_won', true)
-            .in('salesforce_opportunity_id', batch);
+            .in('channel_owner_sf_id', batch);
           if (startStr) oppQuery = oppQuery.gte('close_date', startStr);
           if (endStr) oppQuery = oppQuery.lte('close_date', endStr);
           const { data: opps } = await oppQuery;
-          (opps || []).forEach(o => closedWonOppSfIds.add(o.salesforce_opportunity_id));
+          (opps || []).forEach(o => {
+            const localId = pbmSfIdToLocalId.get(o.channel_owner_sf_id);
+            if (!localId) return;
+            if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: 0 };
+            pbmData[localId].acv += o.acv || 0;
+            pbmData[localId].deals++;
+          });
         }
       }
-
-      // Aggregate per PBM
-      const pbmData: Record<string, { acv: number; deals: number }> = {};
-      const countedOpps: Record<string, Set<string>> = {};
-      (splits || []).forEach((s: { split_owner_user_id: string | null; split_amount: number | null; salesforce_opportunity_id: string }) => {
-        const id = s.split_owner_user_id || '';
-        if (!closedWonOppSfIds.has(s.salesforce_opportunity_id)) return;
-        if (!pbmData[id]) { pbmData[id] = { acv: 0, deals: 0 }; countedOpps[id] = new Set(); }
-        pbmData[id].acv += s.split_amount || 0;
-        if (!countedOpps[id].has(s.salesforce_opportunity_id)) {
-          countedOpps[id].add(s.salesforce_opportunity_id);
-          pbmData[id].deals++;
-        }
-      });
 
       allPBMs.forEach(pbm => {
         const data = pbmData[pbm.id] || { acv: 0, deals: 0 };

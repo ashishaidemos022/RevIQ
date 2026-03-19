@@ -5,16 +5,16 @@ let tokenExpiresAt: number = 0;
 
 function getConfig() {
   const loginUrl = process.env.SALESFORCE_LOGIN_URL;
-  const username = process.env.SALESFORCE_USERNAME;
-  const password = process.env.SALESFORCE_PASSWORD;
+  const clientId = process.env.SALESFORCE_CLIENT_ID;
+  const clientSecret = process.env.SALESFORCE_CLIENT_SECRET;
 
-  if (!loginUrl || !username || !password) {
+  if (!loginUrl || !clientId || !clientSecret) {
     throw new Error(
-      'Missing Salesforce configuration. Required: SALESFORCE_LOGIN_URL, SALESFORCE_USERNAME, SALESFORCE_PASSWORD'
+      'Missing Salesforce configuration. Required: SALESFORCE_LOGIN_URL, SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET'
     );
   }
 
-  return { loginUrl, username, password };
+  return { loginUrl, clientId, clientSecret };
 }
 
 export async function getSalesforceConnection(): Promise<Connection> {
@@ -27,13 +27,33 @@ export async function getSalesforceConnection(): Promise<Connection> {
 
   const config = getConfig();
 
-  const conn = new jsforce.Connection({
-    loginUrl: config.loginUrl,
+  // OAuth 2.0 Client Credentials flow
+  const tokenUrl = `${config.loginUrl}/services/oauth2/token`;
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
   });
 
-  await conn.login(config.username, config.password);
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
 
-  // Salesforce sessions typically last 2 hours
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Salesforce OAuth failed (${res.status}): ${errText}`);
+  }
+
+  const token = await res.json();
+
+  const conn = new jsforce.Connection({
+    instanceUrl: token.instance_url,
+    accessToken: token.access_token,
+  });
+
+  // Token typically lasts 2 hours
   tokenExpiresAt = now + 2 * 60 * 60 * 1000;
   connection = conn;
 

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncSalesforceOpportunities } from '@/lib/salesforce/sync-opportunities';
 import { syncOpportunitySplits } from '@/lib/salesforce/sync-opportunity-splits';
+import { syncOpportunityPartners } from '@/lib/salesforce/sync-opportunity-partners';
 
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -49,9 +50,10 @@ export async function GET(request: NextRequest) {
   try {
     const oppResult = await syncSalesforceOpportunities();
     const splitResult = await syncOpportunitySplits();
+    const partnerResult = await syncOpportunityPartners();
 
-    const totalRecords = oppResult.synced + splitResult.synced;
-    const allErrors = [...oppResult.errors, ...splitResult.errors];
+    const totalRecords = oppResult.synced + splitResult.synced + partnerResult.synced;
+    const allErrors = [...oppResult.errors, ...splitResult.errors, ...partnerResult.errors];
     const hasErrors = allErrors.length > 0;
 
     if (logEntry) {
@@ -70,6 +72,7 @@ export async function GET(request: NextRequest) {
       message: 'Hourly opportunity sync completed',
       opportunities: oppResult,
       opportunity_splits: splitResult,
+      opportunity_partners: partnerResult,
     });
   } catch (error) {
     if (logEntry) {

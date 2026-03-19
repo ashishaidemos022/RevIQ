@@ -29,19 +29,9 @@ function verifyCronSecret(request: NextRequest): boolean {
 
 // Hourly sync: Opportunities
 export async function GET(request: NextRequest) {
-  console.log('[cron/sync-opportunities] Starting...');
-
   if (!verifyCronSecret(request)) {
     return new NextResponse(null, { status: 401 });
   }
-
-  const sfUrl = process.env.SALESFORCE_LOGIN_URL || '';
-  const sfUser = process.env.SALESFORCE_USERNAME || '';
-  const sfPass = process.env.SALESFORCE_PASSWORD || '';
-  console.log('[cron/sync-opportunities] Auth OK, checking SF env vars...');
-  console.log('[cron/sync-opportunities] SALESFORCE_LOGIN_URL:', sfUrl);
-  console.log('[cron/sync-opportunities] SALESFORCE_USERNAME:', sfUser);
-  console.log('[cron/sync-opportunities] SALESFORCE_PASSWORD: length=' + sfPass.length, 'first3=' + sfPass.substring(0, 3), 'last3=' + sfPass.substring(sfPass.length - 3));
 
   const db = getSupabaseClient();
 
@@ -57,13 +47,8 @@ export async function GET(request: NextRequest) {
     .single();
 
   try {
-    console.log('[cron/sync-opportunities] Starting opportunity sync...');
     const oppResult = await syncSalesforceOpportunities();
-    console.log('[cron/sync-opportunities] Opportunities done:', oppResult.synced, 'synced,', oppResult.errors.length, 'errors');
-
-    console.log('[cron/sync-opportunities] Starting splits sync...');
     const splitResult = await syncOpportunitySplits();
-    console.log('[cron/sync-opportunities] Splits done:', splitResult.synced, 'synced,', splitResult.errors.length, 'errors');
 
     const totalRecords = oppResult.synced + splitResult.synced;
     const allErrors = [...oppResult.errors, ...splitResult.errors];
@@ -87,8 +72,6 @@ export async function GET(request: NextRequest) {
       opportunity_splits: splitResult,
     });
   } catch (error) {
-    console.error('[cron/sync-opportunities] FATAL ERROR:', error instanceof Error ? error.stack || error.message : error);
-
     if (logEntry) {
       await db
         .from('sync_log')

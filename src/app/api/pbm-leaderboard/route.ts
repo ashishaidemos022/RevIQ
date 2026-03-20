@@ -109,6 +109,10 @@ export async function GET(request: NextRequest) {
     (pbmSfUsers || []).forEach(u => pbmSfIdToLocalId.set(u.salesforce_user_id, u.id));
     const pbmSfIds = [...pbmSfIdToLocalId.keys()];
 
+    // Debug: trace specific PBM
+    const debugSfId = '005Vx000007yWVdIAM';
+    console.log(`[PBM_LB] PBM count: ${allPBMs?.length}, pbmSfIds count: ${pbmSfIds.length}, debugPBM in map: ${pbmSfIdToLocalId.has(debugSfId)} → ${pbmSfIdToLocalId.get(debugSfId)}`);
+
     // === Shared: Load rv_accounts owner lookup (partner name → owner SF ID) ===
     const rvAccountOwnerMap = new Map<string, string>(); // rv_account name → owner_sf_id
     const rvPageSize = 1000;
@@ -124,6 +128,7 @@ export async function GET(request: NextRequest) {
       if (rvPage.length < rvPageSize) break;
       rvOffset += rvPageSize;
     }
+    console.log(`[PBM_LB] rvAccountOwnerMap size: ${rvAccountOwnerMap.size}, Telarus owner: ${rvAccountOwnerMap.get('Telarus')}, Intelisys owner: ${rvAccountOwnerMap.get('Intelisys')}`);
 
     const entries: Array<{
       rank: number;
@@ -158,7 +163,7 @@ export async function GET(request: NextRequest) {
         const { data: opps } = await oppQuery;
 
         (opps || []).forEach(o => {
-          const acv = o.acv || 0;
+          const acv = parseFloat(o.acv) || 0;
           const oppSfId = o.salesforce_opportunity_id;
           const creditedPbms = new Set<string>(); // track which PBMs got credit on this opp
 
@@ -221,7 +226,7 @@ export async function GET(request: NextRequest) {
           .or('channel_owner_sf_id.not.is.null,rv_account_sf_id.not.is.null');
 
         (opps || []).forEach(o => {
-          const acv = o.acv || 0;
+          const acv = parseFloat(o.acv) || 0;
           const oppSfId = o.salesforce_opportunity_id;
           const src = (o.opportunity_source || '').toLowerCase();
           const isPartnerSourced = src.includes('partner') || src.includes('channel');
@@ -255,6 +260,13 @@ export async function GET(request: NextRequest) {
             }
           }
         });
+      }
+
+      // Debug: trace Ryan's pipeline credit
+      const debugLocalId = pbmSfIdToLocalId.get(debugSfId);
+      if (debugLocalId) {
+        const rd = pbmData[debugLocalId];
+        console.log(`[PBM_LB] Pipeline debug for ${debugSfId}: localId=${debugLocalId}, data=${rd ? JSON.stringify({ total: rd.total, deals: rd.deals.size }) : 'NONE'}`);
       }
 
       allPBMs.forEach(pbm => {

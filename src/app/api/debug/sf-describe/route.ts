@@ -24,9 +24,9 @@ export async function GET(request: NextRequest) {
       referenceTo: f.referenceTo,
     }));
 
-    const childRelationships = (desc.childRelationships || []).map((cr: { childSObject: string; relationshipName: string | null; field: string }) => ({
+    const childRelationships = (desc.childRelationships || []).map((cr) => ({
       childSObject: cr.childSObject,
-      relationshipName: cr.relationshipName,
+      relationshipName: cr.relationshipName ?? null,
       field: cr.field,
     }));
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       customFields: fields.filter(f => f.custom),
       allFields: fields,
       childRelationships,
-      partnerRelationships: childRelationships.filter((cr: { relationshipName: string | null }) =>
+      partnerRelationships: childRelationships.filter((cr) =>
         cr.relationshipName && (cr.relationshipName.toLowerCase().includes('partner') || cr.relationshipName.toLowerCase().includes('rv'))
       ),
     });

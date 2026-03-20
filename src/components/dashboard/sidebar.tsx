@@ -42,9 +42,9 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border bg-sidebar z-30">
       <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-        <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-7 w-7 brightness-0 invert" />
+        <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-9 w-9 brightness-0 invert" />
         <div className="flex flex-col leading-tight">
-          <span className="font-bold text-sm text-sidebar-foreground">RevenueIQ</span>
+          <span className="font-bold text-base text-sidebar-foreground">RevenueIQ</span>
           <span className="text-[10px] text-sidebar-foreground/60 tracking-wide uppercase">by Talkdesk</span>
         </div>
       </div>

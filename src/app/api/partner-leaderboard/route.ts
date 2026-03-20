@@ -5,6 +5,16 @@ import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentF
 
 const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro'];
 
+function normalizeRegion(region: string | null): string | null {
+  if (!region) return null;
+  const r = region.toLowerCase();
+  if (r.startsWith('america')) return 'AMER';
+  if (r.startsWith('emea')) return 'EMEA';
+  if (r.startsWith('apac')) return 'APAC';
+  if (r.startsWith('latam')) return 'AMER';
+  return region;
+}
+
 interface PartnerEntry {
   rank: number;
   partner_id: string;
@@ -58,9 +68,9 @@ export async function GET(request: NextRequest) {
     // Region values are granular (e.g., "Americas Regional East", "EMEA UKI", "APAC")
     // Map filter values to prefixes
     const regionPrefixMap: Record<string, string[]> = {
-      AMER: ['Americas'],
+      AMER: ['Americas', 'LATAM'],
       EMEA: ['EMEA'],
-      APAC: ['APAC', 'LATAM'],
+      APAC: ['APAC'],
     };
 
     let rvQuery = db.from('rv_accounts').select('id, salesforce_rv_id, name, region, owner_sf_id');
@@ -191,7 +201,7 @@ export async function GET(request: NextRequest) {
           partner_id: rv.id,
           partner_name: rv.name,
           pbm_name: rv.owner_sf_id ? (pbmNameMap.get(rv.owner_sf_id) || null) : null,
-          region: rv.region,
+          region: normalizeRegion(rv.region),
           primary_metric: acv,
           secondary_metrics: {
             acv_closed_multiplier: acv, // Same as ACV for now
@@ -233,7 +243,7 @@ export async function GET(request: NextRequest) {
           partner_id: rv.id,
           partner_name: rv.name,
           pbm_name: rv.owner_sf_id ? (pbmNameMap.get(rv.owner_sf_id) || null) : null,
-          region: rv.region,
+          region: normalizeRegion(rv.region),
           primary_metric: totalAcv,
           secondary_metrics: {
             total_acv_created: totalAcv,
@@ -281,7 +291,7 @@ export async function GET(request: NextRequest) {
           partner_id: rv.id,
           partner_name: rv.name,
           pbm_name: rv.owner_sf_id ? (pbmNameMap.get(rv.owner_sf_id) || null) : null,
-          region: rv.region,
+          region: normalizeRegion(rv.region),
           primary_metric: booked,
           secondary_metrics: {
             booked_pilots: booked,

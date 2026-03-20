@@ -79,6 +79,11 @@ export function PbmHome() {
       ),
     },
     {
+      key: "partner_name",
+      header: "Partner",
+      render: (row) => (row.partner_name as string) || "—",
+    },
+    {
       key: "credited_pbm_name",
       header: "PBM",
       render: (row) => (row.credited_pbm_name as string) || "—",

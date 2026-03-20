@@ -9,7 +9,8 @@ import { OverridesTab } from "./overrides-tab";
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
-  const role = user?.role || "ae";
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
+  const role = viewAsUser?.role ?? user?.role ?? "ae";
 
   const isRevopsRW = role === "revops_rw";
   const isEnterpriseRO = role === "enterprise_ro";

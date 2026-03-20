@@ -167,8 +167,7 @@ export function Header() {
         </div>
       )}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-card px-4 md:px-6">
-        <div className="flex items-center gap-2 md:hidden">
-          <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-8 w-8" />
+        <div className="flex items-center md:hidden">
           <div className="flex flex-col leading-tight">
             <span className="font-bold text-sm">RevenueIQ</span>
             <span className="text-[9px] text-muted-foreground tracking-wide uppercase">by Talkdesk</span>

@@ -107,7 +107,7 @@ export function PbmHome() {
         PBM Home Dashboard
       </h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard
           label="ACV Closed QTD"
           value={d?.acv_closed_qtd || 0}
@@ -124,18 +124,13 @@ export function PbmHome() {
           format="number"
         />
         <KpiCard
-          label="Commission Earned QTD"
-          value={d?.commission_earned_qtd || 0}
-          format="currency"
+          label="Quota Attainment QTD"
+          value={d?.quota_attainment_qtd || 0}
+          format="percent"
         />
         <KpiCard
-          label="Commission Projected QTD"
-          value={d?.commission_projected_qtd || 0}
-          format="currency"
-        />
-        <KpiCard
-          label="Quota Attainment"
-          value={d?.quota_attainment || 0}
+          label="Quota Attainment YTD"
+          value={d?.quota_attainment_ytd || 0}
           format="percent"
         />
       </div>

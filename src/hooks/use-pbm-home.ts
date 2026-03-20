@@ -7,9 +7,8 @@ export interface PbmHomeData {
   acv_closed_qtd: number;
   acv_closed_ytd: number;
   deals_closed_qtd: number;
-  commission_earned_qtd: number;
-  commission_projected_qtd: number;
-  quota_attainment: number;
+  quota_attainment_qtd: number;
+  quota_attainment_ytd: number;
   fiscal_year: number;
   fiscal_quarter: number;
 }

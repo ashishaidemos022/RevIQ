@@ -160,14 +160,6 @@ export function QuotasTab() {
   const columns: Column<Record<string, unknown>>[] = [
     { key: "full_name", header: "Name" },
     {
-      key: "role",
-      header: "Role",
-      render: (row) => (
-        <span className="capitalize text-xs">{((row.role as string) || "—").replace(/_/g, " ")}</span>
-      ),
-    },
-    { key: "region", header: "Region", render: (row) => (row.region as string) || "—" },
-    {
       key: "revenue_annual",
       header: `Annual FY${fiscalYear}`,
       render: (row) => formatCurrency(row.revenue_annual as number | null),

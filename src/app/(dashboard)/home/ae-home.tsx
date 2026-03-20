@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOpportunities } from "@/hooks/use-opportunities";
-import { useCommissions } from "@/hooks/use-commissions";
 import { useQuotas } from "@/hooks/use-quotas";
 import {
   getCurrentFiscalPeriod,
@@ -34,22 +33,18 @@ export function AeHome() {
     refetch: refetchOpps,
   } = useOpportunities({ limit: 100 });
 
-  const { data: commissionsData, isLoading: commissionsLoading } =
-    useCommissions({ fiscal_year: fiscalYear });
-
   const { data: quotasData, isLoading: quotasLoading } = useQuotas({
     fiscal_year: fiscalYear,
     quota_type: "revenue",
     user_id: user?.user_id,
   });
 
-  const isLoading = oppsLoading || commissionsLoading || quotasLoading;
+  const isLoading = oppsLoading || quotasLoading;
 
   const kpis = useMemo(() => {
     if (!oppsData?.data) return null;
 
     const opps = oppsData.data;
-    const commissions = commissionsData?.data || [];
     const quotas = quotasData?.data || [];
 
     const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
@@ -76,30 +71,27 @@ export function AeHome() {
     const acvClosedYTD = closedWonYTD.reduce((s, o) => s + (o.acv || 0), 0);
     const dealsClosedQTD = closedWonQTD.length;
 
-    const commissionEarnedQTD = commissions
-      .filter((c) => c.fiscal_quarter === fiscalQuarter && c.is_finalized)
-      .reduce((s, c) => s + (c.commission_amount || 0), 0);
-
-    const commissionProjectedQTD = commissions
-      .filter((c) => c.fiscal_quarter === fiscalQuarter && !c.is_finalized)
-      .reduce((s, c) => s + (c.commission_amount || 0), 0);
-
     const annualQuota = quotas.find(
       (q) => q.fiscal_quarter === null || q.fiscal_quarter === undefined
     );
-    const quotaAttainment = annualQuota
+    const quarterlyQuota = quotas.find(
+      (q) => q.fiscal_quarter === fiscalQuarter
+    );
+    const quotaAttainmentYTD = annualQuota
       ? (acvClosedYTD / annualQuota.quota_amount) * 100
+      : 0;
+    const quotaAttainmentQTD = quarterlyQuota
+      ? (acvClosedQTD / quarterlyQuota.quota_amount) * 100
       : 0;
 
     return {
       acvClosedQTD,
       acvClosedYTD,
       dealsClosedQTD,
-      commissionEarnedQTD,
-      commissionProjectedQTD,
-      quotaAttainment,
+      quotaAttainmentQTD,
+      quotaAttainmentYTD,
     };
-  }, [oppsData, commissionsData, quotasData, fiscalYear, fiscalQuarter]);
+  }, [oppsData, quotasData, fiscalYear, fiscalQuarter]);
 
   const recentOpps = useMemo(() => {
     if (!oppsData?.data) return [];
@@ -165,7 +157,7 @@ export function AeHome() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Home Dashboard</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard
           label="ACV Closed QTD"
           value={kpis?.acvClosedQTD || 0}
@@ -182,18 +174,13 @@ export function AeHome() {
           format="number"
         />
         <KpiCard
-          label="Commission Earned QTD"
-          value={kpis?.commissionEarnedQTD || 0}
-          format="currency"
+          label="Quota Attainment QTD"
+          value={kpis?.quotaAttainmentQTD || 0}
+          format="percent"
         />
         <KpiCard
-          label="Commission Projected QTD"
-          value={kpis?.commissionProjectedQTD || 0}
-          format="currency"
-        />
-        <KpiCard
-          label="Quota Attainment"
-          value={kpis?.quotaAttainment || 0}
+          label="Quota Attainment YTD"
+          value={kpis?.quotaAttainmentYTD || 0}
           format="percent"
         />
       </div>
@@ -224,7 +211,7 @@ export function AeHome() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center justify-center">
-            <QuotaGauge attainment={kpis?.quotaAttainment || 0} />
+            <QuotaGauge attainment={kpis?.quotaAttainmentYTD || 0} />
           </CardContent>
         </Card>
       </div>

@@ -26,9 +26,8 @@ export async function GET(request: NextRequest) {
         acv_closed_qtd: 0,
         acv_closed_ytd: 0,
         deals_closed_qtd: 0,
-        commission_earned_qtd: 0,
-        commission_projected_qtd: 0,
-        quota_attainment: 0,
+        quota_attainment_qtd: 0,
+        quota_attainment_ytd: 0,
         fiscal_year: fiscalYear,
         fiscal_quarter: fiscalQuarter,
       });
@@ -90,19 +89,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Quota attainment
-    let quotaAttainment = 0;
+    let quotaAttainmentYTD = 0;
+    let quotaAttainmentQTD = 0;
     if (pbmLocalIds.length > 0) {
       const { data: quotas } = await db
         .from('quotas')
-        .select('quota_amount')
+        .select('quota_amount, fiscal_quarter')
         .in('user_id', pbmLocalIds)
         .eq('fiscal_year', fiscalYear)
-        .eq('quota_type', 'revenue')
-        .is('fiscal_quarter', null);
+        .eq('quota_type', 'revenue');
 
-      const totalQuota = (quotas || []).reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
-      if (totalQuota > 0) {
-        quotaAttainment = (acvClosedYTD / totalQuota) * 100;
+      const annualQuota = (quotas || [])
+        .filter(q => q.fiscal_quarter === null)
+        .reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
+      const quarterlyQuota = (quotas || [])
+        .filter(q => q.fiscal_quarter === fiscalQuarter)
+        .reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
+
+      if (annualQuota > 0) {
+        quotaAttainmentYTD = (acvClosedYTD / annualQuota) * 100;
+      }
+      if (quarterlyQuota > 0) {
+        quotaAttainmentQTD = (acvClosedQTD / quarterlyQuota) * 100;
       }
     }
 
@@ -110,9 +118,8 @@ export async function GET(request: NextRequest) {
       acv_closed_qtd: acvClosedQTD,
       acv_closed_ytd: acvClosedYTD,
       deals_closed_qtd: dealsClosedQTD,
-      commission_earned_qtd: commissionEarnedQTD,
-      commission_projected_qtd: commissionProjectedQTD,
-      quota_attainment: quotaAttainment,
+      quota_attainment_qtd: quotaAttainmentQTD,
+      quota_attainment_ytd: quotaAttainmentYTD,
       fiscal_year: fiscalYear,
       fiscal_quarter: fiscalQuarter,
     });

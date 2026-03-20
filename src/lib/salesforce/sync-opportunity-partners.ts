@@ -8,8 +8,6 @@ interface SalesforceOpportunityPartner {
   AccountTo: { Name: string } | null;
   Role: string | null;
   IsPrimary: boolean;
-  Channel_Owner__c: string | null;
-  Engagement__c: string | null;
   CreatedDate: string;
 }
 
@@ -48,18 +46,38 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
     return result;
   }
 
-  // Build opportunity ID lookup
+  // Salesforce IDs can be 15-char or 18-char; normalize to 15 for matching
+  const to15 = (id: string) => id?.length === 18 ? id.substring(0, 15) : id;
+
+  // Build opportunity ID lookup (keyed by 15-char SF ID)
   const oppSfIds = [...new Set(sfPartners.map(p => p.OpportunityId))];
-  const oppMap = new Map<string, string>();
+  const oppMap = new Map<string, string>(); // SF opp ID (15-char) → local UUID
   const pageSize = 1000;
 
   for (let i = 0; i < oppSfIds.length; i += pageSize) {
     const batch = oppSfIds.slice(i, i + pageSize);
+    // Try matching both the raw IDs and 15-char truncated versions
     const { data: opps } = await db
       .from('opportunities')
       .select('id, salesforce_opportunity_id')
       .in('salesforce_opportunity_id', batch);
-    (opps || []).forEach(o => oppMap.set(o.salesforce_opportunity_id, o.id));
+    (opps || []).forEach(o => {
+      oppMap.set(o.salesforce_opportunity_id, o.id);
+      oppMap.set(to15(o.salesforce_opportunity_id), o.id);
+    });
+  }
+
+  // If no matches found with raw IDs, try 15-char truncated partner OpportunityIds
+  // This handles the case where opportunities table has 18-char IDs but partner has 15-char or vice versa
+  if (oppMap.size === 0 || sfPartners.every(p => !oppMap.get(p.OpportunityId) && !oppMap.get(to15(p.OpportunityId)))) {
+    // Fetch all opportunities and build a comprehensive map
+    const { data: allOpps } = await db
+      .from('opportunities')
+      .select('id, salesforce_opportunity_id');
+    (allOpps || []).forEach(o => {
+      oppMap.set(o.salesforce_opportunity_id, o.id);
+      oppMap.set(to15(o.salesforce_opportunity_id), o.id);
+    });
   }
 
   // Map and upsert
@@ -69,13 +87,11 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
   const records = sfPartners.map((p) => ({
     salesforce_partner_id: p.Id,
     salesforce_opportunity_id: p.OpportunityId,
-    opportunity_id: oppMap.get(p.OpportunityId) || null,
+    opportunity_id: oppMap.get(p.OpportunityId) || oppMap.get(to15(p.OpportunityId)) || null,
     partner_account_sf_id: p.AccountToId,
     partner_account_name: p.AccountTo?.Name || null,
     role: p.Role,
     is_primary: p.IsPrimary,
-    channel_owner_sf_id: p.Channel_Owner__c,
-    engagement: p.Engagement__c,
     sf_created_date: p.CreatedDate,
     last_synced_at: now,
   }));

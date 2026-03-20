@@ -28,7 +28,7 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
 
   await new Promise<void>((resolve, reject) => {
     const q = conn.query<SalesforceOpportunityPartner>(
-      'SELECT Id, OpportunityId, AccountToId, AccountTo.Name, Role, IsPrimary, Channel_Owner__c, Engagement__c, CreatedDate FROM OpportunityPartner'
+      'SELECT Id, OpportunityId, AccountToId, AccountTo.Name, Role, IsPrimary, CreatedDate FROM OpportunityPartner'
     );
     q.on('record', (record: SalesforceOpportunityPartner) => {
       sfPartners.push(record);

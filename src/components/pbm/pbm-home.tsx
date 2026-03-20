@@ -71,12 +71,12 @@ export function PbmHome() {
     {
       key: "credit_path",
       header: "Credit Path",
-      render: (row) => <CreditPathBadge creditPath={row.credit_path as string | null} />,
-    },
-    {
-      key: "partner_name",
-      header: "Partner",
-      render: (row) => (row.partner_name as string) || "—",
+      render: (row) => (
+        <CreditPathBadge
+          creditPath={row.credit_path as string | null}
+          partnerName={row.partner_name as string | null}
+        />
+      ),
     },
     {
       key: "credited_pbm_name",
@@ -138,7 +138,7 @@ export function PbmHome() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">
-            Credited Opportunities
+            My Opportunities
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -147,7 +147,7 @@ export function PbmHome() {
             columns={columns}
             pageSize={25}
             onRowClick={(row) => setSelectedOpp(row.id as string)}
-            emptyMessage="No credited opportunities found"
+            emptyMessage="No opportunities found"
           />
         </CardContent>
       </Card>

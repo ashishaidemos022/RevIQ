@@ -107,7 +107,12 @@ export function PbmPilots() {
     {
       key: "credit_path",
       header: "Credit Path",
-      render: (row) => <CreditPathBadge creditPath={row.credit_path as string | null} />,
+      render: (row) => (
+        <CreditPathBadge
+          creditPath={row.credit_path as string | null}
+          partnerName={row.partner_name as string | null}
+        />
+      ),
     },
     {
       key: "credited_pbm_name",
@@ -163,12 +168,12 @@ export function PbmPilots() {
     {
       key: "credit_path",
       header: "Credit Path",
-      render: (row) => <CreditPathBadge creditPath={row.credit_path as string | null} />,
-    },
-    {
-      key: "partner_name",
-      header: "Partner",
-      render: (row) => (row.partner_name as string) || "—",
+      render: (row) => (
+        <CreditPathBadge
+          creditPath={row.credit_path as string | null}
+          partnerName={row.partner_name as string | null}
+        />
+      ),
     },
     {
       key: "credited_pbm_name",
@@ -216,13 +221,13 @@ export function PbmPilots() {
       {/* All Pilots Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">All Credited Pilots</CardTitle>
+          <CardTitle className="text-sm font-medium">All Pilots</CardTitle>
         </CardHeader>
         <CardContent>
           {pilots.length === 0 ? (
             <EmptyState
-              title="No credited paid pilots"
-              description="No paid pilot opportunities are credited to PBMs"
+              title="No paid pilots"
+              description="No paid pilot opportunities found"
               icon={FlaskConical}
             />
           ) : (

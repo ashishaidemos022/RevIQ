@@ -163,12 +163,12 @@ export function PbmPipeline() {
     {
       key: "credit_path",
       header: "Credit Path",
-      render: (row) => <CreditPathBadge creditPath={row.credit_path as string | null} />,
-    },
-    {
-      key: "partner_name",
-      header: "Partner",
-      render: (row) => (row.partner_name as string) || "—",
+      render: (row) => (
+        <CreditPathBadge
+          creditPath={row.credit_path as string | null}
+          partnerName={row.partner_name as string | null}
+        />
+      ),
     },
     {
       key: "credited_pbm_name",
@@ -231,7 +231,7 @@ export function PbmPipeline() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
         <KpiCard label="Weighted Pipeline" value={kpis.weightedPipelineAcv} format="currency" />
-        <KpiCard label="Credited Deals" value={kpis.dealCount} format="number" />
+        <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
         <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />
       </div>
@@ -244,8 +244,8 @@ export function PbmPipeline() {
         <CardContent>
           {stageData.length === 0 ? (
             <EmptyState
-              title="No credited open opportunities"
-              description="No open opportunities are credited to PBMs matching the selected filters"
+              title="No open opportunities"
+              description="No open opportunities match the selected filters"
             />
           ) : (
             <div className="space-y-1">
@@ -295,7 +295,7 @@ export function PbmPipeline() {
       {/* Open Opportunities Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Credited Open Opportunities</CardTitle>
+          <CardTitle className="text-sm font-medium">Open Opportunities</CardTitle>
         </CardHeader>
         <CardContent>
           <DataTable
@@ -303,7 +303,7 @@ export function PbmPipeline() {
             columns={oppColumns}
             pageSize={25}
             onRowClick={(row) => setSelectedOpp(row.id as string)}
-            emptyMessage="No credited open opportunities match the selected filters"
+            emptyMessage="No open opportunities match the selected filters"
           />
         </CardContent>
       </Card>

@@ -14,7 +14,10 @@ interface SalesforceOpportunityPartner {
 export interface OpportunityPartnerSyncResult {
   total_partners: number;
   synced: number;
+  matched_opportunities: number;
+  unmatched_opportunities: number;
   errors: string[];
+  debug?: { sample_partner_opp_id?: string; sample_opp_table_id?: string; opp_table_count?: number };
 }
 
 export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncResult> {
@@ -39,6 +42,8 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
   const result: OpportunityPartnerSyncResult = {
     total_partners: sfPartners.length,
     synced: 0,
+    matched_opportunities: 0,
+    unmatched_opportunities: 0,
     errors: [],
   };
 
@@ -46,55 +51,58 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
     return result;
   }
 
-  // Salesforce IDs can be 15-char or 18-char; normalize to 15 for matching
+  // Load ALL opportunities into a lookup map (keyed by salesforce_opportunity_id)
+  // Also key by 15-char truncation to handle 15/18-char ID mismatches
   const to15 = (id: string) => id?.length === 18 ? id.substring(0, 15) : id;
+  const oppMap = new Map<string, string>(); // SF opp ID → local UUID
 
-  // Build opportunity ID lookup (keyed by 15-char SF ID)
-  const oppSfIds = [...new Set(sfPartners.map(p => p.OpportunityId))];
-  const oppMap = new Map<string, string>(); // SF opp ID (15-char) → local UUID
-  const pageSize = 1000;
-
-  for (let i = 0; i < oppSfIds.length; i += pageSize) {
-    const batch = oppSfIds.slice(i, i + pageSize);
-    // Try matching both the raw IDs and 15-char truncated versions
+  const pageSize = 5000;
+  let offset = 0;
+  let oppTableCount = 0;
+  while (true) {
     const { data: opps } = await db
       .from('opportunities')
       .select('id, salesforce_opportunity_id')
-      .in('salesforce_opportunity_id', batch);
-    (opps || []).forEach(o => {
+      .range(offset, offset + pageSize - 1);
+    if (!opps || opps.length === 0) break;
+    oppTableCount += opps.length;
+    opps.forEach(o => {
       oppMap.set(o.salesforce_opportunity_id, o.id);
       oppMap.set(to15(o.salesforce_opportunity_id), o.id);
     });
-  }
-
-  // If no matches found with raw IDs, try 15-char truncated partner OpportunityIds
-  // This handles the case where opportunities table has 18-char IDs but partner has 15-char or vice versa
-  if (oppMap.size === 0 || sfPartners.every(p => !oppMap.get(p.OpportunityId) && !oppMap.get(to15(p.OpportunityId)))) {
-    // Fetch all opportunities and build a comprehensive map
-    const { data: allOpps } = await db
-      .from('opportunities')
-      .select('id, salesforce_opportunity_id');
-    (allOpps || []).forEach(o => {
-      oppMap.set(o.salesforce_opportunity_id, o.id);
-      oppMap.set(to15(o.salesforce_opportunity_id), o.id);
-    });
+    if (opps.length < pageSize) break;
+    offset += pageSize;
   }
 
   // Map and upsert
   const now = new Date().toISOString();
   const batchSize = 200;
+  let matchedCount = 0;
 
-  const records = sfPartners.map((p) => ({
-    salesforce_partner_id: p.Id,
-    salesforce_opportunity_id: p.OpportunityId,
-    opportunity_id: oppMap.get(p.OpportunityId) || oppMap.get(to15(p.OpportunityId)) || null,
-    partner_account_sf_id: p.AccountToId,
-    partner_account_name: p.AccountTo?.Name || null,
-    role: p.Role,
-    is_primary: p.IsPrimary,
-    sf_created_date: p.CreatedDate,
-    last_synced_at: now,
-  }));
+  const records = sfPartners.map((p) => {
+    const oppId = oppMap.get(p.OpportunityId) || oppMap.get(to15(p.OpportunityId)) || null;
+    if (oppId) matchedCount++;
+    return {
+      salesforce_partner_id: p.Id,
+      salesforce_opportunity_id: p.OpportunityId,
+      opportunity_id: oppId,
+      partner_account_sf_id: p.AccountToId,
+      partner_account_name: p.AccountTo?.Name || null,
+      role: p.Role,
+      engagement: p.Role,
+      is_primary: p.IsPrimary,
+      sf_created_date: p.CreatedDate,
+      last_synced_at: now,
+    };
+  });
+
+  result.matched_opportunities = matchedCount;
+  result.unmatched_opportunities = records.length - matchedCount;
+  result.debug = {
+    sample_partner_opp_id: sfPartners[0]?.OpportunityId,
+    sample_opp_table_id: oppMap.keys().next().value,
+    opp_table_count: oppTableCount,
+  };
 
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);

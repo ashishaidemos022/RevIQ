@@ -32,6 +32,7 @@ export const MOBILE_NAV_ITEMS = [
   { label: 'More', href: '/settings', icon: 'Menu' },
 ] as const;
 
+export const PBM_ROLES: UserRole[] = ['pbm'];
 export const AE_ROLES: UserRole[] = ['commercial_ae', 'enterprise_ae'];
 export const MANAGER_PLUS_ROLES: UserRole[] = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 export const SYNC_ROLES: UserRole[] = ['revops_rw'];

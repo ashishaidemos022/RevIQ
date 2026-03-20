@@ -151,7 +151,6 @@ export async function GET(request: NextRequest) {
         partnerOffset += partnerPageSize;
       }
     }
-    console.log(`[PBM_LB] sf_partners loaded: ${sfPartnersByOpp.size} opportunities with PBM channel owners`);
 
     const entries: Array<{
       rank: number;

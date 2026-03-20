@@ -98,6 +98,17 @@ export async function GET(request: NextRequest) {
       pbmManagerMap[r.user_id] = managerNameMap[r.manager_id] ?? null;
     });
 
+    // === Shared: Resolve PBM salesforce_user_ids ===
+    const { data: pbmSfUsers } = await db
+      .from('users')
+      .select('id, salesforce_user_id')
+      .in('id', pbmIds)
+      .not('salesforce_user_id', 'is', null);
+
+    const pbmSfIdToLocalId = new Map<string, string>();
+    (pbmSfUsers || []).forEach(u => pbmSfIdToLocalId.set(u.salesforce_user_id, u.id));
+    const pbmSfIds = [...pbmSfIdToLocalId.keys()];
+
     const entries: Array<{
       rank: number;
       user_id: string;
@@ -109,30 +120,69 @@ export async function GET(request: NextRequest) {
       is_current_user: boolean;
     }> = [];
 
+    // Helper: credit a PBM on a specific opportunity, avoiding double credit
+    // Returns the set of (pbmLocalId, oppSfId) pairs already credited
+    type CreditMap = Record<string, { acv: number; deals: Set<string> }>;
+
+    /**
+     * For a set of opportunities, find additional PBM credits via sf_opportunity_partners.
+     * Each partner record has its own channel_owner_sf_id — credit that PBM directly.
+     * Skip if the partner's Channel Owner is the same as the opportunity-level Channel Owner
+     * (to avoid double credit). Each unique Channel Owner gets 100% credit (full ACV).
+     */
+    async function addOpportunityPartnerCredits(
+      oppSfIds: string[],
+      oppChannelOwnerMap: Map<string, string | null>, // opp SF ID → opp-level channel_owner_sf_id
+      oppAcvMap: Map<string, number>, // opp SF ID → ACV
+      pbmData: CreditMap,
+    ) {
+      if (oppSfIds.length === 0) return;
+
+      const batchSize = 500;
+      for (let i = 0; i < oppSfIds.length; i += batchSize) {
+        const batch = oppSfIds.slice(i, i + batchSize);
+        const { data: partners } = await db
+          .from('sf_opportunity_partners')
+          .select('salesforce_opportunity_id, channel_owner_sf_id')
+          .in('salesforce_opportunity_id', batch)
+          .not('channel_owner_sf_id', 'is', null);
+
+        (partners || []).forEach(p => {
+          const partnerChannelOwnerSfId = p.channel_owner_sf_id;
+          if (!partnerChannelOwnerSfId) return;
+
+          const pbmLocalId = pbmSfIdToLocalId.get(partnerChannelOwnerSfId);
+          if (!pbmLocalId) return; // Channel Owner is not a PBM in our list
+
+          // Skip if this PBM is already the opp-level Channel Owner (avoid double credit)
+          const oppChannelOwner = oppChannelOwnerMap.get(p.salesforce_opportunity_id);
+          if (oppChannelOwner === partnerChannelOwnerSfId) return;
+
+          const acv = oppAcvMap.get(p.salesforce_opportunity_id) || 0;
+          if (!pbmData[pbmLocalId]) pbmData[pbmLocalId] = { acv: 0, deals: new Set() };
+          pbmData[pbmLocalId].acv += acv;
+          pbmData[pbmLocalId].deals.add(p.salesforce_opportunity_id);
+        });
+      }
+    }
+
     if (board === 'revenue') {
-      // PBM revenue is based on Channel Owner (channel_owner_sf_id) on closed-won opportunities
-      // Amount is Reporting ACV (stored as 'acv' in opportunities table)
-      // Resolve PBM salesforce_user_id for matching against channel_owner_sf_id
-      const { data: pbmSfUsers } = await db
-        .from('users')
-        .select('id, salesforce_user_id')
-        .in('id', pbmIds)
-        .not('salesforce_user_id', 'is', null);
-
-      const pbmSfIdToLocalId = new Map<string, string>();
-      (pbmSfUsers || []).forEach(u => pbmSfIdToLocalId.set(u.salesforce_user_id, u.id));
-      const pbmSfIds = [...pbmSfIdToLocalId.keys()];
-
-      // Fetch closed-won opportunities where channel_owner_sf_id matches a PBM
-      const pbmData: Record<string, { acv: number; deals: number }> = {};
+      // Credit PBMs for closed-won opportunities via:
+      // 1. Channel Owner (channel_owner_sf_id)
+      // 2. OpportunityPartner → rv_accounts owner (skip if same as Channel Owner)
+      const pbmData: CreditMap = {};
 
       if (pbmSfIds.length > 0) {
         const batchSize = 500;
+        const allClosedOppSfIds: string[] = [];
+        const oppChannelOwnerMap = new Map<string, string | null>();
+        const oppAcvMap = new Map<string, number>();
+
         for (let i = 0; i < pbmSfIds.length; i += batchSize) {
           const batch = pbmSfIds.slice(i, i + batchSize);
           let oppQuery = db
             .from('opportunities')
-            .select('channel_owner_sf_id, acv')
+            .select('salesforce_opportunity_id, channel_owner_sf_id, acv')
             .eq('is_closed_won', true)
             .in('channel_owner_sf_id', batch);
           if (startStr) oppQuery = oppQuery.gte('close_date', startStr);
@@ -141,25 +191,50 @@ export async function GET(request: NextRequest) {
           (opps || []).forEach(o => {
             const localId = pbmSfIdToLocalId.get(o.channel_owner_sf_id);
             if (!localId) return;
-            if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: 0 };
+            if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: new Set() };
             pbmData[localId].acv += o.acv || 0;
-            pbmData[localId].deals++;
+            pbmData[localId].deals.add(o.salesforce_opportunity_id);
+            allClosedOppSfIds.push(o.salesforce_opportunity_id);
+            oppChannelOwnerMap.set(o.salesforce_opportunity_id, o.channel_owner_sf_id);
+            oppAcvMap.set(o.salesforce_opportunity_id, o.acv || 0);
           });
         }
+
+        // Also find closed-won opportunities that have OpportunityPartner records
+        // but where the Channel Owner is NOT one of our PBMs (so we didn't already fetch them)
+        // We need ALL closed-won opportunities that have partner records pointing to rv_accounts owned by our PBMs
+        let allClosedQuery = db
+          .from('opportunities')
+          .select('salesforce_opportunity_id, channel_owner_sf_id, acv')
+          .eq('is_closed_won', true);
+        if (startStr) allClosedQuery = allClosedQuery.gte('close_date', startStr);
+        if (endStr) allClosedQuery = allClosedQuery.lte('close_date', endStr);
+        const { data: allClosedOpps } = await allClosedQuery;
+
+        const closedOppSfIdsForPartners: string[] = [];
+        (allClosedOpps || []).forEach(o => {
+          if (!oppAcvMap.has(o.salesforce_opportunity_id)) {
+            oppChannelOwnerMap.set(o.salesforce_opportunity_id, o.channel_owner_sf_id);
+            oppAcvMap.set(o.salesforce_opportunity_id, o.acv || 0);
+          }
+          closedOppSfIdsForPartners.push(o.salesforce_opportunity_id);
+        });
+
+        await addOpportunityPartnerCredits(closedOppSfIdsForPartners, oppChannelOwnerMap, oppAcvMap, pbmData);
       }
 
       allPBMs.forEach(pbm => {
-        const data = pbmData[pbm.id] || { acv: 0, deals: 0 };
+        const data = pbmData[pbm.id] || { acv: 0, deals: new Set() };
         entries.push({
           rank: 0,
           user_id: pbm.id,
           full_name: pbm.full_name,
           region: pbm.region,
           manager_name: pbmManagerMap[pbm.id] ?? null,
-          primary_metric: data.acv, // ACV Closed w/ Multiplier = same as ACV for now
+          primary_metric: data.acv,
           secondary_metrics: {
             acv_closed: data.acv,
-            deals_closed: data.deals,
+            deals_closed: data.deals.size,
           },
           is_current_user: pbm.id === user.user_id,
         });
@@ -167,58 +242,103 @@ export async function GET(request: NextRequest) {
 
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
     } else if (board === 'pipeline') {
-      // PBM pipeline from opportunity splits on open opportunities
-      let query = db
-        .from('opportunity_splits')
-        .select('split_owner_user_id, split_amount, salesforce_opportunity_id')
-        .in('split_owner_user_id', pbmIds);
-      const { data: splits } = await query;
+      // Credit PBMs for open pipeline via:
+      // 1. Channel Owner (channel_owner_sf_id)
+      // 2. OpportunityPartner → rv_accounts owner (skip if same as Channel Owner)
+      const pbmData: Record<string, { total: number; partner_sourced: number; partner_influenced: number; deals: Set<string> }> = {};
 
-      const oppSfIds = [...new Set((splits || []).map(s => s.salesforce_opportunity_id))];
-      // Fetch open opportunities with source info
-      const openOppMap = new Map<string, { opportunity_source: string | null; acv: number | null }>();
+      if (pbmSfIds.length > 0) {
+        const oppChannelOwnerMap = new Map<string, string | null>();
+        const oppAcvMap = new Map<string, number>();
+        const oppSourceMap = new Map<string, string | null>();
 
-      if (oppSfIds.length > 0) {
+        // Fetch open opportunities where channel_owner_sf_id matches a PBM
         const batchSize = 500;
-        for (let i = 0; i < oppSfIds.length; i += batchSize) {
-          const batch = oppSfIds.slice(i, i + batchSize);
-          let oppQuery = db
+        for (let i = 0; i < pbmSfIds.length; i += batchSize) {
+          const batch = pbmSfIds.slice(i, i + batchSize);
+          const { data: opps } = await db
             .from('opportunities')
-            .select('salesforce_opportunity_id, opportunity_source, acv')
+            .select('salesforce_opportunity_id, channel_owner_sf_id, acv, opportunity_source')
             .eq('is_closed_won', false)
             .eq('is_closed_lost', false)
             .gt('acv', 0)
-            .in('salesforce_opportunity_id', batch);
-          const { data: opps } = await oppQuery;
-          (opps || []).forEach(o => openOppMap.set(o.salesforce_opportunity_id, { opportunity_source: o.opportunity_source, acv: o.acv }));
+            .in('channel_owner_sf_id', batch);
+          (opps || []).forEach(o => {
+            const localId = pbmSfIdToLocalId.get(o.channel_owner_sf_id);
+            if (!localId) return;
+            const acv = o.acv || 0;
+            if (!pbmData[localId]) pbmData[localId] = { total: 0, partner_sourced: 0, partner_influenced: 0, deals: new Set() };
+            pbmData[localId].total += acv;
+            pbmData[localId].deals.add(o.salesforce_opportunity_id);
+
+            const src = (o.opportunity_source || '').toLowerCase();
+            if (src.includes('partner') || src.includes('channel')) {
+              pbmData[localId].partner_sourced += acv;
+            } else {
+              pbmData[localId].partner_influenced += acv;
+            }
+
+            oppChannelOwnerMap.set(o.salesforce_opportunity_id, o.channel_owner_sf_id);
+            oppAcvMap.set(o.salesforce_opportunity_id, acv);
+            oppSourceMap.set(o.salesforce_opportunity_id, o.opportunity_source);
+          });
+        }
+
+        // Fetch ALL open opportunities for OpportunityPartner credit
+        let allOpenQuery = db
+          .from('opportunities')
+          .select('salesforce_opportunity_id, channel_owner_sf_id, acv, opportunity_source')
+          .eq('is_closed_won', false)
+          .eq('is_closed_lost', false)
+          .gt('acv', 0);
+        const { data: allOpenOpps } = await allOpenQuery;
+
+        const openOppSfIdsForPartners: string[] = [];
+        (allOpenOpps || []).forEach(o => {
+          if (!oppAcvMap.has(o.salesforce_opportunity_id)) {
+            oppChannelOwnerMap.set(o.salesforce_opportunity_id, o.channel_owner_sf_id);
+            oppAcvMap.set(o.salesforce_opportunity_id, o.acv || 0);
+            oppSourceMap.set(o.salesforce_opportunity_id, o.opportunity_source);
+          }
+          openOppSfIdsForPartners.push(o.salesforce_opportunity_id);
+        });
+
+        // Add OpportunityPartner credits via partner-level channel_owner_sf_id
+        if (openOppSfIdsForPartners.length > 0) {
+          for (let i = 0; i < openOppSfIdsForPartners.length; i += batchSize) {
+            const batch = openOppSfIdsForPartners.slice(i, i + batchSize);
+            const { data: partners } = await db
+              .from('sf_opportunity_partners')
+              .select('salesforce_opportunity_id, channel_owner_sf_id')
+              .in('salesforce_opportunity_id', batch)
+              .not('channel_owner_sf_id', 'is', null);
+
+            (partners || []).forEach(p => {
+              const partnerChannelOwnerSfId = p.channel_owner_sf_id;
+              if (!partnerChannelOwnerSfId) return;
+              const pbmLocalId = pbmSfIdToLocalId.get(partnerChannelOwnerSfId);
+              if (!pbmLocalId) return;
+              const oppChannelOwner = oppChannelOwnerMap.get(p.salesforce_opportunity_id);
+              if (oppChannelOwner === partnerChannelOwnerSfId) return; // Skip double credit
+
+              const acv = oppAcvMap.get(p.salesforce_opportunity_id) || 0;
+              if (!pbmData[pbmLocalId]) pbmData[pbmLocalId] = { total: 0, partner_sourced: 0, partner_influenced: 0, deals: new Set() };
+              pbmData[pbmLocalId].total += acv;
+              pbmData[pbmLocalId].deals.add(p.salesforce_opportunity_id);
+
+              const src = (oppSourceMap.get(p.salesforce_opportunity_id) || '').toLowerCase();
+              if (src.includes('partner') || src.includes('channel')) {
+                pbmData[pbmLocalId].partner_sourced += acv;
+              } else {
+                pbmData[pbmLocalId].partner_influenced += acv;
+              }
+            });
+          }
         }
       }
 
-      const pbmData: Record<string, { total: number; partner_sourced: number; partner_influenced: number; deals: number }> = {};
-      const countedOpps: Record<string, Set<string>> = {};
-      (splits || []).forEach((s: { split_owner_user_id: string | null; split_amount: number | null; salesforce_opportunity_id: string }) => {
-        const id = s.split_owner_user_id || '';
-        const opp = openOppMap.get(s.salesforce_opportunity_id);
-        if (!opp) return;
-        const acv = s.split_amount || 0;
-        if (!pbmData[id]) { pbmData[id] = { total: 0, partner_sourced: 0, partner_influenced: 0, deals: 0 }; countedOpps[id] = new Set(); }
-        pbmData[id].total += acv;
-
-        const src = (opp.opportunity_source || '').toLowerCase();
-        if (src.includes('partner') || src.includes('channel')) {
-          pbmData[id].partner_sourced += acv;
-        } else {
-          pbmData[id].partner_influenced += acv;
-        }
-
-        if (!countedOpps[id].has(s.salesforce_opportunity_id)) {
-          countedOpps[id].add(s.salesforce_opportunity_id);
-          pbmData[id].deals++;
-        }
-      });
-
       allPBMs.forEach(pbm => {
-        const data = pbmData[pbm.id] || { total: 0, partner_sourced: 0, partner_influenced: 0, deals: 0 };
+        const data = pbmData[pbm.id] || { total: 0, partner_sourced: 0, partner_influenced: 0, deals: new Set() };
         entries.push({
           rank: 0,
           user_id: pbm.id,
@@ -229,8 +349,8 @@ export async function GET(request: NextRequest) {
           secondary_metrics: {
             partner_sourced: data.partner_sourced,
             partner_influenced: data.partner_influenced,
-            open_deals: data.deals,
-            avg_deal_size: data.deals > 0 ? data.total / data.deals : 0,
+            open_deals: data.deals.size,
+            avg_deal_size: data.deals.size > 0 ? data.total / data.deals.size : 0,
           },
           is_current_user: pbm.id === user.user_id,
         });
@@ -238,73 +358,101 @@ export async function GET(request: NextRequest) {
 
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
     } else if (board === 'pilots') {
-      // PBM pilots from opportunity splits on paid pilot opportunities
-      let query = db
-        .from('opportunity_splits')
-        .select('split_owner_user_id, salesforce_opportunity_id')
-        .in('split_owner_user_id', pbmIds);
-      const { data: splits } = await query;
+      // Credit PBMs for paid pilot opportunities via:
+      // 1. Channel Owner (channel_owner_sf_id)
+      // 2. OpportunityPartner → rv_accounts owner (skip if same as Channel Owner)
+      const pbmData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; numCreated: number; countedOpps: Set<string> }> = {};
 
-      const oppSfIds = [...new Set((splits || []).map(s => s.salesforce_opportunity_id))];
-      const pilotOppMap = new Map<string, {
-        is_closed_won: boolean;
-        is_closed_lost: boolean;
-        paid_pilot_start_date: string | null;
-        close_date: string | null;
-        sf_created_date: string | null;
-        created_at: string;
-      }>();
+      if (pbmSfIds.length > 0) {
+        const oppChannelOwnerMap = new Map<string, string | null>();
 
-      if (oppSfIds.length > 0) {
+        // Fetch all paid pilot opportunities
+        const { data: allPilotOpps } = await db
+          .from('opportunities')
+          .select('salesforce_opportunity_id, channel_owner_sf_id, is_closed_won, is_closed_lost, paid_pilot_start_date, close_date, sf_created_date, created_at')
+          .eq('is_paid_pilot', true);
+
+        const pilotOppMap = new Map<string, {
+          salesforce_opportunity_id: string;
+          channel_owner_sf_id: string | null;
+          is_closed_won: boolean;
+          is_closed_lost: boolean;
+          paid_pilot_start_date: string | null;
+          close_date: string | null;
+          sf_created_date: string | null;
+          created_at: string;
+        }>();
+
+        (allPilotOpps || []).forEach(o => {
+          pilotOppMap.set(o.salesforce_opportunity_id, o);
+          oppChannelOwnerMap.set(o.salesforce_opportunity_id, o.channel_owner_sf_id);
+        });
+
+        // Helper to credit a PBM for a pilot opportunity
+        const creditPilot = (pbmLocalId: string, opp: typeof pilotOppMap extends Map<string, infer V> ? V : never) => {
+          if (!pbmData[pbmLocalId]) {
+            pbmData[pbmLocalId] = { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0, countedOpps: new Set() };
+          }
+          if (pbmData[pbmLocalId].countedOpps.has(opp.salesforce_opportunity_id)) return;
+          pbmData[pbmLocalId].countedOpps.add(opp.salesforce_opportunity_id);
+
+          if (opp.is_closed_won) {
+            pbmData[pbmLocalId].booked++;
+            pbmData[pbmLocalId].bookedCount++;
+            if (opp.paid_pilot_start_date && opp.close_date) {
+              pbmData[pbmLocalId].totalDuration += Math.ceil(
+                (new Date(opp.close_date).getTime() - new Date(opp.paid_pilot_start_date).getTime()) / (1000 * 60 * 60 * 24)
+              );
+            }
+          } else if (!opp.is_closed_lost) {
+            pbmData[pbmLocalId].open++;
+          }
+
+          const createdDate = (opp.sf_created_date || opp.created_at || '').split('T')[0];
+          if (createdDate) {
+            const inRange = (!startStr || createdDate >= startStr) && (!endStr || createdDate <= endStr);
+            if (inRange) {
+              pbmData[pbmLocalId].numCreated++;
+            }
+          }
+        };
+
+        // 1. Credit via Channel Owner
+        pilotOppMap.forEach(opp => {
+          if (!opp.channel_owner_sf_id) return;
+          const localId = pbmSfIdToLocalId.get(opp.channel_owner_sf_id);
+          if (!localId) return;
+          creditPilot(localId, opp);
+        });
+
+        // 2. Credit via OpportunityPartner partner-level channel_owner_sf_id
+        const pilotSfIds = [...pilotOppMap.keys()];
         const batchSize = 500;
-        for (let i = 0; i < oppSfIds.length; i += batchSize) {
-          const batch = oppSfIds.slice(i, i + batchSize);
-          const { data: opps } = await db
-            .from('opportunities')
-            .select('salesforce_opportunity_id, is_closed_won, is_closed_lost, paid_pilot_start_date, close_date, sf_created_date, created_at')
-            .eq('is_paid_pilot', true)
-            .in('salesforce_opportunity_id', batch);
-          (opps || []).forEach(o => pilotOppMap.set(o.salesforce_opportunity_id, o));
+        for (let i = 0; i < pilotSfIds.length; i += batchSize) {
+          const batch = pilotSfIds.slice(i, i + batchSize);
+          const { data: partners } = await db
+            .from('sf_opportunity_partners')
+            .select('salesforce_opportunity_id, channel_owner_sf_id')
+            .in('salesforce_opportunity_id', batch)
+            .not('channel_owner_sf_id', 'is', null);
+
+          (partners || []).forEach(p => {
+            const partnerChannelOwnerSfId = p.channel_owner_sf_id;
+            if (!partnerChannelOwnerSfId) return;
+            const pbmLocalId = pbmSfIdToLocalId.get(partnerChannelOwnerSfId);
+            if (!pbmLocalId) return;
+            const oppChannelOwner = oppChannelOwnerMap.get(p.salesforce_opportunity_id);
+            if (oppChannelOwner === partnerChannelOwnerSfId) return; // Skip double credit
+
+            const opp = pilotOppMap.get(p.salesforce_opportunity_id);
+            if (!opp) return;
+            creditPilot(pbmLocalId, opp);
+          });
         }
       }
 
-      const pbmData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; numCreated: number }> = {};
-      const countedOpps: Record<string, Set<string>> = {};
-      (splits || []).forEach((s: { split_owner_user_id: string | null; salesforce_opportunity_id: string }) => {
-        const id = s.split_owner_user_id || '';
-        const opp = pilotOppMap.get(s.salesforce_opportunity_id);
-        if (!opp) return;
-
-        if (!pbmData[id]) { pbmData[id] = { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0 }; countedOpps[id] = new Set(); }
-
-        // Avoid double-counting if PBM has multiple splits on same opportunity
-        if (countedOpps[id].has(s.salesforce_opportunity_id)) return;
-        countedOpps[id].add(s.salesforce_opportunity_id);
-
-        if (opp.is_closed_won) {
-          pbmData[id].booked++;
-          pbmData[id].bookedCount++;
-          if (opp.paid_pilot_start_date && opp.close_date) {
-            pbmData[id].totalDuration += Math.ceil(
-              (new Date(opp.close_date).getTime() - new Date(opp.paid_pilot_start_date).getTime()) / (1000 * 60 * 60 * 24)
-            );
-          }
-        } else if (!opp.is_closed_lost) {
-          pbmData[id].open++;
-        }
-
-        // Count pilots created within the selected period
-        const createdDate = (opp.sf_created_date || opp.created_at || '').split('T')[0];
-        if (createdDate) {
-          const inRange = (!startStr || createdDate >= startStr) && (!endStr || createdDate <= endStr);
-          if (inRange) {
-            pbmData[id].numCreated++;
-          }
-        }
-      });
-
       allPBMs.forEach(pbm => {
-        const data = pbmData[pbm.id] || { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0 };
+        const data = pbmData[pbm.id] || { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0, countedOpps: new Set() };
         entries.push({
           rank: 0,
           user_id: pbm.id,

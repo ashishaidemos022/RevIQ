@@ -8,6 +8,8 @@ interface SalesforceOpportunityPartner {
   AccountTo: { Name: string } | null;
   Role: string | null;
   IsPrimary: boolean;
+  Channel_Owner__c: string | null;
+  Engagement__c: string | null;
   CreatedDate: string;
 }
 
@@ -26,7 +28,7 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
 
   await new Promise<void>((resolve, reject) => {
     const q = conn.query<SalesforceOpportunityPartner>(
-      'SELECT Id, OpportunityId, AccountToId, AccountTo.Name, Role, IsPrimary, CreatedDate FROM OpportunityPartner'
+      'SELECT Id, OpportunityId, AccountToId, AccountTo.Name, Role, IsPrimary, Channel_Owner__c, Engagement__c, CreatedDate FROM OpportunityPartner'
     );
     q.on('record', (record: SalesforceOpportunityPartner) => {
       sfPartners.push(record);
@@ -72,6 +74,8 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
     partner_account_name: p.AccountTo?.Name || null,
     role: p.Role,
     is_primary: p.IsPrimary,
+    channel_owner_sf_id: p.Channel_Owner__c,
+    engagement: p.Engagement__c,
     sf_created_date: p.CreatedDate,
     last_synced_at: now,
   }));

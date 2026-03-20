@@ -40,9 +40,9 @@ export function Sidebar() {
   const userRole = user?.role as UserRole | undefined;
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r bg-card z-30">
+    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border bg-sidebar z-30">
       <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-        <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-7 w-7 invert brightness-200" />
+        <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-7 w-7 brightness-0 invert" />
         <div className="flex flex-col leading-tight">
           <span className="font-bold text-sm text-sidebar-foreground">RevenueIQ</span>
           <span className="text-[10px] text-sidebar-foreground/60 tracking-wide uppercase">by Talkdesk</span>
@@ -69,8 +69,8 @@ export function Sidebar() {
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      ? "bg-sidebar-accent text-sidebar-primary"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                 >
                   {Icon && <Icon className="h-4 w-4" />}

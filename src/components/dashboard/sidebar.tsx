@@ -41,11 +41,12 @@ export function Sidebar() {
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r bg-card z-30">
-      <div className="flex h-16 items-center gap-2 px-6 border-b">
-        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-primary-foreground font-bold text-sm">TD</span>
+      <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
+        <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-7 w-7 invert brightness-200" />
+        <div className="flex flex-col leading-tight">
+          <span className="font-bold text-sm text-sidebar-foreground">RevenueIQ</span>
+          <span className="text-[10px] text-sidebar-foreground/60 tracking-wide uppercase">by Talkdesk</span>
         </div>
-        <span className="font-semibold text-lg">RevenueIQ</span>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-3">

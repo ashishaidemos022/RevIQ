@@ -45,9 +45,10 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-md space-y-6 px-4">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight">TD RevenueIQ</h1>
-          <p className="mt-2 text-muted-foreground">
+        <div className="text-center space-y-3">
+          <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-10 mx-auto" />
+          <h1 className="text-3xl font-bold tracking-tight text-primary">RevenueIQ</h1>
+          <p className="text-muted-foreground">
             Enterprise Sales Performance Platform
           </p>
         </div>

@@ -56,7 +56,7 @@ export async function syncOpportunityPartners(): Promise<OpportunityPartnerSyncR
   const to15 = (id: string) => id?.length === 18 ? id.substring(0, 15) : id;
   const oppMap = new Map<string, string>(); // SF opp ID → local UUID
 
-  const pageSize = 5000;
+  const pageSize = 1000; // Supabase default max_rows is 1000
   let offset = 0;
   let oppTableCount = 0;
   while (true) {

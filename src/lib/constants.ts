@@ -4,7 +4,12 @@ export const NAV_ITEMS = [
   { label: 'Home', href: '/home', icon: 'Home', roles: 'all' as const },
   { label: 'Pipeline', href: '/pipeline', icon: 'BarChart3', roles: 'all' as const },
   { label: 'Paid Pilots', href: '/pilots', icon: 'FlaskConical', roles: 'all' as const },
-  { label: 'Activities', href: '/activities', icon: 'Zap', roles: 'all' as const },
+  {
+    label: 'Activities',
+    href: '/activities',
+    icon: 'Zap',
+    roles: ['ae', 'commercial_ae', 'enterprise_ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'] as UserRole[],
+  },
   { label: 'Performance', href: '/performance', icon: 'TrendingUp', roles: 'all' as const },
   { label: 'AE Leaderboard', href: '/leaderboard', icon: 'Trophy', roles: 'all' as const },
   { label: 'PBM Leaderboard', href: '/pbm-leaderboard', icon: 'Handshake', roles: 'all' as const },

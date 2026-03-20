@@ -26,7 +26,12 @@ export const NAV_ITEMS = [
     icon: 'Users',
     roles: ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'] as UserRole[],
   },
-  { label: 'Settings', href: '/settings', icon: 'Settings', roles: 'all' as const },
+  {
+    label: 'Settings',
+    href: '/settings',
+    icon: 'Settings',
+    roles: ['revops_rw', 'enterprise_ro'] as UserRole[],
+  },
 ] as const;
 
 export const MOBILE_NAV_ITEMS = [
@@ -41,7 +46,7 @@ export const PBM_ROLES: UserRole[] = ['pbm'];
 export const AE_ROLES: UserRole[] = ['commercial_ae', 'enterprise_ae'];
 export const MANAGER_PLUS_ROLES: UserRole[] = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 export const SYNC_ROLES: UserRole[] = ['revops_rw'];
-export const QUOTA_WRITE_ROLES: UserRole[] = ['vp', 'cro', 'c_level', 'revops_rw'];
+export const QUOTA_WRITE_ROLES: UserRole[] = ['revops_rw'];
 export const COMMISSION_RATE_WRITE_ROLES: UserRole[] = ['cro', 'c_level', 'revops_rw'];
 export const FULL_ACCESS_ROLES: UserRole[] = ['cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 export const VIEW_AS_ROLES: UserRole[] = ['revops_rw', 'revops_ro', 'cro', 'c_level'];

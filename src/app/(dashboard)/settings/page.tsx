@@ -3,7 +3,6 @@
 import { useAuthStore } from "@/stores/auth-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuotasTab } from "./quotas-tab";
-import { CommissionRatesTab } from "./commission-rates-tab";
 import { HierarchyTab } from "./hierarchy-tab";
 import { OverridesTab } from "./overrides-tab";
 
@@ -18,7 +17,6 @@ export default function SettingsPage() {
   // Only revops_rw sees Quotas, Commission Rates, Hierarchy, and Permission Overrides
   // enterprise_ro sees Hierarchy only
   const canViewQuotas = isRevopsRW;
-  const canViewCommissionRates = isRevopsRW;
   const canViewHierarchy = isRevopsRW || isEnterpriseRO;
   const canViewOverrides = isRevopsRW;
 
@@ -30,7 +28,6 @@ export default function SettingsPage() {
       <Tabs defaultValue={defaultTab}>
         <TabsList>
           {canViewQuotas && <TabsTrigger value="quotas">Quotas</TabsTrigger>}
-          {canViewCommissionRates && <TabsTrigger value="commission-rates">Commission Rates</TabsTrigger>}
           {canViewHierarchy && <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>}
           {canViewOverrides && <TabsTrigger value="overrides">Permission Overrides</TabsTrigger>}
         </TabsList>
@@ -38,11 +35,6 @@ export default function SettingsPage() {
         {canViewQuotas && (
           <TabsContent value="quotas" className="mt-4">
             <QuotasTab />
-          </TabsContent>
-        )}
-        {canViewCommissionRates && (
-          <TabsContent value="commission-rates" className="mt-4">
-            <CommissionRatesTab />
           </TabsContent>
         )}
         {canViewHierarchy && (

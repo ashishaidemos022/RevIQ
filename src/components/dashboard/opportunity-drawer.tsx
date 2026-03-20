@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
 
 interface OpportunityDrawerProps {
   opportunityId: string | null;
@@ -26,11 +27,9 @@ export function OpportunityDrawer({
   const { data, isLoading } = useQuery({
     queryKey: ["opportunity", opportunityId],
     queryFn: () =>
-      apiFetch<{ data: Record<string, unknown>[] }>(
-        `/api/opportunities?limit=1&offset=0`
-      ).then((res) =>
-        res.data.find((o) => o.id === opportunityId)
-      ),
+      apiFetch<{ data: Record<string, unknown> }>(
+        `/api/opportunities/${opportunityId}`
+      ).then((res) => res.data),
     enabled: !!opportunityId && open,
   });
 
@@ -66,13 +65,19 @@ export function OpportunityDrawer({
           </div>
         ) : opp ? (
           <div className="mt-6 space-y-4">
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Badge>{opp.stage as string}</Badge>
               {opp.is_paid_pilot ? <Badge variant="outline">Paid Pilot</Badge> : null}
               {opp.type ? (
                 <Badge variant="secondary">
                   {(opp.type as string).replace("_", " ")}
                 </Badge>
+              ) : null}
+              {opp.credit_path ? (
+                <CreditPathBadge
+                  creditPath={opp.credit_path as string | null}
+                  partnerName={opp.partner_name as string | null}
+                />
               ) : null}
             </div>
 
@@ -124,6 +129,31 @@ export function OpportunityDrawer({
               </div>
             </div>
 
+            {/* Partner / Credit Info */}
+            {opp.partner_name || opp.credit_path ? (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Partner & Credit</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Credit Path</p>
+                      <p className="font-medium">
+                        {(opp.credit_path as string) || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Partner</p>
+                      <p className="font-medium">
+                        {(opp.partner_name as string) || "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {/* Paid Pilot Details */}
             {opp.is_paid_pilot ? (
               <>
                 <Separator />

@@ -30,12 +30,13 @@ export async function resolvePbmCreditedOpps(
 
   // === Path 1: Channel Owner on Opportunity ===
   // Fetch all opps where channel_owner_sf_id matches a PBM
+  // Also fetch rv_account_sf_id to use as partner name (RV Account name stored on opp)
   const pageSize = 1000;
   let offset = 0;
   while (true) {
     const { data: opps } = await db
       .from('opportunities')
-      .select('salesforce_opportunity_id, channel_owner_sf_id')
+      .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id')
       .not('channel_owner_sf_id', 'is', null)
       .in('channel_owner_sf_id', pbmSfIds)
       .range(offset, offset + pageSize - 1);
@@ -46,7 +47,7 @@ export async function resolvePbmCreditedOpps(
         addCredit(o.salesforce_opportunity_id, {
           pbm_local_id: localId,
           credit_path: 'Channel Owner',
-          partner_name: null,
+          partner_name: o.rv_account_sf_id || null,
         });
       }
     });

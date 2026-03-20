@@ -40,6 +40,15 @@ export interface LeaderboardEntry {
   is_current_user: boolean;
 }
 
+// View As (impersonation)
+export interface ViewAsUser {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: import('./database').UserRole;
+  region: string | null;
+}
+
 // Org tree node
 export interface OrgTreeNode {
   user: Pick<import('./database').User, 'id' | 'full_name' | 'email' | 'role' | 'region' | 'is_active'>;

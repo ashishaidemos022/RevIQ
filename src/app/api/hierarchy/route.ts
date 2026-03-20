@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 
 const MANAGER_PLUS = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth();
 
@@ -12,7 +12,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const scope = await resolveDataScope(user);
+    const viewAsUser = await resolveViewAs(request, user);
+    const scope = await resolveDataScope(user, viewAsUser);
     const db = getSupabaseClient();
 
     // Get all active users (inactive/deprovisioned users excluded from hierarchy views)

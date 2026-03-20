@@ -2,12 +2,20 @@
 
 import { useAuthStore } from "@/stores/auth-store";
 import { useTheme } from "@/providers/theme-provider";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { SYNC_ROLES } from "@/lib/constants";
+import { SYNC_ROLES, VIEW_AS_ROLES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,8 +23,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Bell, RefreshCw, LogOut } from "lucide-react";
-import { UserRole } from "@/types";
+import { Sun, Moon, Bell, RefreshCw, LogOut, Eye, Search, X } from "lucide-react";
+import { UserRole, ViewAsUser } from "@/types";
 
 function formatRelativeTime(dateStr: string | null): { text: string; stale: "ok" | "warn" | "error" } {
   if (!dateStr) return { text: "Never", stale: "error" };
@@ -48,11 +56,66 @@ const staleStyles = {
 export function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
+  const setViewAs = useAuthStore((s) => s.setViewAs);
+  const clearViewAs = useAuthStore((s) => s.clearViewAs);
   const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const isDevAdmin = user?.user_id === "dev-admin";
   const canSync = user && SYNC_ROLES.includes(user.role as UserRole);
+  const canViewAs = user && VIEW_AS_ROLES.includes(user.role as UserRole);
+
+  // View As dialog state
+  const [viewAsOpen, setViewAsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ViewAsUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced user search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+        if (res.ok) {
+          const json = await res.json();
+          setSearchResults(json.data || []);
+        }
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery]);
+
+  const handleSelectUser = (target: ViewAsUser) => {
+    setViewAs(target);
+    setViewAsOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    // Invalidate all queries so dashboards re-fetch with viewAs param
+    queryClient.invalidateQueries();
+  };
+
+  const handleClearViewAs = () => {
+    clearViewAs();
+    queryClient.invalidateQueries();
+  };
 
   const { data: lastSync } = useQuery({
     queryKey: ["sync-last"],
@@ -89,6 +152,20 @@ export function Header() {
           DEV ADMIN — Development Environment Only
         </div>
       )}
+      {viewAsUser && (
+        <div className="bg-amber-500 text-white text-center text-xs font-bold py-1 px-4 flex items-center justify-center gap-2">
+          <Eye className="h-3 w-3" />
+          <span>
+            Viewing as: {viewAsUser.full_name} ({viewAsUser.role.replace("_", " ")}) — {viewAsUser.email}
+          </span>
+          <button
+            onClick={handleClearViewAs}
+            className="ml-2 underline hover:no-underline"
+          >
+            Exit
+          </button>
+        </div>
+      )}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-card px-4 md:px-6">
         <div className="flex items-center gap-2 md:hidden">
           <img src="/talkdesk-logo.svg" alt="Talkdesk" className="h-6 w-6" />
@@ -102,6 +179,20 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {canViewAs && (
+            <Button
+              variant={viewAsUser ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => setViewAsOpen(true)}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {viewAsUser ? `Viewing: ${viewAsUser.full_name}` : "View As"}
+              </span>
+            </Button>
+          )}
+
           {canSync && (
             <Button
               variant="outline"
@@ -162,6 +253,66 @@ export function Header() {
           </DropdownMenu>
         </div>
       </header>
+
+      {/* View As Dialog */}
+      <Dialog open={viewAsOpen} onOpenChange={setViewAsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>View As Another User</DialogTitle>
+            <DialogDescription>
+              Search for a user to view the app from their perspective. All data will be read-only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or email..."
+                value={searchQuery}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {searching && (
+                <p className="text-xs text-muted-foreground py-2 text-center">Searching...</p>
+              )}
+              {!searching && searchResults.length === 0 && searchQuery.length >= 2 && (
+                <p className="text-xs text-muted-foreground py-2 text-center">No users found</p>
+              )}
+              {searchResults.map((u) => (
+                <button
+                  key={u.user_id}
+                  onClick={() => handleSelectUser(u)}
+                  className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-sm flex items-center justify-between"
+                >
+                  <div>
+                    <p className="font-medium">{u.full_name}</p>
+                    <p className="text-xs text-muted-foreground">{u.email}</p>
+                  </div>
+                  <span className="text-xs bg-muted px-2 py-0.5 rounded capitalize">
+                    {u.role.replace("_", " ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {viewAsUser && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  handleClearViewAs();
+                  setViewAsOpen(false);
+                }}
+              >
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                Stop Viewing As {viewAsUser.full_name}
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

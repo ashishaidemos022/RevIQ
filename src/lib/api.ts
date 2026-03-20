@@ -1,5 +1,15 @@
+import { useAuthStore } from '@/stores/auth-store';
+
 export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const viewAsUser = useAuthStore.getState().viewAsUser;
+
+  let finalUrl = url;
+  if (viewAsUser) {
+    const separator = url.includes('?') ? '&' : '?';
+    finalUrl = `${url}${separator}viewAs=${viewAsUser.user_id}`;
+  }
+
+  const res = await fetch(finalUrl, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

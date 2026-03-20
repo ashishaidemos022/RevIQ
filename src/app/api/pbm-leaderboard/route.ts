@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod } from '@/lib/fiscal';
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth();
+    const viewAsUser = await resolveViewAs(request, user);
     const db = getSupabaseClient();
     const url = request.nextUrl;
 
@@ -206,7 +207,7 @@ export async function GET(request: NextRequest) {
             acv_closed: data.acv,
             deals_closed: data.deals.size,
           },
-          is_current_user: pbm.id === user.user_id,
+          is_current_user: pbm.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 
@@ -284,7 +285,7 @@ export async function GET(request: NextRequest) {
             open_deals: data.deals.size,
             avg_deal_size: data.deals.size > 0 ? data.total / data.deals.size : 0,
           },
-          is_current_user: pbm.id === user.user_id,
+          is_current_user: pbm.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 
@@ -367,7 +368,7 @@ export async function GET(request: NextRequest) {
             avg_duration: data.bookedCount > 0 ? Math.round(data.totalDuration / data.bookedCount) : 0,
             num_created: data.numCreated,
           },
-          is_current_user: pbm.id === user.user_id,
+          is_current_user: pbm.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 

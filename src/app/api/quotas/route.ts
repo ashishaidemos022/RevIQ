@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, requireRole, resolveDataScope, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, requireRole, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth();
-    const scope = await resolveDataScope(user);
+    const viewAsUser = await resolveViewAs(request, user);
+    const scope = await resolveDataScope(user, viewAsUser);
     const db = getSupabaseClient();
     const url = request.nextUrl;
 

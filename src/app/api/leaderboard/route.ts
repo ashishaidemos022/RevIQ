@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod, getQuarterLabel } from '@/lib/fiscal';
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth();
-    const scope = await resolveDataScope(user);
+    const viewAsUser = await resolveViewAs(request, user);
+    const scope = await resolveDataScope(user, viewAsUser);
     const db = getSupabaseClient();
     const url = request.nextUrl;
 
@@ -157,7 +158,7 @@ export async function GET(request: NextRequest) {
             acv_closed: data.acv,
             deals_closed: data.deals,
           },
-          is_current_user: ae.id === user.user_id,
+          is_current_user: ae.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 
@@ -210,7 +211,7 @@ export async function GET(request: NextRequest) {
             open_deals: data.deals,
             avg_deal_size: data.deals > 0 ? data.total / data.deals : 0,
           },
-          is_current_user: ae.id === user.user_id,
+          is_current_user: ae.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 
@@ -264,7 +265,7 @@ export async function GET(request: NextRequest) {
             avg_duration: data.bookedCount > 0 ? Math.round(data.totalDuration / data.bookedCount) : 0,
             num_created: data.numCreated,
           },
-          is_current_user: ae.id === user.user_id,
+          is_current_user: ae.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 
@@ -305,7 +306,7 @@ export async function GET(request: NextRequest) {
             meetings: data.meeting,
             linkedin: data.linkedin,
           },
-          is_current_user: ae.id === user.user_id,
+          is_current_user: ae.id === (viewAsUser?.user_id ?? user.user_id),
         });
       });
 

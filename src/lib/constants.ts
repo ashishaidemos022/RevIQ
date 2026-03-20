@@ -38,3 +38,4 @@ export const SYNC_ROLES: UserRole[] = ['revops_rw'];
 export const QUOTA_WRITE_ROLES: UserRole[] = ['vp', 'cro', 'c_level', 'revops_rw'];
 export const COMMISSION_RATE_WRITE_ROLES: UserRole[] = ['cro', 'c_level', 'revops_rw'];
 export const FULL_ACCESS_ROLES: UserRole[] = ['cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+export const VIEW_AS_ROLES: UserRole[] = ['revops_rw', 'revops_ro', 'cro', 'c_level'];

@@ -111,7 +111,6 @@ export interface Opportunity {
   probability: number | null;
   type: OpportunityType | null;
   last_stage_changed_at: string | null;
-  partner_id: string | null;
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;

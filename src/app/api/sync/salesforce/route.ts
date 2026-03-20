@@ -11,6 +11,7 @@ import { syncRVAccounts } from '@/lib/salesforce/sync-rv-accounts';
 import { syncSalesforceOpportunities } from '@/lib/salesforce/sync-opportunities';
 import { syncOpportunitySplits } from '@/lib/salesforce/sync-opportunity-splits';
 import { syncOpportunityPartners } from '@/lib/salesforce/sync-opportunity-partners';
+import { syncPartners } from '@/lib/salesforce/sync-partners';
 
 export async function POST() {
   try {
@@ -53,9 +54,12 @@ export async function POST() {
       // Step 6: Sync Opportunity Partners (requires opportunities from step 4)
       const partnerResult = await syncOpportunityPartners();
 
+      // Step 7: Sync Partner__c custom object (requires opportunities from step 4)
+      const sfPartnerResult = await syncPartners();
+
       // TODO: Sync Activities
 
-      const totalRecords = userResult.matched + accountResult.synced + rvAccountResult.synced + oppResult.synced + splitResult.synced + partnerResult.synced;
+      const totalRecords = userResult.matched + accountResult.synced + rvAccountResult.synced + oppResult.synced + splitResult.synced + partnerResult.synced + sfPartnerResult.synced;
       const allErrors = [
         ...userResult.errors,
         ...accountResult.errors,
@@ -63,6 +67,7 @@ export async function POST() {
         ...oppResult.errors,
         ...splitResult.errors,
         ...partnerResult.errors,
+        ...sfPartnerResult.errors,
       ];
       const hasErrors = allErrors.length > 0;
 
@@ -86,6 +91,7 @@ export async function POST() {
         opportunities: oppResult,
         opportunity_splits: splitResult,
         opportunity_partners: partnerResult,
+        sf_partners: sfPartnerResult,
       });
     } catch (syncError) {
       // Update sync log with failure

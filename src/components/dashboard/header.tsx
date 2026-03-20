@@ -103,16 +103,54 @@ export function Header() {
     };
   }, [searchQuery]);
 
-  const handleSelectUser = (target: ViewAsUser) => {
-    setViewAs(target);
+  const viewAsLogId = useAuthStore((s) => s.viewAsLogId);
+
+  const handleSelectUser = async (target: ViewAsUser) => {
+    // End previous view-as session if active
+    if (viewAsLogId) {
+      fetch('/api/view-as-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'end', log_id: viewAsLogId }),
+      }).catch(() => {});
+    }
+
+    // Log the new view-as session
+    let logId: string | undefined;
+    try {
+      const res = await fetch('/api/view-as-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start',
+          viewed_as_id: target.user_id,
+          viewed_as_role: target.role,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        logId = json.log_id;
+      }
+    } catch {
+      // Non-blocking — don't prevent view-as if logging fails
+    }
+
+    setViewAs(target, logId);
     setViewAsOpen(false);
     setSearchQuery("");
     setSearchResults([]);
-    // Invalidate all queries so dashboards re-fetch with viewAs param
     queryClient.invalidateQueries();
   };
 
   const handleClearViewAs = () => {
+    // End view-as session log
+    if (viewAsLogId) {
+      fetch('/api/view-as-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'end', log_id: viewAsLogId }),
+      }).catch(() => {});
+    }
     clearViewAs();
     queryClient.invalidateQueries();
   };

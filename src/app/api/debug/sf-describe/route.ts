@@ -24,11 +24,21 @@ export async function GET(request: NextRequest) {
       referenceTo: f.referenceTo,
     }));
 
+    const childRelationships = (desc.childRelationships || []).map((cr: { childSObject: string; relationshipName: string | null; field: string }) => ({
+      childSObject: cr.childSObject,
+      relationshipName: cr.relationshipName,
+      field: cr.field,
+    }));
+
     return NextResponse.json({
       objectName: desc.name,
       totalFields: fields.length,
       customFields: fields.filter(f => f.custom),
       allFields: fields,
+      childRelationships,
+      partnerRelationships: childRelationships.filter((cr: { relationshipName: string | null }) =>
+        cr.relationshipName && (cr.relationshipName.toLowerCase().includes('partner') || cr.relationshipName.toLowerCase().includes('rv'))
+      ),
     });
   } catch (error) {
     return handleAuthError(error);

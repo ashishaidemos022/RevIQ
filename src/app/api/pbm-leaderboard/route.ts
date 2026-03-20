@@ -110,10 +110,6 @@ export async function GET(request: NextRequest) {
     (pbmSfUsers || []).forEach(u => pbmSfIdToLocalId.set(u.salesforce_user_id, u.id));
     const pbmSfIds = [...pbmSfIdToLocalId.keys()];
 
-    // Debug: trace specific PBM
-    const debugSfId = '005Vx000007yWVdIAM';
-    console.log(`[PBM_LB] PBM count: ${allPBMs?.length}, pbmSfIds count: ${pbmSfIds.length}, debugPBM in map: ${pbmSfIdToLocalId.has(debugSfId)} → ${pbmSfIdToLocalId.get(debugSfId)}`);
-
     // === Shared: Load rv_accounts owner lookup (partner name → owner SF ID) ===
     const rvAccountOwnerMap = new Map<string, string>(); // rv_account name → owner_sf_id
     const rvPageSize = 1000;
@@ -129,7 +125,33 @@ export async function GET(request: NextRequest) {
       if (rvPage.length < rvPageSize) break;
       rvOffset += rvPageSize;
     }
-    console.log(`[PBM_LB] rvAccountOwnerMap size: ${rvAccountOwnerMap.size}, Telarus owner: ${rvAccountOwnerMap.get('Telarus')}, Intelisys owner: ${rvAccountOwnerMap.get('Intelisys')}`);
+
+    // === Shared: Load sf_partners Channel Owner lookup (opp SF ID → set of channel_owner_sf_ids) ===
+    // Only load partners whose channel_owner_sf_id matches a PBM
+    const sfPartnersByOpp = new Map<string, Set<string>>(); // salesforce_opportunity_id → Set<channel_owner_sf_id>
+    if (pbmSfIds.length > 0) {
+      const partnerPageSize = 1000;
+      let partnerOffset = 0;
+      while (true) {
+        const { data: partnerPage } = await db
+          .from('sf_partners')
+          .select('salesforce_opportunity_id, channel_owner_sf_id')
+          .not('channel_owner_sf_id', 'is', null)
+          .not('salesforce_opportunity_id', 'is', null)
+          .in('channel_owner_sf_id', pbmSfIds)
+          .range(partnerOffset, partnerOffset + partnerPageSize - 1);
+        if (!partnerPage || partnerPage.length === 0) break;
+        partnerPage.forEach(p => {
+          if (!sfPartnersByOpp.has(p.salesforce_opportunity_id)) {
+            sfPartnersByOpp.set(p.salesforce_opportunity_id, new Set());
+          }
+          sfPartnersByOpp.get(p.salesforce_opportunity_id)!.add(p.channel_owner_sf_id);
+        });
+        if (partnerPage.length < partnerPageSize) break;
+        partnerOffset += partnerPageSize;
+      }
+    }
+    console.log(`[PBM_LB] sf_partners loaded: ${sfPartnersByOpp.size} opportunities with PBM channel owners`);
 
     const entries: Array<{
       rank: number;
@@ -143,17 +165,16 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     /**
-     * PBM credit model:
-     * 1. Channel Owner (opportunities.channel_owner_sf_id) → 100% credit
-     * 2. RV Account Owner (rv_accounts.owner_sf_id via opportunities.rv_account_sf_id = rv_accounts.name) → 100% credit
-     * 3. De-duplicate: if both point to the same PBM on the same opp, count only once
+     * PBM credit model (3 paths, de-duplicated per opp):
+     * 1. Channel Owner on Opportunity (opportunities.channel_owner_sf_id)
+     * 2. RV Account Owner (rv_accounts.owner_sf_id via opportunities.rv_account_sf_id = rv_accounts.name)
+     * 3. Partner__c Channel Owner (sf_partners.channel_owner_sf_id via sf_partners.salesforce_opportunity_id)
      */
 
     if (board === 'revenue') {
       const pbmData: Record<string, { acv: number; deals: Set<string> }> = {};
 
       if (pbmSfIds.length > 0) {
-        // Fetch closed-won opportunities that have a channel_owner or rv_account
         let oppQuery = db
           .from('opportunities')
           .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv')
@@ -163,33 +184,67 @@ export async function GET(request: NextRequest) {
         if (endStr) oppQuery = oppQuery.lte('close_date', endStr);
         const { data: opps } = await oppQuery;
 
-        (opps || []).forEach(o => {
+        // Also fetch opps that only have Partner__c credit (no channel_owner or rv_account on opp itself)
+        const oppSfIdsFromPartners = [...sfPartnersByOpp.keys()];
+        let partnerOnlyOpps: typeof opps = [];
+        if (oppSfIdsFromPartners.length > 0) {
+          // Fetch in batches to avoid query size limits
+          for (let i = 0; i < oppSfIdsFromPartners.length; i += 500) {
+            const batch = oppSfIdsFromPartners.slice(i, i + 500);
+            let q = db
+              .from('opportunities')
+              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv')
+              .eq('is_closed_won', true)
+              .in('salesforce_opportunity_id', batch);
+            if (startStr) q = q.gte('close_date', startStr);
+            if (endStr) q = q.lte('close_date', endStr);
+            const { data: batchOpps } = await q;
+            if (batchOpps) partnerOnlyOpps = partnerOnlyOpps!.concat(batchOpps);
+          }
+        }
+
+        // Merge and de-duplicate opps
+        const allOpps = new Map<string, NonNullable<typeof opps>[number]>();
+        (opps || []).forEach(o => allOpps.set(o.salesforce_opportunity_id, o));
+        (partnerOnlyOpps || []).forEach(o => {
+          if (!allOpps.has(o.salesforce_opportunity_id)) allOpps.set(o.salesforce_opportunity_id, o);
+        });
+
+        allOpps.forEach(o => {
           const acv = parseFloat(o.acv) || 0;
           const oppSfId = o.salesforce_opportunity_id;
-          const creditedPbms = new Set<string>(); // track which PBMs got credit on this opp
+          const creditedPbms = new Set<string>();
 
-          // Credit 1: Channel Owner
+          const creditPbm = (localId: string) => {
+            if (creditedPbms.has(localId)) return;
+            creditedPbms.add(localId);
+            if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: new Set() };
+            pbmData[localId].acv += acv;
+            pbmData[localId].deals.add(oppSfId);
+          };
+
+          // Credit 1: Channel Owner on Opportunity
           if (o.channel_owner_sf_id) {
             const localId = pbmSfIdToLocalId.get(o.channel_owner_sf_id);
-            if (localId) {
-              if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: new Set() };
-              pbmData[localId].acv += acv;
-              pbmData[localId].deals.add(oppSfId);
-              creditedPbms.add(localId);
-            }
+            if (localId) creditPbm(localId);
           }
 
-          // Credit 2: RV Account Owner (partner account owner)
+          // Credit 2: RV Account Owner
           if (o.rv_account_sf_id) {
             const rvOwnerSfId = rvAccountOwnerMap.get(o.rv_account_sf_id);
             if (rvOwnerSfId) {
               const localId = pbmSfIdToLocalId.get(rvOwnerSfId);
-              if (localId && !creditedPbms.has(localId)) {
-                if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: new Set() };
-                pbmData[localId].acv += acv;
-                pbmData[localId].deals.add(oppSfId);
-              }
+              if (localId) creditPbm(localId);
             }
+          }
+
+          // Credit 3: Partner__c Channel Owner
+          const partnerOwners = sfPartnersByOpp.get(oppSfId);
+          if (partnerOwners) {
+            partnerOwners.forEach(sfId => {
+              const localId = pbmSfIdToLocalId.get(sfId);
+              if (localId) creditPbm(localId);
+            });
           }
         });
       }
@@ -217,7 +272,6 @@ export async function GET(request: NextRequest) {
       const pbmData: Record<string, { total: number; partner_sourced: number; partner_influenced: number; deals: Set<string> }> = {};
 
       if (pbmSfIds.length > 0) {
-        // Fetch open opportunities that have a channel_owner or rv_account
         const { data: opps } = await db
           .from('opportunities')
           .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, opportunity_source')
@@ -226,7 +280,30 @@ export async function GET(request: NextRequest) {
           .gt('acv', 0)
           .or('channel_owner_sf_id.not.is.null,rv_account_sf_id.not.is.null');
 
-        (opps || []).forEach(o => {
+        // Also fetch opps that only have Partner__c credit
+        const oppSfIdsFromPartners = [...sfPartnersByOpp.keys()];
+        let partnerOnlyOpps: typeof opps = [];
+        if (oppSfIdsFromPartners.length > 0) {
+          for (let i = 0; i < oppSfIdsFromPartners.length; i += 500) {
+            const batch = oppSfIdsFromPartners.slice(i, i + 500);
+            const { data: batchOpps } = await db
+              .from('opportunities')
+              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, opportunity_source')
+              .eq('is_closed_won', false)
+              .eq('is_closed_lost', false)
+              .gt('acv', 0)
+              .in('salesforce_opportunity_id', batch);
+            if (batchOpps) partnerOnlyOpps = partnerOnlyOpps!.concat(batchOpps);
+          }
+        }
+
+        const allOpps = new Map<string, NonNullable<typeof opps>[number]>();
+        (opps || []).forEach(o => allOpps.set(o.salesforce_opportunity_id, o));
+        (partnerOnlyOpps || []).forEach(o => {
+          if (!allOpps.has(o.salesforce_opportunity_id)) allOpps.set(o.salesforce_opportunity_id, o);
+        });
+
+        allOpps.forEach(o => {
           const acv = parseFloat(o.acv) || 0;
           const oppSfId = o.salesforce_opportunity_id;
           const src = (o.opportunity_source || '').toLowerCase();
@@ -246,7 +323,7 @@ export async function GET(request: NextRequest) {
             }
           };
 
-          // Credit 1: Channel Owner
+          // Credit 1: Channel Owner on Opportunity
           if (o.channel_owner_sf_id) {
             const localId = pbmSfIdToLocalId.get(o.channel_owner_sf_id);
             if (localId) creditPbm(localId);
@@ -260,14 +337,16 @@ export async function GET(request: NextRequest) {
               if (localId) creditPbm(localId);
             }
           }
-        });
-      }
 
-      // Debug: trace Ryan's pipeline credit
-      const debugLocalId = pbmSfIdToLocalId.get(debugSfId);
-      if (debugLocalId) {
-        const rd = pbmData[debugLocalId];
-        console.log(`[PBM_LB] Pipeline debug for ${debugSfId}: localId=${debugLocalId}, data=${rd ? JSON.stringify({ total: rd.total, deals: rd.deals.size }) : 'NONE'}`);
+          // Credit 3: Partner__c Channel Owner
+          const partnerOwners = sfPartnersByOpp.get(oppSfId);
+          if (partnerOwners) {
+            partnerOwners.forEach(sfId => {
+              const localId = pbmSfIdToLocalId.get(sfId);
+              if (localId) creditPbm(localId);
+            });
+          }
+        });
       }
 
       allPBMs.forEach(pbm => {
@@ -295,7 +374,6 @@ export async function GET(request: NextRequest) {
       const pbmData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; numCreated: number; countedOpps: Set<string> }> = {};
 
       if (pbmSfIds.length > 0) {
-        // Fetch all paid pilot opportunities
         const { data: allPilotOpps } = await db
           .from('opportunities')
           .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, is_closed_won, is_closed_lost, paid_pilot_start_date, close_date, sf_created_date, created_at')
@@ -332,13 +410,16 @@ export async function GET(request: NextRequest) {
         (allPilotOpps || []).forEach(opp => {
           const creditedPbms = new Set<string>();
 
-          // Credit 1: Channel Owner
+          const tryCreditPilot = (localId: string) => {
+            if (creditedPbms.has(localId)) return;
+            creditedPbms.add(localId);
+            creditPilot(localId, opp);
+          };
+
+          // Credit 1: Channel Owner on Opportunity
           if (opp.channel_owner_sf_id) {
             const localId = pbmSfIdToLocalId.get(opp.channel_owner_sf_id);
-            if (localId) {
-              creditPilot(localId, opp);
-              creditedPbms.add(localId);
-            }
+            if (localId) tryCreditPilot(localId);
           }
 
           // Credit 2: RV Account Owner
@@ -346,10 +427,17 @@ export async function GET(request: NextRequest) {
             const rvOwnerSfId = rvAccountOwnerMap.get(opp.rv_account_sf_id);
             if (rvOwnerSfId) {
               const localId = pbmSfIdToLocalId.get(rvOwnerSfId);
-              if (localId && !creditedPbms.has(localId)) {
-                creditPilot(localId, opp);
-              }
+              if (localId) tryCreditPilot(localId);
             }
+          }
+
+          // Credit 3: Partner__c Channel Owner
+          const partnerOwners = sfPartnersByOpp.get(opp.salesforce_opportunity_id);
+          if (partnerOwners) {
+            partnerOwners.forEach(sfId => {
+              const localId = pbmSfIdToLocalId.get(sfId);
+              if (localId) tryCreditPilot(localId);
+            });
           }
         });
       }

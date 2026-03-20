@@ -2,7 +2,8 @@
 
 import { useAuthStore } from "@/stores/auth-store";
 import { useTheme } from "@/providers/theme-provider";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { SYNC_ROLES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ export function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { theme, toggleTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const [syncing, setSyncing] = useState(false);
   const isDevAdmin = user?.user_id === "dev-admin";
   const canSync = user && SYNC_ROLES.includes(user.role as UserRole);
 
@@ -56,6 +59,18 @@ export function Header() {
     queryFn: () => apiFetch<{ salesforce: string | null; looker: string | null }>("/api/sync/last"),
     refetchInterval: 60_000,
   });
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await apiFetch("/api/sync/salesforce", { method: "POST" });
+      queryClient.invalidateQueries({ queryKey: ["sync-last"] });
+    } catch (err) {
+      console.error("Sync failed:", err);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const sf = formatRelativeTime(lastSync?.salesforce ?? null);
   const looker = formatRelativeTime(lastSync?.looker ?? null);
@@ -88,9 +103,15 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           {canSync && (
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Sync Now</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">{syncing ? "Syncing..." : "Sync Now"}</span>
             </Button>
           )}
 

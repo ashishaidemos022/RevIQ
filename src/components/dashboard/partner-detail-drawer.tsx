@@ -186,9 +186,9 @@ function DealsTable({ deals }: { deals: Deal[] }) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <div className="overflow-x-auto max-h-[400px] overflow-y-auto relative">
           <table className="w-full min-w-[800px]">
-            <thead className="sticky top-0 bg-background">
+            <thead className="sticky top-0 bg-background z-10">
               <tr className="text-xs font-medium text-muted-foreground border-b">
                 <DealSortHeader label="Account" colKey="account_name" {...hp} />
                 <DealSortHeader label="Opportunity" colKey="name" {...hp} />

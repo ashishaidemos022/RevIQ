@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Building2 } from "lucide-react";
+import { Building2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PartnerDetailDrawer } from "@/components/dashboard/partner-detail-drawer";
 
@@ -28,6 +28,90 @@ interface PartnerEntry {
   region: string | null;
   primary_metric: number;
   secondary_metrics: Record<string, number>;
+}
+
+type SortDir = "asc" | "desc";
+type SortKey = string;
+
+function useSort(defaultKey: SortKey = "rank", defaultDir: SortDir = "asc") {
+  const [sortKey, setSortKey] = useState<SortKey>(defaultKey);
+  const [sortDir, setSortDir] = useState<SortDir>(defaultDir);
+
+  const toggle = useCallback((key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "rank" || key === "partner_name" || key === "pbm_name" || key === "region" ? "asc" : "desc");
+    }
+  }, [sortKey]);
+
+  return { sortKey, sortDir, toggle };
+}
+
+function getValue(entry: PartnerEntry, key: SortKey): string | number {
+  if (key === "rank") return entry.rank;
+  if (key === "partner_name") return entry.partner_name;
+  if (key === "pbm_name") return entry.pbm_name || "";
+  if (key === "region") return entry.region || "";
+  if (key === "primary_metric") return entry.primary_metric;
+  return entry.secondary_metrics[key] || 0;
+}
+
+function sortEntries(entries: PartnerEntry[], key: SortKey, dir: SortDir): PartnerEntry[] {
+  return [...entries].sort((a, b) => {
+    const va = getValue(a, key);
+    const vb = getValue(b, key);
+    let cmp: number;
+    if (typeof va === "string" && typeof vb === "string") {
+      cmp = va.localeCompare(vb);
+    } else {
+      cmp = (va as number) - (vb as number);
+    }
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
+function SortHeader({
+  label,
+  sortKey: colKey,
+  currentKey,
+  currentDir,
+  onSort,
+  align = "left",
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  currentDir: SortDir;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const isActive = colKey === currentKey;
+  return (
+    <th
+      className={cn(
+        "py-2 px-2 cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap",
+        align === "right" ? "text-right" : "text-left",
+        className
+      )}
+      onClick={() => onSort(colKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {align === "right" && isActive && (
+          currentDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        )}
+        {align === "right" && !isActive && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+        {label}
+        {align === "left" && isActive && (
+          currentDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        )}
+        {align === "left" && !isActive && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+      </span>
+    </th>
+  );
 }
 
 const REGIONS = [
@@ -65,22 +149,26 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowClick: (id: string) => void }) {
+  const { sortKey, sortDir, toggle } = useSort("rank", "asc");
+  const sorted = useMemo(() => sortEntries(entries, sortKey, sortDir), [entries, sortKey, sortDir]);
+  const hp = { currentKey: sortKey, currentDir: sortDir, onSort: toggle };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[850px]">
         <thead>
           <tr className="text-xs font-medium text-muted-foreground border-b">
-            <th className="text-left py-2 px-2 w-12">Rank</th>
-            <th className="text-left py-2 px-2">Partner Name</th>
-            <th className="text-left py-2 px-2">PBM Name</th>
-            <th className="text-left py-2 px-2 w-20">Region</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">ACV Closed w/ Multiplier</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">ACV Closed</th>
-            <th className="text-right py-2 px-2 w-16">Deals</th>
+            <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
+            <SortHeader label="Partner Name" sortKey="partner_name" {...hp} />
+            <SortHeader label="PBM Name" sortKey="pbm_name" {...hp} />
+            <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
+            <SortHeader label="ACV Closed w/ Multiplier" sortKey="acv_closed_multiplier" {...hp} align="right" />
+            <SortHeader label="ACV Closed" sortKey="acv_closed" {...hp} align="right" />
+            <SortHeader label="Deals" sortKey="deals" {...hp} align="right" className="w-16" />
           </tr>
         </thead>
         <tbody>
-          {entries.map((e) => (
+          {sorted.map((e) => (
             <tr
               key={e.partner_id}
               className={cn(
@@ -105,24 +193,28 @@ function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowC
 }
 
 function PipelineBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowClick: (id: string) => void }) {
+  const { sortKey, sortDir, toggle } = useSort("primary_metric", "desc");
+  const sorted = useMemo(() => sortEntries(entries, sortKey, sortDir), [entries, sortKey, sortDir]);
+  const hp = { currentKey: sortKey, currentDir: sortDir, onSort: toggle };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[950px]">
         <thead>
           <tr className="text-xs font-medium text-muted-foreground border-b">
-            <th className="text-left py-2 px-2 w-12">Rank</th>
-            <th className="text-left py-2 px-2">Partner Name</th>
-            <th className="text-left py-2 px-2">PBM Name</th>
-            <th className="text-left py-2 px-2 w-20">Region</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Total ACV Created</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Partner Sourced</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Partner Influenced</th>
-            <th className="text-right py-2 px-2 w-16">Deals</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Avg Size</th>
+            <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
+            <SortHeader label="Partner Name" sortKey="partner_name" {...hp} />
+            <SortHeader label="PBM Name" sortKey="pbm_name" {...hp} />
+            <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
+            <SortHeader label="Total ACV Created" sortKey="primary_metric" {...hp} align="right" />
+            <SortHeader label="Partner Sourced" sortKey="partner_sourced" {...hp} align="right" />
+            <SortHeader label="Partner Influenced" sortKey="partner_influenced" {...hp} align="right" />
+            <SortHeader label="Deals" sortKey="deals" {...hp} align="right" className="w-16" />
+            <SortHeader label="Avg Size" sortKey="avg_size" {...hp} align="right" />
           </tr>
         </thead>
         <tbody>
-          {entries.map((e) => (
+          {sorted.map((e) => (
             <tr
               key={e.partner_id}
               className={cn(
@@ -149,23 +241,27 @@ function PipelineBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRow
 }
 
 function PilotsBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowClick: (id: string) => void }) {
+  const { sortKey, sortDir, toggle } = useSort("primary_metric", "desc");
+  const sorted = useMemo(() => sortEntries(entries, sortKey, sortDir), [entries, sortKey, sortDir]);
+  const hp = { currentKey: sortKey, currentDir: sortDir, onSort: toggle };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[850px]">
         <thead>
           <tr className="text-xs font-medium text-muted-foreground border-b">
-            <th className="text-left py-2 px-2 w-12">Rank</th>
-            <th className="text-left py-2 px-2">Partner Name</th>
-            <th className="text-left py-2 px-2">PBM Name</th>
-            <th className="text-left py-2 px-2 w-20">Region</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Booked Paid Pilots</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Open Pilots</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Avg Duration</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Numbers Created</th>
+            <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
+            <SortHeader label="Partner Name" sortKey="partner_name" {...hp} />
+            <SortHeader label="PBM Name" sortKey="pbm_name" {...hp} />
+            <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
+            <SortHeader label="Booked Paid Pilots" sortKey="primary_metric" {...hp} align="right" />
+            <SortHeader label="Open Pilots" sortKey="open_pilots" {...hp} align="right" />
+            <SortHeader label="Avg Duration" sortKey="avg_duration" {...hp} align="right" />
+            <SortHeader label="Numbers Created" sortKey="num_created" {...hp} align="right" />
           </tr>
         </thead>
         <tbody>
-          {entries.map((e) => (
+          {sorted.map((e) => (
             <tr
               key={e.partner_id}
               className={cn(

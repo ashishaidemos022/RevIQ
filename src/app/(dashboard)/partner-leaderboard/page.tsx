@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PartnerDetailDrawer } from "@/components/dashboard/partner-detail-drawer";
 
 interface PartnerEntry {
   rank: number;
@@ -63,7 +64,7 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="text-muted-foreground text-sm font-medium w-6 text-center">{rank}</span>;
 }
 
-function RevenueBoard({ entries }: { entries: PartnerEntry[] }) {
+function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowClick: (id: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[850px]">
@@ -83,9 +84,10 @@ function RevenueBoard({ entries }: { entries: PartnerEntry[] }) {
             <tr
               key={e.partner_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20"
               )}
+              onClick={() => onRowClick(e.partner_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">{e.partner_name}</td>
@@ -102,7 +104,7 @@ function RevenueBoard({ entries }: { entries: PartnerEntry[] }) {
   );
 }
 
-function PipelineBoard({ entries }: { entries: PartnerEntry[] }) {
+function PipelineBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowClick: (id: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[950px]">
@@ -124,9 +126,10 @@ function PipelineBoard({ entries }: { entries: PartnerEntry[] }) {
             <tr
               key={e.partner_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20"
               )}
+              onClick={() => onRowClick(e.partner_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">{e.partner_name}</td>
@@ -145,7 +148,7 @@ function PipelineBoard({ entries }: { entries: PartnerEntry[] }) {
   );
 }
 
-function PilotsBoard({ entries }: { entries: PartnerEntry[] }) {
+function PilotsBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowClick: (id: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[850px]">
@@ -166,9 +169,10 @@ function PilotsBoard({ entries }: { entries: PartnerEntry[] }) {
             <tr
               key={e.partner_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20"
               )}
+              onClick={() => onRowClick(e.partner_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">{e.partner_name}</td>
@@ -190,6 +194,7 @@ export default function PartnerLeaderboardPage() {
   const [board, setBoard] = useState("revenue");
   const [period, setPeriod] = useState("qtd");
   const [region, setRegion] = useState("combined");
+  const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
 
   const {
     data,
@@ -263,7 +268,7 @@ export default function PartnerLeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No revenue data for the selected period" icon={Building2} />
               ) : (
-                <RevenueBoard entries={entries} />
+                <RevenueBoard entries={entries} onRowClick={setSelectedPartner} />
               )}
             </CardContent>
           </Card>
@@ -275,7 +280,7 @@ export default function PartnerLeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No pipeline data available" icon={Building2} />
               ) : (
-                <PipelineBoard entries={entries} />
+                <PipelineBoard entries={entries} onRowClick={setSelectedPartner} />
               )}
             </CardContent>
           </Card>
@@ -287,12 +292,18 @@ export default function PartnerLeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No pilot data available" icon={Building2} />
               ) : (
-                <PilotsBoard entries={entries} />
+                <PilotsBoard entries={entries} onRowClick={setSelectedPartner} />
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <PartnerDetailDrawer
+        partnerId={selectedPartner}
+        open={!!selectedPartner}
+        onClose={() => setSelectedPartner(null)}
+      />
     </div>
   );
 }

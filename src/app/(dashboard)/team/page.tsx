@@ -23,7 +23,9 @@ interface AeData {
   acv_closed_qtd: number;
   acv_closed_ytd: number;
   annual_quota: number;
+  quarterly_quota: number;
   attainment: number;
+  attainment_qtd: number;
   active_pilots: number;
   activities_qtd: number;
   commission_qtd: number;
@@ -35,6 +37,7 @@ interface TeamResponse {
     summary: {
       acvClosedQTD: number;
       avgAttainment: number;
+      avgAttainmentQTD: number;
       activePilots: number;
       activitiesQTD: number;
     };
@@ -63,8 +66,36 @@ export default function TeamPage() {
       maximumFractionDigits: 0,
     }).format(val);
 
+  const formatRole = (role: string) => {
+    const map: Record<string, string> = {
+      ae: "AE", commercial_ae: "Commercial AE", enterprise_ae: "Enterprise AE",
+      pbm: "PBM", manager: "Manager", avp: "AVP", vp: "VP",
+    };
+    return map[role] || role;
+  };
+
+  const renderAttainment = (val: number) => (
+    <span
+      className={cn(
+        "font-medium",
+        val >= 75 ? "text-green-600" : val >= 50 ? "text-amber-600" : val > 0 ? "text-red-600" : "text-muted-foreground"
+      )}
+    >
+      {val > 0 ? `${val.toFixed(1)}%` : "—"}
+    </span>
+  );
+
   const columns: Column<Record<string, unknown>>[] = [
-    { key: "full_name", header: "AE Name" },
+    { key: "full_name", header: "Name" },
+    {
+      key: "role",
+      header: "Role",
+      render: (row) => (
+        <Badge variant="outline" className="text-[10px]">
+          {formatRole(row.role as string)}
+        </Badge>
+      ),
+    },
     {
       key: "region",
       header: "Region",
@@ -86,25 +117,14 @@ export default function TeamPage() {
       render: (row) => formatCurrency(row.annual_quota as number),
     },
     {
+      key: "attainment_qtd",
+      header: "Attainment QTD",
+      render: (row) => renderAttainment(row.attainment_qtd as number),
+    },
+    {
       key: "attainment",
-      header: "Attainment %",
-      render: (row) => {
-        const val = row.attainment as number;
-        return (
-          <span
-            className={cn(
-              "font-medium",
-              val >= 75
-                ? "text-green-600"
-                : val >= 50
-                  ? "text-amber-600"
-                  : "text-red-600"
-            )}
-          >
-            {val.toFixed(1)}%
-          </span>
-        );
-      },
+      header: "Attainment YTD",
+      render: (row) => renderAttainment(row.attainment as number),
     },
     {
       key: "active_pilots",
@@ -136,7 +156,7 @@ export default function TeamPage() {
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load team data" onRetry={refetch} />;
 
-  const { aes, summary } = teamData?.data || { aes: [], summary: { acvClosedQTD: 0, avgAttainment: 0, activePilots: 0, activitiesQTD: 0 } };
+  const { aes, summary } = teamData?.data || { aes: [], summary: { acvClosedQTD: 0, avgAttainment: 0, avgAttainmentQTD: 0, activePilots: 0, activitiesQTD: 0 } };
 
   return (
     <div className="space-y-6">
@@ -146,17 +166,18 @@ export default function TeamPage() {
       </h1>
 
       {/* Team KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard label="Total ACV Closed (QTD)" value={summary.acvClosedQTD} format="currency" />
-        <KpiCard label="Avg Quota Attainment" value={summary.avgAttainment} format="percent" />
+        <KpiCard label="Avg Attainment QTD" value={summary.avgAttainmentQTD} format="percent" />
+        <KpiCard label="Avg Attainment YTD" value={summary.avgAttainment} format="percent" />
         <KpiCard label="Total Active Pilots" value={summary.activePilots} format="number" />
         <KpiCard label="Total Activities QTD" value={summary.activitiesQTD} format="number" />
       </div>
 
-      {/* AE Roster Table */}
+      {/* Team Roster Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">AE Roster</CardTitle>
+          <CardTitle className="text-sm font-medium">Team Roster</CardTitle>
         </CardHeader>
         <CardContent>
           {aes.length === 0 ? (

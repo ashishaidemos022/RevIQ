@@ -5,7 +5,7 @@ import { useTheme } from "@/providers/theme-provider";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { SYNC_ROLES, VIEW_AS_ROLES } from "@/lib/constants";
+import { VIEW_AS_ROLES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Bell, RefreshCw, LogOut, Eye, Search, X } from "lucide-react";
+import { Sun, Moon, Bell, LogOut, Eye, Search, X } from "lucide-react";
 import { UserRole, ViewAsUser } from "@/types";
 
 function formatRelativeTime(dateStr: string | null): { text: string; stale: "ok" | "warn" | "error" } {
@@ -61,9 +61,7 @@ export function Header() {
   const clearViewAs = useAuthStore((s) => s.clearViewAs);
   const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
-  const [syncing, setSyncing] = useState(false);
   const isDevAdmin = user?.user_id === "dev-admin";
-  const canSync = user && SYNC_ROLES.includes(user.role as UserRole);
   const canViewAs = user && VIEW_AS_ROLES.includes(user.role as UserRole);
 
   // View As dialog state
@@ -161,18 +159,6 @@ export function Header() {
     refetchInterval: 60_000,
   });
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await apiFetch("/api/sync/salesforce", { method: "POST" });
-      queryClient.invalidateQueries({ queryKey: ["sync-last"] });
-    } catch (err) {
-      console.error("Sync failed:", err);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const sf = formatRelativeTime(lastSync?.salesforce ?? null);
   const looker = formatRelativeTime(lastSync?.looker ?? null);
 
@@ -228,19 +214,6 @@ export function Header() {
               <span className="hidden sm:inline">
                 {viewAsUser ? `Viewing: ${viewAsUser.full_name}` : "View As"}
               </span>
-            </Button>
-          )}
-
-          {canSync && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">{syncing ? "Syncing..." : "Sync Now"}</span>
             </Button>
           )}
 

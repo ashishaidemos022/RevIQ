@@ -1,16 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePbmHome } from "@/hooks/use-pbm-home";
 import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
+import {
+  getCurrentFiscalPeriod,
+  getQuarterStartDate,
+  getQuarterEndDate,
+} from "@/lib/fiscal";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
 import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
+import { AcvByMonthChart } from "@/components/charts/acv-by-month";
+import { PipelineByStageChart } from "@/components/charts/pipeline-by-stage";
+import { QuotaGauge } from "@/components/charts/quota-gauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Opportunity } from "@/types";
 
 export function PbmHome() {
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
@@ -25,9 +34,27 @@ export function PbmHome() {
   const {
     data: oppsData,
     isLoading: oppsLoading,
-  } = usePbmOpportunities({ limit: 25 });
+  } = usePbmOpportunities({ limit: 100 });
 
   const isLoading = homeLoading || oppsLoading;
+
+  const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+
+  const quarterPacePercent = useMemo(() => {
+    const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
+    const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
+    const now = new Date();
+    const totalDays = Math.ceil(
+      (qEnd.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1;
+    const elapsed = Math.max(
+      1,
+      Math.ceil((now.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24))
+    );
+    return Math.min((elapsed / totalDays) * 100, 100);
+  }, [fiscalYear, fiscalQuarter]);
+
+  const oppsAsOpportunities = (oppsData?.data || []) as unknown as Opportunity[];
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("en-US", {
@@ -133,6 +160,40 @@ export function PbmHome() {
           value={d?.quota_attainment_ytd || 0}
           format="percent"
         />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">ACV by Month</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AcvByMonthChart opportunities={oppsAsOpportunities} />
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              Pipeline by Stage
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PipelineByStageChart opportunities={oppsAsOpportunities} />
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              Quarterly Pacing
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center">
+            <QuotaGauge
+              attainment={d?.quota_attainment_qtd || 0}
+              expectedPace={quarterPacePercent}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       <Card>

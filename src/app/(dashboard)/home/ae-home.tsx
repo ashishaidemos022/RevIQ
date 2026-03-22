@@ -86,12 +86,27 @@ export function AeHome() {
       ? (acvClosedQTD / quarterlyQuota.quota_amount) * 100
       : 0;
 
+    // Quarterly pacing: what % of quota should be hit by now based on days elapsed
+    const now = new Date();
+    const totalDaysInQuarter = Math.ceil(
+      (qEnd.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1;
+    const daysElapsed = Math.max(
+      1,
+      Math.ceil((now.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24))
+    );
+    const quarterPacePercent = Math.min(
+      (daysElapsed / totalDaysInQuarter) * 100,
+      100
+    );
+
     return {
       acvClosedQTD,
       acvClosedYTD,
       dealsClosedQTD,
       quotaAttainmentQTD,
       quotaAttainmentYTD,
+      quarterPacePercent,
     };
   }, [oppsData, quotasData, fiscalYear, fiscalQuarter]);
 
@@ -209,11 +224,14 @@ export function AeHome() {
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
-              Quota Attainment
+              Quarterly Pacing
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center justify-center">
-            <QuotaGauge attainment={kpis?.quotaAttainmentYTD || 0} />
+            <QuotaGauge
+              attainment={kpis?.quotaAttainmentQTD || 0}
+              expectedPace={kpis?.quarterPacePercent || 0}
+            />
           </CardContent>
         </Card>
       </div>

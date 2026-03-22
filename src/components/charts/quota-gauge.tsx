@@ -5,21 +5,46 @@ import { cn } from "@/lib/utils";
 
 interface QuotaGaugeProps {
   attainment: number;
+  expectedPace?: number;
 }
 
-export function QuotaGauge({ attainment }: QuotaGaugeProps) {
-  const capped = Math.min(attainment, 100);
-  const remaining = Math.max(100 - capped, 0);
+export function QuotaGauge({ attainment, expectedPace }: QuotaGaugeProps) {
+  const showPacing = expectedPace !== undefined && expectedPace > 0;
 
-  const color =
-    attainment >= 75
+  // Pacing ratio: how far ahead/behind expected pace
+  // e.g., 30% attainment vs 55% expected pace → pacing = 54.5% (behind)
+  const pacingRatio = showPacing ? (attainment / expectedPace) * 100 : 0;
+
+  // Color based on pacing: >= 90% of pace = green, 70-89% = amber, < 70% = red
+  const color = showPacing
+    ? pacingRatio >= 90
+      ? "hsl(142, 76%, 36%)"
+      : pacingRatio >= 70
+        ? "hsl(38, 92%, 50%)"
+        : "hsl(0, 72%, 51%)"
+    : attainment >= 75
       ? "hsl(142, 76%, 36%)"
       : attainment >= 50
         ? "hsl(38, 92%, 50%)"
         : "hsl(0, 72%, 51%)";
 
-  const statusLabel =
-    attainment >= 75 ? "On Track" : attainment >= 50 ? "At Risk" : "Behind";
+  const statusLabel = showPacing
+    ? pacingRatio >= 90
+      ? "On Pace"
+      : pacingRatio >= 70
+        ? "Slightly Behind"
+        : "Behind Pace"
+    : attainment >= 75
+      ? "On Track"
+      : attainment >= 50
+        ? "At Risk"
+        : "Behind";
+
+  // The gauge shows attainment against the expected pace
+  // If pacing, the "full" ring represents expected pace, fill represents actual
+  const gaugeMax = showPacing ? Math.max(expectedPace, attainment) : 100;
+  const capped = Math.min(attainment, gaugeMax);
+  const remaining = Math.max(gaugeMax - capped, 0);
 
   const data = [
     { value: capped, fill: color },
@@ -48,15 +73,26 @@ export function QuotaGauge({ attainment }: QuotaGaugeProps) {
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-bold">{attainment.toFixed(0)}%</span>
+        <span className="text-3xl font-bold">{attainment.toFixed(1)}%</span>
+        {showPacing && (
+          <span className="text-[10px] text-muted-foreground">
+            of {expectedPace.toFixed(0)}% expected
+          </span>
+        )}
         <span
           className={cn(
             "text-xs font-medium",
-            attainment >= 75
-              ? "text-green-600"
-              : attainment >= 50
-                ? "text-amber-500"
-                : "text-red-600"
+            showPacing
+              ? pacingRatio >= 90
+                ? "text-green-600"
+                : pacingRatio >= 70
+                  ? "text-amber-500"
+                  : "text-red-600"
+              : attainment >= 75
+                ? "text-green-600"
+                : attainment >= 50
+                  ? "text-amber-500"
+                  : "text-red-600"
           )}
         >
           {statusLabel}

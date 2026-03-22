@@ -11,10 +11,10 @@ export const NAV_ITEMS = [
     roles: ['ae', 'commercial_ae', 'enterprise_ae', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'] as UserRole[],
   },
   { label: 'Performance', href: '/performance', icon: 'TrendingUp', roles: 'all' as const },
-  { label: 'AE Leaderboard', href: '/leaderboard', icon: 'Trophy', roles: 'all' as const },
-  { label: 'PBM Leaderboard', href: '/pbm-leaderboard', icon: 'Handshake', roles: 'all' as const },
+  { label: 'AE Leaderboards', href: '/leaderboard', icon: 'Trophy', roles: 'all' as const },
+  { label: 'PBM Leaderboards', href: '/pbm-leaderboard', icon: 'Handshake', roles: 'all' as const },
   {
-    label: 'Partner Leaderboard',
+    label: 'Partner Leaderboards',
     href: '/partner-leaderboard',
     icon: 'Building2',
     roles: ['revops_rw', 'revops_ro', 'enterprise_ro'] as UserRole[],

@@ -265,7 +265,7 @@ export default function PbmLeaderboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Handshake className="h-6 w-6" />
-            PBM Leaderboard
+            PBM Leaderboards
           </h1>
           <Select value={period} onValueChange={(v) => v && setPeriod(v)}>
             <SelectTrigger className="w-[160px] h-8 text-xs">

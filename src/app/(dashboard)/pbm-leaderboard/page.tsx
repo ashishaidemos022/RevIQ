@@ -387,6 +387,7 @@ export default function PbmLeaderboardPage() {
         onClose={() => setSelectedUserId(null)}
         board={board}
         period={period}
+        apiPrefix="/api/pbm-leaderboard"
       />
     </div>
   );

@@ -20,6 +20,7 @@ interface UserDetailDrawerProps {
   onClose: () => void;
   board?: string;
   period?: string;
+  apiPrefix?: string;
 }
 
 interface UserDetail {
@@ -107,16 +108,16 @@ function KpiMini({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-export function UserDetailDrawer({ userId, open, onClose, board, period }: UserDetailDrawerProps) {
+export function UserDetailDrawer({ userId, open, onClose, board, period, apiPrefix = "/api/leaderboard" }: UserDetailDrawerProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["user-leaderboard-detail", userId, board, period],
+    queryKey: ["user-leaderboard-detail", userId, board, period, apiPrefix],
     queryFn: () => {
       const params = new URLSearchParams();
       if (board) params.set("board", board);
       if (period) params.set("period", period);
       const qs = params.toString();
       return apiFetch<{ data: UserDetail }>(
-        `/api/leaderboard/${userId}${qs ? `?${qs}` : ""}`
+        `${apiPrefix}/${userId}${qs ? `?${qs}` : ""}`
       ).then((res) => res.data);
     },
     enabled: !!userId && open,

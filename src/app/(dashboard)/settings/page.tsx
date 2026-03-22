@@ -6,6 +6,7 @@ import { QuotasTab } from "./quotas-tab";
 import { HierarchyTab } from "./hierarchy-tab";
 import { OverridesTab } from "./overrides-tab";
 import { AuditLogTab } from "./audit-log-tab";
+import { SyncTab } from "./sync-tab";
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   const canViewHierarchy = isRevopsRW || isEnterpriseRO;
   const canViewOverrides = isRevopsRW;
   const canViewAuditLog = isRevopsRW || isEnterpriseRO;
+  const canViewSync = isRevopsRW || isEnterpriseRO;
 
   const defaultTab = canViewQuotas ? "quotas" : "hierarchy";
 
@@ -32,6 +34,7 @@ export default function SettingsPage() {
           {canViewQuotas && <TabsTrigger value="quotas">Quotas</TabsTrigger>}
           {canViewHierarchy && <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>}
           {canViewOverrides && <TabsTrigger value="overrides">Permission Overrides</TabsTrigger>}
+          {canViewSync && <TabsTrigger value="sync">Sync</TabsTrigger>}
           {canViewAuditLog && <TabsTrigger value="audit-log">Audit Log</TabsTrigger>}
         </TabsList>
 
@@ -48,6 +51,11 @@ export default function SettingsPage() {
         {canViewOverrides && (
           <TabsContent value="overrides" className="mt-4">
             <OverridesTab />
+          </TabsContent>
+        )}
+        {canViewSync && (
+          <TabsContent value="sync" className="mt-4">
+            <SyncTab />
           </TabsContent>
         )}
         {canViewAuditLog && (

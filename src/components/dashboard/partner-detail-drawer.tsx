@@ -29,6 +29,8 @@ interface PartnerDetailDrawerProps {
   partnerId: string | null;
   open: boolean;
   onClose: () => void;
+  board?: string;
+  period?: string;
 }
 
 interface PartnerDetail {
@@ -255,13 +257,18 @@ function DealsTable({ deals }: { deals: Deal[] }) {
   );
 }
 
-export function PartnerDetailDrawer({ partnerId, open, onClose }: PartnerDetailDrawerProps) {
+export function PartnerDetailDrawer({ partnerId, open, onClose, board, period }: PartnerDetailDrawerProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["partner-detail", partnerId],
-    queryFn: () =>
-      apiFetch<{ data: PartnerDetail }>(
-        `/api/partner-leaderboard/${partnerId}`
-      ).then((res) => res.data),
+    queryKey: ["partner-detail", partnerId, board, period],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (board) params.set("board", board);
+      if (period) params.set("period", period);
+      const qs = params.toString();
+      return apiFetch<{ data: PartnerDetail }>(
+        `/api/partner-leaderboard/${partnerId}${qs ? `?${qs}` : ""}`
+      ).then((res) => res.data);
+    },
     enabled: !!partnerId && open,
   });
 

@@ -399,6 +399,8 @@ export default function PartnerLeaderboardPage() {
         partnerId={selectedPartner}
         open={!!selectedPartner}
         onClose={() => setSelectedPartner(null)}
+        board={board}
+        period={period}
       />
     </div>
   );

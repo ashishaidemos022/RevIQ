@@ -28,6 +28,9 @@ export async function GET(
     const { partnerId } = await params;
     const db = getSupabaseClient();
     const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+    const url = request.nextUrl;
+    const board = url.searchParams.get('board') || null;
+    const period = url.searchParams.get('period') || 'qtd';
 
     // Fetch the RV account (partner)
     const { data: rvAccount, error: rvError } = await db
@@ -111,7 +114,7 @@ export async function GET(
     }
 
     // Build deals list with resolved names
-    const deals = partnerOpps.map(o => ({
+    const allDeals = partnerOpps.map(o => ({
       id: o.id,
       name: o.name,
       account_name: accountNameMap.get(o.account_id as string) || null,
@@ -128,7 +131,7 @@ export async function GET(
       sf_created_date: o.sf_created_date,
     }));
 
-    // Compute KPIs
+    // Compute date range for the selected period
     const { start: fyStart, end: fyEnd } = getFiscalYearRange(fiscalYear);
     const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
     const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
@@ -137,14 +140,45 @@ export async function GET(
     const qStartStr = qStart.toISOString().split('T')[0];
     const qEndStr = qEnd.toISOString().split('T')[0];
 
-    const closedWonQTD = deals.filter(d =>
+    // Compute period date range based on period param
+    let periodStartStr = qStartStr;
+    let periodEndStr = qEndStr;
+    if (period === 'ytd') {
+      periodStartStr = fyStartStr;
+      periodEndStr = fyEndStr;
+    } else if (period === 'prev_qtd') {
+      let prevQ = fiscalQuarter - 1;
+      let prevFY = fiscalYear;
+      if (prevQ === 0) { prevQ = 4; prevFY--; }
+      periodStartStr = getQuarterStartDate(prevFY, prevQ).toISOString().split('T')[0];
+      periodEndStr = getQuarterEndDate(prevFY, prevQ).toISOString().split('T')[0];
+    }
+
+    // Filter deals based on board context
+    let deals = allDeals;
+    if (board === 'revenue') {
+      deals = allDeals.filter(d =>
+        d.is_closed_won && d.close_date &&
+        d.close_date >= periodStartStr && d.close_date <= periodEndStr
+      );
+    } else if (board === 'pipeline') {
+      deals = allDeals.filter(d =>
+        !d.is_closed_won && !d.is_closed_lost && d.close_date &&
+        d.close_date >= periodStartStr && d.close_date <= periodEndStr
+      );
+    } else if (board === 'pilots') {
+      deals = allDeals.filter(d => d.is_paid_pilot);
+    }
+
+    // Compute KPIs (always from full deal set for context)
+    const closedWonQTD = allDeals.filter(d =>
       d.is_closed_won && d.close_date && d.close_date >= qStartStr && d.close_date <= qEndStr
     );
-    const closedWonYTD = deals.filter(d =>
+    const closedWonYTD = allDeals.filter(d =>
       d.is_closed_won && d.close_date && d.close_date >= fyStartStr && d.close_date <= fyEndStr
     );
-    const openDeals = deals.filter(d => !d.is_closed_won && !d.is_closed_lost);
-    const activePilots = deals.filter(d => d.is_paid_pilot && !d.is_closed_won && !d.is_closed_lost);
+    const openDeals = allDeals.filter(d => !d.is_closed_won && !d.is_closed_lost);
+    const activePilots = allDeals.filter(d => d.is_paid_pilot && !d.is_closed_won && !d.is_closed_lost);
 
     const acvClosedQTD = closedWonQTD.reduce((s, d) => s + ((d.acv as number) || 0), 0);
     const acvClosedYTD = closedWonYTD.reduce((s, d) => s + ((d.acv as number) || 0), 0);

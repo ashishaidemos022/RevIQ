@@ -27,6 +27,7 @@ import {
 import { Trophy, Medal, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeaderboardEntry } from "@/types";
+import { UserDetailDrawer } from "@/components/dashboard/user-detail-drawer";
 
 const AE_TYPES = [
   { value: "combined", label: "Combined" },
@@ -96,7 +97,7 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="text-muted-foreground text-sm font-medium w-6 text-center">{rank}</span>;
 }
 
-function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function RevenueBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[750px]">
@@ -116,10 +117,11 @@ function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -139,7 +141,7 @@ function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
   );
 }
 
-function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[900px]">
@@ -161,10 +163,11 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -186,7 +189,7 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
   );
 }
 
-function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function PilotsBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[700px]">
@@ -206,10 +209,11 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -229,7 +233,7 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
   );
 }
 
-function ActivitiesBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function ActivitiesBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[650px]">
@@ -250,10 +254,11 @@ function ActivitiesBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -281,6 +286,7 @@ export default function LeaderboardPage() {
   const [aeType, setAeType] = useState("combined");
   const [region, setRegion] = useState("combined");
   const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // Fetch available managers
   const { data: managersData } = useQuery({
@@ -440,7 +446,7 @@ export default function LeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No revenue data for the selected period" icon={Trophy} />
               ) : (
-                <RevenueBoard entries={visibleEntries} />
+                <RevenueBoard entries={visibleEntries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
@@ -452,7 +458,7 @@ export default function LeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No pipeline data available" icon={Trophy} />
               ) : (
-                <PipelineBoard entries={visibleEntries} />
+                <PipelineBoard entries={visibleEntries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
@@ -464,7 +470,7 @@ export default function LeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No pilot data available" icon={Trophy} />
               ) : (
-                <PilotsBoard entries={visibleEntries} />
+                <PilotsBoard entries={visibleEntries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
@@ -476,12 +482,20 @@ export default function LeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No activity data for the selected period" icon={Trophy} />
               ) : (
-                <ActivitiesBoard entries={visibleEntries} />
+                <ActivitiesBoard entries={visibleEntries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <UserDetailDrawer
+        userId={selectedUserId}
+        open={!!selectedUserId}
+        onClose={() => setSelectedUserId(null)}
+        board={board}
+        period={period}
+      />
     </div>
   );
 }

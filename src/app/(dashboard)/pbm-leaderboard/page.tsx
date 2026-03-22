@@ -27,6 +27,7 @@ import {
 import { Handshake, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeaderboardEntry } from "@/types";
+import { UserDetailDrawer } from "@/components/dashboard/user-detail-drawer";
 
 const REGIONS = [
   { value: "combined", label: "All Regions" },
@@ -62,7 +63,7 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="text-muted-foreground text-sm font-medium w-6 text-center">{rank}</span>;
 }
 
-function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function RevenueBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[750px]">
@@ -82,10 +83,11 @@ function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -105,7 +107,7 @@ function RevenueBoard({ entries }: { entries: LeaderboardEntry[] }) {
   );
 }
 
-function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[900px]">
@@ -127,10 +129,11 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -152,7 +155,7 @@ function PipelineBoard({ entries }: { entries: LeaderboardEntry[] }) {
   );
 }
 
-function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
+function PilotsBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; onRowClick?: (userId: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[750px]">
@@ -173,10 +176,11 @@ function PilotsBoard({ entries }: { entries: LeaderboardEntry[] }) {
             <tr
               key={e.user_id}
               className={cn(
-                "text-sm",
+                "text-sm cursor-pointer hover:bg-muted/50 transition-colors",
                 e.rank <= 3 && "bg-amber-50/50 dark:bg-amber-950/20",
                 e.is_current_user && "bg-primary/5 ring-1 ring-primary/20"
               )}
+              onClick={() => onRowClick?.(e.user_id)}
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">
@@ -203,6 +207,7 @@ export default function PbmLeaderboardPage() {
   const [period, setPeriod] = useState("qtd");
   const [region, setRegion] = useState("combined");
   const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // Fetch available managers for PBMs
   const { data: managersData } = useQuery({
@@ -345,7 +350,7 @@ export default function PbmLeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No revenue data for the selected period" icon={Handshake} />
               ) : (
-                <RevenueBoard entries={entries} />
+                <RevenueBoard entries={entries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
@@ -357,7 +362,7 @@ export default function PbmLeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No pipeline data available" icon={Handshake} />
               ) : (
-                <PipelineBoard entries={entries} />
+                <PipelineBoard entries={entries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
@@ -369,12 +374,20 @@ export default function PbmLeaderboardPage() {
               {entries.length === 0 ? (
                 <EmptyState title="No data" description="No pilot data available" icon={Handshake} />
               ) : (
-                <PilotsBoard entries={entries} />
+                <PilotsBoard entries={entries} onRowClick={setSelectedUserId} />
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <UserDetailDrawer
+        userId={selectedUserId}
+        open={!!selectedUserId}
+        onClose={() => setSelectedUserId(null)}
+        board={board}
+        period={period}
+      />
     </div>
   );
 }

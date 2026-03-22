@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 
 export function AeHome() {
   const user = useAuthStore((s) => s.user);
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
+  const effectiveUserId = viewAsUser?.user_id ?? user?.user_id;
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
 
@@ -36,7 +38,7 @@ export function AeHome() {
   const { data: quotasData, isLoading: quotasLoading } = useQuotas({
     fiscal_year: fiscalYear,
     quota_type: "revenue",
-    user_id: user?.user_id,
+    user_id: effectiveUserId,
   });
 
   const isLoading = oppsLoading || quotasLoading;

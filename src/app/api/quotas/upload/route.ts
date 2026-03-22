@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, requireRole, handleAuthError } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod } from '@/lib/fiscal';
+import { logAudit } from '@/lib/audit';
 import * as XLSX from 'xlsx';
 
 export async function POST(request: NextRequest) {
@@ -179,6 +180,21 @@ export async function POST(request: NextRequest) {
 
       results.processed++;
     }
+
+    logAudit({
+      event_type: 'quota.upload',
+      actor_id: user.user_id,
+      actor_email: user.email,
+      target_type: 'quota',
+      metadata: {
+        fiscal_year: fiscalYear,
+        processed: results.processed,
+        quotas_upserted: results.quotas_upserted,
+        commission_rates_upserted: results.commission_rates_upserted,
+        skipped_count: results.skipped.length,
+        error_count: results.errors.length,
+      },
+    });
 
     return NextResponse.json({
       success: true,

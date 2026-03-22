@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { VIEW_AS_ROLES } from '@/lib/constants';
 import { UserRole } from '@/types';
+import { logAudit } from '@/lib/audit';
 
 // POST — log a view-as start or end event
 export async function POST(request: NextRequest) {
@@ -37,6 +38,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      logAudit({
+        event_type: 'view_as.start',
+        actor_id: user.user_id,
+        actor_email: user.email,
+        target_type: 'user',
+        target_id: viewed_as_id,
+        metadata: { viewed_as_role },
+      });
+
       return NextResponse.json({ log_id: data.id });
     }
 
@@ -54,6 +64,13 @@ export async function POST(request: NextRequest) {
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
+
+      logAudit({
+        event_type: 'view_as.end',
+        actor_id: user.user_id,
+        actor_email: user.email,
+        metadata: { log_id },
+      });
 
       return NextResponse.json({ ok: true });
     }

@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuotasTab } from "./quotas-tab";
 import { HierarchyTab } from "./hierarchy-tab";
 import { OverridesTab } from "./overrides-tab";
+import { AuditLogTab } from "./audit-log-tab";
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
@@ -19,6 +20,7 @@ export default function SettingsPage() {
   const canViewQuotas = isRevopsRW;
   const canViewHierarchy = isRevopsRW || isEnterpriseRO;
   const canViewOverrides = isRevopsRW;
+  const canViewAuditLog = isRevopsRW || isEnterpriseRO;
 
   const defaultTab = canViewQuotas ? "quotas" : "hierarchy";
 
@@ -30,6 +32,7 @@ export default function SettingsPage() {
           {canViewQuotas && <TabsTrigger value="quotas">Quotas</TabsTrigger>}
           {canViewHierarchy && <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>}
           {canViewOverrides && <TabsTrigger value="overrides">Permission Overrides</TabsTrigger>}
+          {canViewAuditLog && <TabsTrigger value="audit-log">Audit Log</TabsTrigger>}
         </TabsList>
 
         {canViewQuotas && (
@@ -45,6 +48,11 @@ export default function SettingsPage() {
         {canViewOverrides && (
           <TabsContent value="overrides" className="mt-4">
             <OverridesTab />
+          </TabsContent>
+        )}
+        {canViewAuditLog && (
+          <TabsContent value="audit-log" className="mt-4">
+            <AuditLogTab />
           </TabsContent>
         )}
       </Tabs>

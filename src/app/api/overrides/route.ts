@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
+import { logAudit } from '@/lib/audit';
 
 const OVERRIDE_ROLES = ['cro', 'c_level', 'revops_rw'];
 
@@ -94,6 +95,15 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    logAudit({
+      event_type: 'override.grant',
+      actor_id: user.user_id,
+      actor_email: user.email,
+      target_type: 'user',
+      target_id: user_id,
+      after_state: { effective_role, allow_writes: allow_writes || false, notes },
+    });
 
     return NextResponse.json({ data });
   } catch (error) {

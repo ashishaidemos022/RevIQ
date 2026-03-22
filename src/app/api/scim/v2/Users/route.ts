@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { logAudit } from '@/lib/audit';
 
 function validateScimToken(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -154,6 +155,14 @@ export async function POST(request: NextRequest) {
       status: 'success',
       records_synced: 1,
       raw_payload: payload,
+    });
+
+    logAudit({
+      event_type: 'scim.create',
+      target_type: 'user',
+      target_id: user.id,
+      target_label: fullName,
+      after_state: { email, role, region, department, title },
     });
 
     return NextResponse.json(

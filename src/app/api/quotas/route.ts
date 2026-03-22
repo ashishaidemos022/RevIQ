@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, requireRole, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(request: NextRequest) {
   try {
@@ -62,6 +63,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    logAudit({
+      event_type: 'quota.create',
+      actor_id: user.user_id,
+      actor_email: user.email,
+      target_type: 'quota',
+      target_id: data.id,
+      target_label: body.user_id,
+      after_state: data,
+    });
+
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
     return handleAuthError(error);
@@ -90,6 +101,15 @@ export async function PUT(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    logAudit({
+      event_type: 'quota.update',
+      actor_id: user.user_id,
+      actor_email: user.email,
+      target_type: 'quota',
+      target_id: id,
+      after_state: data,
+    });
 
     return NextResponse.json({ data });
   } catch (error) {

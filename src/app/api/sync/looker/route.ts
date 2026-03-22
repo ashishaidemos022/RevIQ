@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { SYNC_ROLES } from '@/lib/constants';
+import { logAudit } from '@/lib/audit';
 
 export async function POST() {
   try {
@@ -39,6 +40,14 @@ export async function POST() {
         })
         .eq('id', logEntry.id);
     }
+
+    logAudit({
+      event_type: 'sync.complete',
+      actor_id: user.user_id,
+      actor_email: user.email,
+      target_type: 'sync',
+      metadata: { sync_type: 'looker', records_synced: 0, status: 'success' },
+    });
 
     return NextResponse.json({ message: 'Looker sync completed (stubbed)', records: 0 });
   } catch (error) {

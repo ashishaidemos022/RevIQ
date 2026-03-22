@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { logAudit } from '@/lib/audit';
 
 function validateScimToken(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -167,6 +168,14 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       raw_payload: payload,
     });
 
+    logAudit({
+      event_type: 'scim.update',
+      target_type: 'user',
+      target_id: user.id,
+      target_label: user.full_name,
+      after_state: { email: user.email, role: user.role, region: user.region },
+    });
+
     return NextResponse.json(toScimUser(user));
   } catch (error) {
     console.error('SCIM PUT error:', error);
@@ -290,6 +299,14 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       raw_payload: payload,
     });
 
+    logAudit({
+      event_type: 'scim.update',
+      target_type: 'user',
+      target_id: user.id,
+      target_label: user.full_name,
+      after_state: { email: user.email, role: user.role, region: user.region },
+    });
+
     return NextResponse.json(toScimUser(user));
   } catch (error) {
     console.error('SCIM PATCH error:', error);
@@ -311,7 +328,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       .from('users')
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .select('id')
+      .select('id, full_name')
       .single();
 
     if (error || !user) {
@@ -335,6 +352,15 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       status: 'success',
       records_synced: 1,
       raw_payload: { operation: 'DELETE', user_id: id },
+    });
+
+    logAudit({
+      event_type: 'scim.deactivate',
+      target_type: 'user',
+      target_id: user.id,
+      target_label: user.full_name,
+      before_state: { is_active: true },
+      after_state: { is_active: false },
     });
 
     return new NextResponse(null, { status: 204 });

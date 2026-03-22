@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { SYNC_ROLES } from '@/lib/constants';
+import { logAudit } from '@/lib/audit';
 import { syncSalesforceUsers } from '@/lib/salesforce/sync-users';
 import { syncSalesforceAccounts } from '@/lib/salesforce/sync-accounts';
 import { syncRVAccounts } from '@/lib/salesforce/sync-rv-accounts';
@@ -78,6 +79,19 @@ export async function POST() {
           .eq('id', logEntry.id);
       }
 
+      logAudit({
+        event_type: hasErrors ? 'sync.complete' : 'sync.complete',
+        actor_id: user.user_id,
+        actor_email: user.email,
+        target_type: 'sync',
+        metadata: {
+          sync_type: 'salesforce',
+          records_synced: totalRecords,
+          status: hasErrors ? 'partial' : 'success',
+          error_count: allErrors.length,
+        },
+      });
+
       return NextResponse.json({
         message: 'Salesforce sync completed',
         users: userResult,
@@ -99,6 +113,17 @@ export async function POST() {
           })
           .eq('id', logEntry.id);
       }
+
+      logAudit({
+        event_type: 'sync.failed',
+        actor_id: user.user_id,
+        actor_email: user.email,
+        target_type: 'sync',
+        metadata: {
+          sync_type: 'salesforce',
+          error: syncError instanceof Error ? syncError.message : 'Unknown error',
+        },
+      });
 
       console.error('Salesforce sync error:', syncError);
       return NextResponse.json(

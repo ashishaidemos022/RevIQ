@@ -19,6 +19,7 @@ interface PartnerEntry {
   rank: number;
   partner_id: string;
   partner_name: string;
+  partner_type: string | null;
   pbm_name: string | null;
   region: string | null;
   primary_metric: number;
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       APAC: ['APAC'],
     };
 
-    let rvQuery = db.from('rv_accounts').select('id, salesforce_rv_id, name, region, owner_sf_id');
+    let rvQuery = db.from('rv_accounts').select('id, salesforce_rv_id, name, region, owner_sf_id, partner_subtype');
     if (region !== 'combined') {
       const prefixes = regionPrefixMap[region] || [region];
       // Use OR filter with ilike for prefix matching
@@ -86,8 +87,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Build RV account name map (by salesforce_rv_id and by name)
-    const rvMap = new Map<string, { id: string; name: string; region: string | null; owner_sf_id: string | null }>();
-    const rvNameMap = new Map<string, { id: string; name: string; region: string | null; owner_sf_id: string | null }>();
+    const rvMap = new Map<string, { id: string; name: string; region: string | null; owner_sf_id: string | null; partner_subtype: string | null }>();
+    const rvNameMap = new Map<string, { id: string; name: string; region: string | null; owner_sf_id: string | null; partner_subtype: string | null }>();
     for (const rv of rvAccounts) {
       rvMap.set(rv.salesforce_rv_id, rv);
       rvNameMap.set(rv.name, rv);
@@ -200,6 +201,7 @@ export async function GET(request: NextRequest) {
           rank: 0,
           partner_id: rv.id,
           partner_name: rv.name,
+          partner_type: rv.partner_subtype || null,
           pbm_name: rv.owner_sf_id ? (pbmNameMap.get(rv.owner_sf_id) || null) : null,
           region: normalizeRegion(rv.region),
           primary_metric: acv,
@@ -242,6 +244,7 @@ export async function GET(request: NextRequest) {
           rank: 0,
           partner_id: rv.id,
           partner_name: rv.name,
+          partner_type: rv.partner_subtype || null,
           pbm_name: rv.owner_sf_id ? (pbmNameMap.get(rv.owner_sf_id) || null) : null,
           region: normalizeRegion(rv.region),
           primary_metric: totalAcv,
@@ -290,6 +293,7 @@ export async function GET(request: NextRequest) {
           rank: 0,
           partner_id: rv.id,
           partner_name: rv.name,
+          partner_type: rv.partner_subtype || null,
           pbm_name: rv.owner_sf_id ? (pbmNameMap.get(rv.owner_sf_id) || null) : null,
           region: normalizeRegion(rv.region),
           primary_metric: booked,

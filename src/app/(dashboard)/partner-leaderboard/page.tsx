@@ -24,6 +24,7 @@ interface PartnerEntry {
   rank: number;
   partner_id: string;
   partner_name: string;
+  partner_type: string | null;
   pbm_name: string | null;
   region: string | null;
   primary_metric: number;
@@ -42,7 +43,7 @@ function useSort(defaultKey: SortKey = "rank", defaultDir: SortDir = "asc") {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
-      setSortDir(key === "rank" || key === "partner_name" || key === "pbm_name" || key === "region" ? "asc" : "desc");
+      setSortDir(key === "rank" || key === "partner_name" || key === "partner_type" || key === "pbm_name" || key === "region" ? "asc" : "desc");
     }
   }, [sortKey]);
 
@@ -52,6 +53,7 @@ function useSort(defaultKey: SortKey = "rank", defaultDir: SortDir = "asc") {
 function getValue(entry: PartnerEntry, key: SortKey): string | number {
   if (key === "rank") return entry.rank;
   if (key === "partner_name") return entry.partner_name;
+  if (key === "partner_type") return entry.partner_type || "";
   if (key === "pbm_name") return entry.pbm_name || "";
   if (key === "region") return entry.region || "";
   if (key === "primary_metric") return entry.primary_metric;
@@ -160,6 +162,7 @@ function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowC
           <tr className="text-xs font-medium text-muted-foreground border-b">
             <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
             <SortHeader label="Partner Name" sortKey="partner_name" {...hp} />
+            <SortHeader label="Partner Type" sortKey="partner_type" {...hp} />
             <SortHeader label="PBM Name" sortKey="pbm_name" {...hp} />
             <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
             <SortHeader label="ACV Closed w/ Multiplier" sortKey="acv_closed_multiplier" {...hp} align="right" />
@@ -179,6 +182,7 @@ function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowC
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">{e.partner_name}</td>
+              <td className="py-2 px-2 text-muted-foreground text-xs">{e.partner_type || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.pbm_name || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.region || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.secondary_metrics.acv_closed_multiplier || 0)}</td>
@@ -204,6 +208,7 @@ function PipelineBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRow
           <tr className="text-xs font-medium text-muted-foreground border-b">
             <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
             <SortHeader label="Partner Name" sortKey="partner_name" {...hp} />
+            <SortHeader label="Partner Type" sortKey="partner_type" {...hp} />
             <SortHeader label="PBM Name" sortKey="pbm_name" {...hp} />
             <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
             <SortHeader label="Total ACV Created" sortKey="primary_metric" {...hp} align="right" />
@@ -225,6 +230,7 @@ function PipelineBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRow
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">{e.partner_name}</td>
+              <td className="py-2 px-2 text-muted-foreground text-xs">{e.partner_type || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.pbm_name || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.region || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.primary_metric)}</td>
@@ -252,6 +258,7 @@ function PilotsBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowCl
           <tr className="text-xs font-medium text-muted-foreground border-b">
             <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
             <SortHeader label="Partner Name" sortKey="partner_name" {...hp} />
+            <SortHeader label="Partner Type" sortKey="partner_type" {...hp} />
             <SortHeader label="PBM Name" sortKey="pbm_name" {...hp} />
             <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
             <SortHeader label="Booked Paid Pilots" sortKey="primary_metric" {...hp} align="right" />
@@ -272,6 +279,7 @@ function PilotsBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowCl
             >
               <td className="py-2 px-2"><RankBadge rank={e.rank} /></td>
               <td className="py-2 px-2 font-medium">{e.partner_name}</td>
+              <td className="py-2 px-2 text-muted-foreground text-xs">{e.partner_type || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.pbm_name || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.region || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{e.primary_metric}</td>

@@ -56,11 +56,11 @@
 ### Role Hierarchy
 
 ```
-C-Level (full company visibility + read/write)
+C-Level (full company visibility + read/write quotas & commission rates)
 RevOps Read/Write — revops_rw (full company visibility + read/write)
 RevOps Read-Only — revops_ro (full company visibility, no writes)
-    └── CRO (full company visibility + read/write)
-        └── SVP / VP (full regional org tree + quota write)
+    └── CRO (full company visibility + read-only quotas & commission rates)
+        └── SVP / VP (full regional org tree, no quota/commission access)
               └── AVP (their group/pod org subtree — between VP and Manager)
                     └── Sales Manager / Line Manager (direct reports + their reports)
                           └── Account Executive (own data only)
@@ -76,8 +76,8 @@ RevOps Read-Only — revops_ro (full company visibility, no writes)
 | `ae` | Account Executive | Own opportunities, activities, commissions only | No | No |
 | `manager` | Sales Manager | All AEs in their direct + transitive reporting tree | No | No |
 | `avp` | Area VP | All managers and AEs within their group/pod subtree (broader than manager, narrower than VP) | No | No |
-| `vp` | VP / SVP | All managers, AVPs, and AEs within their full regional org subtree | Yes (their region) | No |
-| `cro` | CRO | Full company — all regions, all AEs | Yes (company-wide) | Yes |
+| `vp` | VP / SVP | All managers, AVPs, and AEs within their full regional org subtree | No | No |
+| `cro` | CRO | Full company — all regions, all AEs | Read-only | Read-only |
 | `c_level` | C-Level | Full company — same as CRO | Yes (company-wide) | Yes |
 | `revops_ro` | RevOps (Read-Only) | Full company — read-only, no data modifications | No | No |
 | `revops_rw` | RevOps (Read/Write) | Full company — full read + write access to quotas, commission rates, and sync | Yes (company-wide) | Yes |
@@ -618,10 +618,10 @@ commission_amount = acv × commission_rate × usage_multiplier
 ```
 
 ### Commission Rate Configuration
-- Base commission rates are **managed directly in Supabase** by CRO / VP via the Settings → Commission Rates UI
+- Base commission rates are **managed directly in Supabase** by C-Level / RevOps RW via the Settings → Commission Rates UI (CRO has read-only access)
 - Rates can be set per: AE, fiscal year, fiscal quarter, and/or deal type
 - A dedicated `commission_rates` table stores all rate configurations with full audit trail (`entered_by`, `created_at`, `updated_at`)
-- AEs cannot view or edit commission rates — read access is restricted to Manager+ roles
+- Commission rates are only visible to CRO (read-only), C-Level, and RevOps RW in the Settings UI — no access for VP and below
 
 ### Usage Multiplier Logic
 - Usage data from Looker provides **interaction counts per product type** (e.g., Navigator: 1,240 interactions, Autopilot: 580 interactions) for each account
@@ -672,8 +672,8 @@ TD RevenueIQ
 | Leaderboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Usage | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Team View | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Settings → Quotas | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (read) | ✅ | ❌ (read) |
-| Settings → Commission Rates | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (read) | ✅ | ❌ (read) |
+| Settings → Quotas | ❌ | ❌ | ❌ | ❌ | ✅ (read) | ✅ | ❌ | ✅ | ❌ |
+| Settings → Commission Rates | ❌ | ❌ | ❌ | ❌ | ✅ (read) | ✅ | ❌ | ✅ | ❌ |
 | Settings → Sync | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 | Settings → Hierarchy Viewer | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Settings → Permission Overrides | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
@@ -1264,7 +1264,7 @@ quota_scope_id    uuid REFERENCES quota_scopes(id) NULL
 |---|----------|--------|----------------------|
 | 1 | Source of truth for user-to-manager hierarchy | **RESOLVED** | Okta SCIM `manager` attribute is the single source of truth. Hierarchy is constructed from the manager attribute on each user profile, not from group membership. Written to `user_hierarchy` on every SCIM sync. |
 | 2 | What Looker metrics and formula define "usage score" for the commission multiplier? | **RESOLVED** | Interaction counts per product type (Navigator, Autopilot, etc.). Multiplier = actual interactions ÷ target interactions. Targets configured in Supabase per product type. |
-| 3 | Exact commission rate tiers per AE, deal type, and fiscal period | **RESOLVED** | Quotas and base commission rates managed natively in Supabase via `commission_rates` table. Configured by CRO/VP in Settings UI. |
+| 3 | Exact commission rate tiers per AE, deal type, and fiscal period | **RESOLVED** | Quotas and base commission rates managed natively in Supabase via `commission_rates` table. Configured by C-Level/RevOps RW in Settings UI. CRO has read-only access. VP and below have no access. |
 | 4 | Should "Sync Now" trigger Salesforce + Looker simultaneously or separately? | **OPEN** | Recommend: single button triggers both sequentially; Settings page allows independent triggers |
 | 5 | Exact Salesforce custom field API names for Paid Pilot | **RESOLVED** | Field is `Pilot_Type__c` (text). Opportunity is a Paid Pilot when `Pilot_Type__c = 'Paid Pilot'`. Also sync `Pilot_Start_Date__c` and `Pilot_End_Date__c`. |
 | 6 | Commission dispute / correction workflow | **Phase 2** | Deferred to v2 |

@@ -77,40 +77,49 @@ export async function GET(request: NextRequest) {
       const acvClosed = closedInQ.reduce((s, o) => s + (parseFloat(String(o.acv)) || 0), 0);
       const dealsClosed = closedInQ.length;
 
-      // Active pilots at quarter end
-      const pilotsAtEnd = allCreditedOpps.filter(
-        o => o.is_paid_pilot && o.paid_pilot_start_date && o.paid_pilot_start_date <= endStr
-      );
-      const activePilots = pilotsAtEnd.filter(o => !o.is_closed_won && !o.is_closed_lost).length;
-      const convertedPilots = pilotsAtEnd.filter(o => o.is_closed_won).length;
-      const pilotConversionRate = pilotsAtEnd.length > 0 ? (convertedPilots / pilotsAtEnd.length) * 100 : 0;
+      // These metrics are N/A before FY2027
+      let activePilots: number | null = null;
+      let pilotConversionRate: number | null = null;
+      let commissionEarned: number | null = null;
+      let totalActivities: number | null = null;
 
-      // Commission earned
-      let commissionEarned = 0;
-      if (pbmLocalIds.length > 0) {
-        const { data: comms } = await db
-          .from('commissions')
-          .select('commission_amount')
-          .in('user_id', pbmLocalIds)
-          .eq('fiscal_year', fy)
-          .eq('fiscal_quarter', q)
-          .eq('is_finalized', true);
-        commissionEarned = (comms || []).reduce(
-          (s, c) => s + (parseFloat(c.commission_amount) || 0), 0
+      if (fy >= 2027) {
+        // Active pilots at quarter end
+        const pilotsAtEnd = allCreditedOpps.filter(
+          o => o.is_paid_pilot && o.paid_pilot_start_date && o.paid_pilot_start_date <= endStr
         );
-      }
+        activePilots = pilotsAtEnd.filter(o => !o.is_closed_won && !o.is_closed_lost).length;
+        const convertedPilots = pilotsAtEnd.filter(o => o.is_closed_won).length;
+        pilotConversionRate = pilotsAtEnd.length > 0 ? (convertedPilots / pilotsAtEnd.length) * 100 : 0;
 
-      // Activities — PBMs don't typically own activities directly,
-      // but count any they do own
-      let totalActivities = 0;
-      if (pbmLocalIds.length > 0) {
-        const { count } = await db
-          .from('activities')
-          .select('id', { count: 'exact', head: true })
-          .in('owner_user_id', pbmLocalIds)
-          .gte('activity_date', startStr)
-          .lte('activity_date', endStr);
-        totalActivities = count || 0;
+        // Commission earned
+        if (pbmLocalIds.length > 0) {
+          const { data: comms } = await db
+            .from('commissions')
+            .select('commission_amount')
+            .in('user_id', pbmLocalIds)
+            .eq('fiscal_year', fy)
+            .eq('fiscal_quarter', q)
+            .eq('is_finalized', true);
+          commissionEarned = (comms || []).reduce(
+            (s, c) => s + (parseFloat(c.commission_amount) || 0), 0
+          );
+        } else {
+          commissionEarned = 0;
+        }
+
+        // Activities
+        if (pbmLocalIds.length > 0) {
+          const { count } = await db
+            .from('activities')
+            .select('id', { count: 'exact', head: true })
+            .in('owner_user_id', pbmLocalIds)
+            .gte('activity_date', startStr)
+            .lte('activity_date', endStr);
+          totalActivities = count || 0;
+        } else {
+          totalActivities = 0;
+        }
       }
 
       // Quota attainment — YTD ACV / annual quota

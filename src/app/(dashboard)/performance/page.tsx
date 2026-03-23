@@ -33,10 +33,10 @@ interface QuarterData {
   acvClosed: number;
   dealsClosed: number;
   quotaAttainment: number | null;
-  activePilots: number;
-  pilotConversionRate: number;
-  commissionEarned: number;
-  totalActivities: number;
+  activePilots: number | null;
+  pilotConversionRate: number | null;
+  commissionEarned: number | null;
+  totalActivities: number | null;
 }
 
 const METRICS = [

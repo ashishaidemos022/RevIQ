@@ -27,10 +27,10 @@ export async function GET(request: NextRequest) {
       acvClosed: number;
       dealsClosed: number;
       quotaAttainment: number | null;
-      activePilots: number;
-      pilotConversionRate: number;
-      commissionEarned: number;
-      totalActivities: number;
+      activePilots: number | null;
+      pilotConversionRate: number | null;
+      commissionEarned: number | null;
+      totalActivities: number | null;
     }> = {};
 
     for (const { fy, q } of quarters) {
@@ -54,50 +54,59 @@ export async function GET(request: NextRequest) {
       const acvClosed = (closedOpps || []).reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
       const dealsClosed = (closedOpps || []).length;
 
-      // Active pilots at quarter end
-      let pilotsQuery = db
-        .from('opportunities')
-        .select('is_closed_won, is_closed_lost, is_paid_pilot')
-        .eq('is_paid_pilot', true)
-        .lte('paid_pilot_start_date', endStr);
-      if (ownerId) pilotsQuery = pilotsQuery.eq('owner_user_id', ownerId);
-      else if (!scope.allAccess) pilotsQuery = pilotsQuery.in('owner_user_id', scope.userIds);
-      const { data: pilots } = await pilotsQuery;
+      // These metrics are N/A before FY2027
+      let activePilots: number | null = null;
+      let pilotConversionRate: number | null = null;
+      let commissionEarned: number | null = null;
+      let totalActivities: number | null = null;
 
-      const activePilots = (pilots || []).filter(
-        (p: { is_closed_won: boolean; is_closed_lost: boolean }) => !p.is_closed_won && !p.is_closed_lost
-      ).length;
-      const convertedPilots = (pilots || []).filter(
-        (p: { is_closed_won: boolean }) => p.is_closed_won
-      ).length;
-      const pilotConversionRate = (pilots || []).length > 0
-        ? (convertedPilots / (pilots || []).length) * 100
-        : 0;
+      if (fy >= 2027) {
+        // Active pilots at quarter end
+        let pilotsQuery = db
+          .from('opportunities')
+          .select('is_closed_won, is_closed_lost, is_paid_pilot')
+          .eq('is_paid_pilot', true)
+          .lte('paid_pilot_start_date', endStr);
+        if (ownerId) pilotsQuery = pilotsQuery.eq('owner_user_id', ownerId);
+        else if (!scope.allAccess) pilotsQuery = pilotsQuery.in('owner_user_id', scope.userIds);
+        const { data: pilots } = await pilotsQuery;
 
-      // Commission earned
-      let commQuery = db
-        .from('commissions')
-        .select('commission_amount')
-        .eq('fiscal_year', fy)
-        .eq('fiscal_quarter', q)
-        .eq('is_finalized', true);
-      if (ownerId) commQuery = commQuery.eq('user_id', ownerId);
-      else if (!scope.allAccess) commQuery = commQuery.in('user_id', scope.userIds);
-      const { data: comms } = await commQuery;
+        activePilots = (pilots || []).filter(
+          (p: { is_closed_won: boolean; is_closed_lost: boolean }) => !p.is_closed_won && !p.is_closed_lost
+        ).length;
+        const convertedPilots = (pilots || []).filter(
+          (p: { is_closed_won: boolean }) => p.is_closed_won
+        ).length;
+        pilotConversionRate = (pilots || []).length > 0
+          ? (convertedPilots / (pilots || []).length) * 100
+          : 0;
 
-      const commissionEarned = (comms || []).reduce(
-        (s: number, c: { commission_amount: number | null }) => s + (c.commission_amount || 0), 0
-      );
+        // Commission earned
+        let commQuery = db
+          .from('commissions')
+          .select('commission_amount')
+          .eq('fiscal_year', fy)
+          .eq('fiscal_quarter', q)
+          .eq('is_finalized', true);
+        if (ownerId) commQuery = commQuery.eq('user_id', ownerId);
+        else if (!scope.allAccess) commQuery = commQuery.in('user_id', scope.userIds);
+        const { data: comms } = await commQuery;
 
-      // Activities
-      let actQuery = db
-        .from('activities')
-        .select('id', { count: 'exact', head: true })
-        .gte('activity_date', startStr)
-        .lte('activity_date', endStr);
-      if (ownerId) actQuery = actQuery.eq('owner_user_id', ownerId);
-      else if (!scope.allAccess) actQuery = actQuery.in('owner_user_id', scope.userIds);
-      const { count: totalActivities } = await actQuery;
+        commissionEarned = (comms || []).reduce(
+          (s: number, c: { commission_amount: number | null }) => s + (c.commission_amount || 0), 0
+        );
+
+        // Activities
+        let actQuery = db
+          .from('activities')
+          .select('id', { count: 'exact', head: true })
+          .gte('activity_date', startStr)
+          .lte('activity_date', endStr);
+        if (ownerId) actQuery = actQuery.eq('owner_user_id', ownerId);
+        else if (!scope.allAccess) actQuery = actQuery.in('owner_user_id', scope.userIds);
+        const { count } = await actQuery;
+        totalActivities = count || 0;
+      }
 
       // Quota for attainment
       let quotaQuery = db
@@ -146,7 +155,7 @@ export async function GET(request: NextRequest) {
         activePilots,
         pilotConversionRate,
         commissionEarned,
-        totalActivities: totalActivities || 0,
+        totalActivities,
       };
     }
 

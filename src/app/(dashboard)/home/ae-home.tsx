@@ -67,18 +67,18 @@ export function AeHome() {
   const kpis = kpisData?.data || null;
   const charts = chartsData?.data || null;
 
-  // Open opportunities closing within this + next 3 quarters, sorted by close date ascending
+  // Open opportunities with close date up to end of current + next 3 quarters, sorted by close date ascending
+  // Includes past-due open opps (close date in the past but still not closed)
   const openOpps = useMemo(() => {
     if (!oppsData?.data) return [];
     const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
-    // End of 4th quarter from now (current + 3 ahead)
     let endQ = fiscalQuarter + 3;
     let endFY = fiscalYear;
     if (endQ > 4) { endQ -= 4; endFY += 1; }
     const cutoffDate = getQuarterEndDate(endFY, endQ).toISOString().split("T")[0];
 
     return [...oppsData.data]
-      .filter((o) => o.close_date && o.close_date <= cutoffDate)
+      .filter((o) => !o.close_date || o.close_date <= cutoffDate)
       .sort((a, b) => (a.close_date || "").localeCompare(b.close_date || ""))
       .slice(0, 25);
   }, [oppsData]);

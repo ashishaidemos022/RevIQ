@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,9 +19,7 @@ export async function GET(request: NextRequest) {
       .from('commissions')
       .select('*, opportunities(id, name, acv, stage, account_id, accounts(name)), users!commissions_user_id_fkey(id, full_name, email)');
 
-    if (!scope.allAccess) {
-      query = query.in('user_id', scope.userIds);
-    }
+    query = scopedQuery(query, 'user_id', scope);
 
     if (userId) query = query.eq('user_id', userId);
     if (fiscalYear) query = query.eq('fiscal_year', parseInt(fiscalYear));

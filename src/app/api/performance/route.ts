@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 
 export async function GET(request: NextRequest) {
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         .gte('close_date', startStr)
         .lte('close_date', endStr);
       if (ownerId) oppsQuery = oppsQuery.eq('owner_user_id', ownerId);
-      else if (!scope.allAccess) oppsQuery = oppsQuery.in('owner_user_id', scope.userIds);
+      else oppsQuery = scopedQuery(oppsQuery, 'owner_user_id', scope);
       const { data: closedOpps } = await oppsQuery;
 
       const acvClosed = (closedOpps || []).reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
           .eq('is_paid_pilot', true)
           .lte('paid_pilot_start_date', endStr);
         if (ownerId) pilotsQuery = pilotsQuery.eq('owner_user_id', ownerId);
-        else if (!scope.allAccess) pilotsQuery = pilotsQuery.in('owner_user_id', scope.userIds);
+        else pilotsQuery = scopedQuery(pilotsQuery, 'owner_user_id', scope);
         const { data: pilots } = await pilotsQuery;
 
         activePilots = (pilots || []).filter(
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
           .eq('fiscal_quarter', q)
           .eq('is_finalized', true);
         if (ownerId) commQuery = commQuery.eq('user_id', ownerId);
-        else if (!scope.allAccess) commQuery = commQuery.in('user_id', scope.userIds);
+        else commQuery = scopedQuery(commQuery, 'user_id', scope);
         const { data: comms } = await commQuery;
 
         commissionEarned = (comms || []).reduce(
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
           .gte('activity_date', startStr)
           .lte('activity_date', endStr);
         if (ownerId) actQuery = actQuery.eq('owner_user_id', ownerId);
-        else if (!scope.allAccess) actQuery = actQuery.in('owner_user_id', scope.userIds);
+        else actQuery = scopedQuery(actQuery, 'owner_user_id', scope);
         const { count } = await actQuery;
         totalActivities = count || 0;
       }
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
         .eq('quota_type', 'revenue')
         .is('fiscal_quarter', null);
       if (ownerId) quotaQuery = quotaQuery.eq('user_id', ownerId);
-      else if (!scope.allAccess) quotaQuery = quotaQuery.in('user_id', scope.userIds);
+      else quotaQuery = scopedQuery(quotaQuery, 'user_id', scope);
       const { data: quotas } = await quotaQuery;
 
       const totalQuota = (quotas || []).reduce(
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
           .gte('close_date', qiStart.toISOString().split('T')[0])
           .lte('close_date', qiEnd.toISOString().split('T')[0]);
         if (ownerId) ytdQuery = ytdQuery.eq('owner_user_id', ownerId);
-        else if (!scope.allAccess) ytdQuery = ytdQuery.in('owner_user_id', scope.userIds);
+        else ytdQuery = scopedQuery(ytdQuery, 'owner_user_id', scope);
         const { data: ytdOpps } = await ytdQuery;
         ytdAcvClosed += (ytdOpps || []).reduce(
           (s: number, o: { acv: number | null }) => s + (o.acv || 0), 0

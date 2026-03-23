@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery, batchedIn } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credited-opps';
 
@@ -34,9 +34,7 @@ export async function GET(request: NextRequest) {
       .in('role', ['commercial_ae', 'enterprise_ae', 'pbm'])
       .eq('is_active', true);
 
-    if (!scope.allAccess) {
-      usersQuery = usersQuery.in('id', scope.userIds);
-    }
+    usersQuery = scopedQuery(usersQuery, 'id', scope);
 
     const { data: aes } = await usersQuery;
     if (!aes || aes.length === 0) {
@@ -52,10 +50,11 @@ export async function GET(request: NextRequest) {
 
     // Get opportunities for AEs (owner-based)
     const { data: allOpps } = aeIds.length > 0
-      ? await db
-          .from('opportunities')
-          .select('owner_user_id, acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date')
-          .in('owner_user_id', aeIds)
+      ? await batchedIn(
+          db.from('opportunities').select('owner_user_id, acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date'),
+          'owner_user_id',
+          aeIds
+        )
       : { data: [] };
 
     // Resolve PBM credited opportunities
@@ -109,28 +108,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Get quotas (annual + current quarter)
-    const { data: quotas } = await db
-      .from('quotas')
-      .select('user_id, quota_amount, fiscal_quarter')
-      .eq('fiscal_year', fiscalYear)
-      .eq('quota_type', 'revenue')
-      .in('user_id', allIds);
+    const { data: quotas } = await batchedIn(
+      db.from('quotas').select('user_id, quota_amount, fiscal_quarter').eq('fiscal_year', fiscalYear).eq('quota_type', 'revenue'),
+      'user_id',
+      allIds
+    );
 
     // Get activities QTD
-    const { data: acts } = await db
-      .from('activities')
-      .select('owner_user_id')
-      .in('owner_user_id', allIds)
-      .gte('activity_date', qStartStr)
-      .lte('activity_date', qEndStr);
+    const { data: acts } = await batchedIn(
+      db.from('activities').select('owner_user_id').gte('activity_date', qStartStr).lte('activity_date', qEndStr),
+      'owner_user_id',
+      allIds
+    );
 
     // Get commissions QTD
-    const { data: comms } = await db
-      .from('commissions')
-      .select('user_id, commission_amount, is_finalized')
-      .eq('fiscal_year', fiscalYear)
-      .eq('fiscal_quarter', fiscalQuarter)
-      .in('user_id', allIds);
+    const { data: comms } = await batchedIn(
+      db.from('commissions').select('user_id, commission_amount, is_finalized').eq('fiscal_year', fiscalYear).eq('fiscal_quarter', fiscalQuarter),
+      'user_id',
+      allIds
+    );
 
     // Build shared lookup maps
     const annualQuotaMap: Record<string, number> = {};

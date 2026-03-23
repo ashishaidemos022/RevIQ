@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,9 +21,7 @@ export async function GET(request: NextRequest) {
       .from('activities')
       .select('*, accounts(id, name), opportunities(id, name), users!activities_owner_user_id_fkey(id, full_name)', { count: 'exact' });
 
-    if (!scope.allAccess) {
-      query = query.in('owner_user_id', scope.userIds);
-    }
+    query = scopedQuery(query, 'owner_user_id', scope);
 
     if (ownerId) query = query.eq('owner_user_id', ownerId);
     if (activityType) query = query.eq('activity_type', activityType);

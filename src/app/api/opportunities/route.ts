@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,9 +26,7 @@ export async function GET(request: NextRequest) {
       .select('*, accounts(id, name, industry, region), users!opportunities_owner_user_id_fkey(id, full_name, email)', { count: 'exact' });
 
     // Scope filter
-    if (!scope.allAccess) {
-      query = query.in('owner_user_id', scope.userIds);
-    }
+    query = scopedQuery(query, 'owner_user_id', scope);
 
     // If specific owner requested (for managers viewing an AE)
     if (ownerId) {

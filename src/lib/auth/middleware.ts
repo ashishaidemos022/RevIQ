@@ -61,13 +61,17 @@ export async function resolveViewAs(
   };
 }
 
+export interface DataScope {
+  allAccess: boolean;
+  userIds: string[];
+  /** The root user ID for subtree-based scoping (used for RPC-based filtering) */
+  rootUserId?: string;
+}
+
 export async function resolveDataScope(
   user: SessionUser,
   viewAsUser?: SessionUser | null
-): Promise<{
-  allAccess: boolean;
-  userIds: string[];
-}> {
+): Promise<DataScope> {
   const targetUser = viewAsUser ?? user;
 
   if (FULL_ACCESS_ROLES.includes(targetUser.role)) {
@@ -94,7 +98,54 @@ export async function resolveDataScope(
 
   // For managers+, get org subtree
   const subtree = await getOrgSubtree(targetUser.user_id);
-  return { allAccess: false, userIds: [targetUser.user_id, ...subtree] };
+  return { allAccess: false, userIds: [targetUser.user_id, ...subtree], rootUserId: targetUser.user_id };
+}
+
+/**
+ * Applies scope filtering to a Supabase query on a user ID column.
+ * For small user lists (<= 50), uses .in() directly.
+ * For large lists, batches into multiple .in() clauses joined with .or()
+ * to avoid PostgREST URL length limits.
+ */
+const SCOPE_BATCH_SIZE = 50;
+
+export function scopedQuery<T>(
+  query: T,
+  column: string,
+  scope: DataScope
+): T {
+  if (scope.allAccess) return query;
+  if (scope.userIds.length <= SCOPE_BATCH_SIZE) {
+    return (query as any).in(column, scope.userIds) as T;
+  }
+  // Batch into chunks and join with OR
+  const chunks: string[] = [];
+  for (let i = 0; i < scope.userIds.length; i += SCOPE_BATCH_SIZE) {
+    const batch = scope.userIds.slice(i, i + SCOPE_BATCH_SIZE);
+    chunks.push(`${column}.in.(${batch.join(',')})`);
+  }
+  return (query as any).or(chunks.join(',')) as T;
+}
+
+/**
+ * Applies batched .in() filtering for a raw array of IDs.
+ * Use this when you have a derived ID list (not a DataScope) that may exceed PostgREST limits.
+ */
+export function batchedIn<T>(
+  query: T,
+  column: string,
+  ids: string[]
+): T {
+  if (ids.length === 0) return query;
+  if (ids.length <= SCOPE_BATCH_SIZE) {
+    return (query as any).in(column, ids) as T;
+  }
+  const chunks: string[] = [];
+  for (let i = 0; i < ids.length; i += SCOPE_BATCH_SIZE) {
+    const batch = ids.slice(i, i + SCOPE_BATCH_SIZE);
+    chunks.push(`${column}.in.(${batch.join(',')})`);
+  }
+  return (query as any).or(chunks.join(',')) as T;
 }
 
 export class AuthError extends Error {

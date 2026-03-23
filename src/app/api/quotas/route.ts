@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, requireRole, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { requireAuth, requireRole, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { logAudit } from '@/lib/audit';
 
 export async function GET(request: NextRequest) {
@@ -17,9 +17,7 @@ export async function GET(request: NextRequest) {
 
     let query = db.from('quotas').select('*, users!quotas_user_id_fkey(id, full_name, email)');
 
-    if (!scope.allAccess) {
-      query = query.in('user_id', scope.userIds);
-    }
+    query = scopedQuery(query, 'user_id', scope);
 
     if (userId) {
       // Validate UUID format — skip filter if invalid (e.g., 'dev-admin')

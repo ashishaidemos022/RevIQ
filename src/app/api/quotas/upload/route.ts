@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
-    requireRole(user, 'vp', 'cro', 'c_level', 'revops_rw');
+    requireRole(user, 'c_level', 'revops_rw');
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;

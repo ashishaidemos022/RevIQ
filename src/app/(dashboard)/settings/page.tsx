@@ -15,14 +15,17 @@ export default function SettingsPage() {
 
   const isRevopsRW = role === "revops_rw";
   const isEnterpriseRO = role === "enterprise_ro";
+  const isCRO = role === "cro";
+  const isCLevel = role === "c_level";
 
-  // Only revops_rw sees Quotas, Commission Rates, Hierarchy, and Permission Overrides
-  // enterprise_ro sees Hierarchy only
-  const canViewQuotas = isRevopsRW;
-  const canViewHierarchy = isRevopsRW || isEnterpriseRO;
-  const canViewOverrides = isRevopsRW;
-  const canViewAuditLog = isRevopsRW || isEnterpriseRO;
-  const canViewSync = isRevopsRW || isEnterpriseRO;
+  // CRO: read-only access to Quotas & Commission Rates
+  // C-Level & revops_rw: full read/write access
+  // enterprise_ro: Hierarchy only
+  const canViewQuotas = isRevopsRW || isCRO || isCLevel;
+  const canViewHierarchy = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
+  const canViewOverrides = isRevopsRW || isCLevel;
+  const canViewAuditLog = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
+  const canViewSync = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
 
   const defaultTab = canViewQuotas ? "quotas" : "hierarchy";
 

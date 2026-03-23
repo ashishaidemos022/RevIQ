@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,6 +34,12 @@ export async function GET(request: NextRequest) {
       totalActivities: number | null;
     }> = {};
 
+    // Helper to apply owner/scope filter
+    const applyScope = <T>(query: T, column: string): T => {
+      if (ownerId) return (query as any).eq(column, ownerId) as T;
+      return scopedQuery(query, column, scope);
+    };
+
     for (const { fy, q } of quarters) {
       const start = getQuarterStartDate(fy, q);
       const end = getQuarterEndDate(fy, q);
@@ -40,19 +47,20 @@ export async function GET(request: NextRequest) {
       const endStr = end.toISOString().split('T')[0];
       const label = `Q${q} FY${fy}`;
 
-      // Closed-won opportunities in quarter
-      let oppsQuery = db
-        .from('opportunities')
-        .select('acv, is_paid_pilot, is_closed_won')
-        .eq('is_closed_won', true)
-        .gte('close_date', startStr)
-        .lte('close_date', endStr);
-      if (ownerId) oppsQuery = oppsQuery.eq('owner_user_id', ownerId);
-      else oppsQuery = scopedQuery(oppsQuery, 'owner_user_id', scope);
-      const { data: closedOpps } = await oppsQuery;
+      // Closed-won opportunities in quarter — paginated to avoid 1000-row cap
+      const closedOpps = await fetchAll<{ acv: number | null }>(() =>
+        applyScope(
+          db.from('opportunities')
+            .select('acv')
+            .eq('is_closed_won', true)
+            .gte('close_date', startStr)
+            .lte('close_date', endStr),
+          'owner_user_id'
+        )
+      );
 
-      const acvClosed = (closedOpps || []).reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
-      const dealsClosed = (closedOpps || []).length;
+      const acvClosed = closedOpps.reduce((s, o) => s + (o.acv || 0), 0);
+      const dealsClosed = closedOpps.length;
 
       // These metrics are N/A before FY2027
       let activePilots: number | null = null;
@@ -61,85 +69,80 @@ export async function GET(request: NextRequest) {
       let totalActivities: number | null = null;
 
       if (fy >= 2027) {
-        // Active pilots at quarter end
-        let pilotsQuery = db
-          .from('opportunities')
-          .select('is_closed_won, is_closed_lost, is_paid_pilot')
-          .eq('is_paid_pilot', true)
-          .lte('paid_pilot_start_date', endStr);
-        if (ownerId) pilotsQuery = pilotsQuery.eq('owner_user_id', ownerId);
-        else pilotsQuery = scopedQuery(pilotsQuery, 'owner_user_id', scope);
-        const { data: pilots } = await pilotsQuery;
-
-        activePilots = (pilots || []).filter(
-          (p: { is_closed_won: boolean; is_closed_lost: boolean }) => !p.is_closed_won && !p.is_closed_lost
-        ).length;
-        const convertedPilots = (pilots || []).filter(
-          (p: { is_closed_won: boolean }) => p.is_closed_won
-        ).length;
-        pilotConversionRate = (pilots || []).length > 0
-          ? (convertedPilots / (pilots || []).length) * 100
-          : 0;
-
-        // Commission earned
-        let commQuery = db
-          .from('commissions')
-          .select('commission_amount')
-          .eq('fiscal_year', fy)
-          .eq('fiscal_quarter', q)
-          .eq('is_finalized', true);
-        if (ownerId) commQuery = commQuery.eq('user_id', ownerId);
-        else commQuery = scopedQuery(commQuery, 'user_id', scope);
-        const { data: comms } = await commQuery;
-
-        commissionEarned = (comms || []).reduce(
-          (s: number, c: { commission_amount: number | null }) => s + (c.commission_amount || 0), 0
+        // Active pilots at quarter end — paginated
+        const pilots = await fetchAll<{ is_closed_won: boolean; is_closed_lost: boolean }>(() =>
+          applyScope(
+            db.from('opportunities')
+              .select('is_closed_won, is_closed_lost')
+              .eq('is_paid_pilot', true)
+              .lte('paid_pilot_start_date', endStr),
+            'owner_user_id'
+          )
         );
 
-        // Activities
+        activePilots = pilots.filter(p => !p.is_closed_won && !p.is_closed_lost).length;
+        const convertedPilots = pilots.filter(p => p.is_closed_won).length;
+        pilotConversionRate = pilots.length > 0
+          ? (convertedPilots / pilots.length) * 100
+          : 0;
+
+        // Commission earned — paginated
+        const comms = await fetchAll<{ commission_amount: number | null }>(() =>
+          applyScope(
+            db.from('commissions')
+              .select('commission_amount')
+              .eq('fiscal_year', fy)
+              .eq('fiscal_quarter', q)
+              .eq('is_finalized', true),
+            'user_id'
+          )
+        );
+
+        commissionEarned = comms.reduce((s, c) => s + (c.commission_amount || 0), 0);
+
+        // Activities — use server-side count (no 1000-row issue)
         let actQuery = db
           .from('activities')
           .select('id', { count: 'exact', head: true })
           .gte('activity_date', startStr)
           .lte('activity_date', endStr);
-        if (ownerId) actQuery = actQuery.eq('owner_user_id', ownerId);
-        else actQuery = scopedQuery(actQuery, 'owner_user_id', scope);
+        actQuery = applyScope(actQuery, 'owner_user_id');
         const { count } = await actQuery;
         totalActivities = count || 0;
       }
 
-      // Quota for attainment
-      let quotaQuery = db
-        .from('quotas')
-        .select('quota_amount')
-        .eq('fiscal_year', fy)
-        .eq('quota_type', 'revenue')
-        .is('fiscal_quarter', null);
-      if (ownerId) quotaQuery = quotaQuery.eq('user_id', ownerId);
-      else quotaQuery = scopedQuery(quotaQuery, 'user_id', scope);
-      const { data: quotas } = await quotaQuery;
-
-      const totalQuota = (quotas || []).reduce(
-        (s: number, q: { quota_amount: number }) => s + q.quota_amount, 0
+      // Quota for attainment — paginated
+      const quotas = fy < 2027 ? [] : await fetchAll<{ quota_amount: number }>(() =>
+        applyScope(
+          db.from('quotas')
+            .select('quota_amount')
+            .eq('fiscal_year', fy)
+            .eq('quota_type', 'revenue')
+            .is('fiscal_quarter', null),
+          'user_id'
+        )
       );
+
+      const totalQuota = quotas.reduce((s, q) => s + (q.quota_amount || 0), 0);
 
       // Get YTD ACV for attainment (all quarters in same FY up to current quarter)
       let ytdAcvClosed = 0;
-      for (let qi = 1; qi <= q; qi++) {
-        const qiStart = getQuarterStartDate(fy, qi);
-        const qiEnd = getQuarterEndDate(fy, qi);
-        let ytdQuery = db
-          .from('opportunities')
-          .select('acv')
-          .eq('is_closed_won', true)
-          .gte('close_date', qiStart.toISOString().split('T')[0])
-          .lte('close_date', qiEnd.toISOString().split('T')[0]);
-        if (ownerId) ytdQuery = ytdQuery.eq('owner_user_id', ownerId);
-        else ytdQuery = scopedQuery(ytdQuery, 'owner_user_id', scope);
-        const { data: ytdOpps } = await ytdQuery;
-        ytdAcvClosed += (ytdOpps || []).reduce(
-          (s: number, o: { acv: number | null }) => s + (o.acv || 0), 0
-        );
+      if (fy >= 2027) {
+        for (let qi = 1; qi <= q; qi++) {
+          const qiStart = getQuarterStartDate(fy, qi);
+          const qiEnd = getQuarterEndDate(fy, qi);
+          const ytdOpps = await fetchAll<{ acv: number | null }>(() =>
+            applyScope(
+              db.from('opportunities')
+                .select('acv')
+                .eq('is_closed_won', true)
+                .gte('close_date', qiStart.toISOString().split('T')[0])
+                .lte('close_date', qiEnd.toISOString().split('T')[0]),
+              'owner_user_id'
+            )
+          );
+          ytdAcvClosed += ytdOpps.reduce((s, o) => s + (o.acv || 0), 0);
+        }
       }
 
       // No quota data before FY2027

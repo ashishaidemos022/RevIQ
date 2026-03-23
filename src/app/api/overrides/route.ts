@@ -24,12 +24,32 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const enriched = (data || []).map((o: Record<string, unknown>) => ({
-      ...o,
-      user_name: (o.users as { full_name: string } | null)?.full_name || 'Unknown',
-      user_role: (o.users as { role: string } | null)?.role || '',
-      granted_by_name: (o.granted as { full_name: string } | null)?.full_name || 'System',
-    }));
+    // Resolve reference user names
+    const allRefIds = new Set<string>();
+    (data || []).forEach((o: Record<string, unknown>) => {
+      const refs = o.reference_user_ids as string[] | null;
+      if (refs) refs.forEach(id => allRefIds.add(id));
+    });
+
+    const refNameMap = new Map<string, string>();
+    if (allRefIds.size > 0) {
+      const { data: refUsers } = await db
+        .from('users')
+        .select('id, full_name')
+        .in('id', [...allRefIds]);
+      (refUsers || []).forEach(u => refNameMap.set(u.id, u.full_name));
+    }
+
+    const enriched = (data || []).map((o: Record<string, unknown>) => {
+      const refs = (o.reference_user_ids as string[] | null) || [];
+      return {
+        ...o,
+        user_name: (o.users as { full_name: string } | null)?.full_name || 'Unknown',
+        user_role: (o.users as { role: string } | null)?.role || '',
+        granted_by_name: (o.granted as { full_name: string } | null)?.full_name || 'System',
+        reference_user_names: refs.map(id => refNameMap.get(id) || 'Unknown'),
+      };
+    });
 
     // Filter to last 90 days for revoked overrides
     const ninetyDaysAgo = new Date();
@@ -58,10 +78,18 @@ export async function POST(request: NextRequest) {
 
     const db = getSupabaseClient();
     const body = await request.json();
-    const { user_id, effective_role, allow_writes, notes } = body;
+    const { user_id, reference_user_ids, allow_writes, notes } = body;
 
-    if (!user_id || !effective_role || !notes) {
-      return NextResponse.json({ error: 'user_id, effective_role, and notes are required' }, { status: 400 });
+    if (!user_id || !notes) {
+      return NextResponse.json({ error: 'user_id and notes are required' }, { status: 400 });
+    }
+
+    if (!reference_user_ids || !Array.isArray(reference_user_ids) || reference_user_ids.length === 0) {
+      return NextResponse.json({ error: 'At least one reference user is required' }, { status: 400 });
+    }
+
+    if (reference_user_ids.length > 3) {
+      return NextResponse.json({ error: 'Maximum 3 reference users allowed' }, { status: 400 });
     }
 
     // Check for existing active override
@@ -84,7 +112,8 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id,
         granted_by: user.user_id !== 'dev-admin' ? user.user_id : null,
-        effective_role,
+        reference_user_ids,
+        effective_role: null,
         allow_writes: allow_writes || false,
         notes,
         is_active: true,
@@ -102,7 +131,7 @@ export async function POST(request: NextRequest) {
       actor_email: user.email,
       target_type: 'user',
       target_id: user_id,
-      after_state: { effective_role, allow_writes: allow_writes || false, notes },
+      after_state: { reference_user_ids, allow_writes: allow_writes || false, notes },
     });
 
     return NextResponse.json({ data });

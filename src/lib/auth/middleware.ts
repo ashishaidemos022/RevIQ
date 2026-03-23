@@ -82,13 +82,28 @@ export async function resolveDataScope(
   const db = getSupabaseClient();
   const { data: override } = await db
     .from('permission_overrides')
-    .select('effective_role')
+    .select('effective_role, reference_user_ids')
     .eq('user_id', targetUser.user_id)
     .eq('is_active', true)
     .single();
 
-  if (override && FULL_ACCESS_ROLES.includes(override.effective_role as UserRole)) {
-    return { allAccess: true, userIds: [] };
+  if (override) {
+    // New reference-user-based overrides: union the org subtrees of all reference users
+    const refIds: string[] = override.reference_user_ids || [];
+    if (refIds.length > 0) {
+      const allUserIds = new Set<string>([targetUser.user_id]);
+      for (const refId of refIds) {
+        allUserIds.add(refId);
+        const refSubtree = await getOrgSubtree(refId);
+        refSubtree.forEach(id => allUserIds.add(id));
+      }
+      return { allAccess: false, userIds: [...allUserIds] };
+    }
+
+    // Legacy effective_role-based overrides
+    if (override.effective_role && FULL_ACCESS_ROLES.includes(override.effective_role as UserRole)) {
+      return { allAccess: true, userIds: [] };
+    }
   }
 
   // For AEs (all AE types), only their own data

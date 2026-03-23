@@ -73,8 +73,8 @@ export function AeHome() {
   } = useOpportunities({
     status: "open",
     close_date_lte: cutoffDate,
-    sort_by: "close_date",
-    sort_asc: "true",
+    sort_by: "acv",
+    sort_asc: "false",
     limit: 25,
   });
 

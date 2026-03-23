@@ -11,19 +11,19 @@ import { SyncTab } from "./sync-tab";
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
   const viewAsUser = useAuthStore((s) => s.viewAsUser);
-  const role = viewAsUser?.role ?? user?.role ?? "ae";
+  const role = viewAsUser?.role ?? user?.role ?? "other";
 
   const isRevopsRW = role === "revops_rw";
   const isEnterpriseRO = role === "enterprise_ro";
   const isCRO = role === "cro";
   const isCLevel = role === "c_level";
 
-  // CRO: read-only access to Quotas & Commission Rates
-  // C-Level & revops_rw: full read/write access
+  // CRO & C-Level: read-only access to Quotas & Commission Rates
+  // revops_rw: full read/write access
   // enterprise_ro: Hierarchy only
   const canViewQuotas = isRevopsRW || isCRO || isCLevel;
   const canViewHierarchy = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
-  const canViewOverrides = isRevopsRW || isCLevel;
+  const canViewOverrides = isRevopsRW || isCRO;
   const canViewAuditLog = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
   const canViewSync = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
 

@@ -6,7 +6,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { VIEW_AS_ROLES } from '@/lib/constants';
 
 const FULL_ACCESS_ROLES: UserRole[] = ['cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
-const WRITE_ROLES: UserRole[] = ['cro', 'c_level', 'revops_rw'];
+const WRITE_ROLES: UserRole[] = ['revops_rw'];
 
 export async function requireAuth(): Promise<SessionUser> {
   const session = await getSession();
@@ -23,7 +23,7 @@ export function requireRole(user: SessionUser, ...allowedRoles: UserRole[]): voi
 }
 
 export function canWrite(user: SessionUser): boolean {
-  return WRITE_ROLES.includes(user.role) || user.role === 'vp';
+  return WRITE_ROLES.includes(user.role);
 }
 
 /**
@@ -107,7 +107,7 @@ export async function resolveDataScope(
   }
 
   // For AEs (all AE types), only their own data
-  if (['ae', 'commercial_ae', 'enterprise_ae', 'pbm'].includes(targetUser.role) && !override) {
+  if (['other', 'commercial_ae', 'enterprise_ae', 'pbm'].includes(targetUser.role) && !override) {
     return { allAccess: false, userIds: [targetUser.user_id] };
   }
 

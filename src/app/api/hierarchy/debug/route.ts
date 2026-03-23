@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 
-const DEBUG_ROLES = ['revops_rw', 'c_level'];
+const DEBUG_ROLES = ['revops_rw'];
 
 export async function GET(request: NextRequest) {
   try {

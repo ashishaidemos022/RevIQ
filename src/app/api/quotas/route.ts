@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
-    requireRole(user, 'c_level', 'revops_rw');
+    requireRole(user, 'revops_rw');
     const db = getSupabaseClient();
     const body = await request.json();
 
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireAuth();
-    requireRole(user, 'c_level', 'revops_rw');
+    requireRole(user, 'revops_rw');
     const db = getSupabaseClient();
     const body = await request.json();
     const { id, ...updates } = body;

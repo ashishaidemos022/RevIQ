@@ -73,10 +73,9 @@ function TreeNode({
 
   const roleBadgeColor: Record<string, string> = {
     cro: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-    vp: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    avp: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-    manager: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    ae: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+    c_level: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+    leader: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    other: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   };
 
   return (

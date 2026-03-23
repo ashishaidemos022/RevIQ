@@ -1,11 +1,9 @@
 export type UserRole =
-  | 'ae'
+  | 'other'
   | 'commercial_ae'
   | 'enterprise_ae'
   | 'pbm'
-  | 'manager'
-  | 'avp'
-  | 'vp'
+  | 'leader'
   | 'cro'
   | 'c_level'
   | 'revops_ro'

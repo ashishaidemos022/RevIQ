@@ -68,8 +68,8 @@ export default function TeamPage() {
 
   const formatRole = (role: string) => {
     const map: Record<string, string> = {
-      ae: "AE", commercial_ae: "Commercial AE", enterprise_ae: "Enterprise AE",
-      pbm: "PBM", manager: "Manager", avp: "AVP", vp: "VP",
+      other: "Other", commercial_ae: "Commercial AE", enterprise_ae: "Enterprise AE",
+      pbm: "PBM", leader: "Leader",
     };
     return map[role] || role;
   };

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const email = profile.email || profile['email'] || profile.nameID;
     const oktaId = profile['okta_id'] || profile.nameID;
     const fullName = profile['full_name'] || profile['displayName'] || email;
-    const role = (profile['role'] || 'ae') as UserRole;
+    const role = (profile['role'] || 'other') as UserRole;
 
     if (!oktaId || !email) {
       await logAuthEvent({ event_type: 'login_failed', auth_method: 'saml', failure_reason: 'missing_attributes', ...reqMeta });

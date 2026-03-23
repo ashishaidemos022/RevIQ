@@ -3,7 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { logAudit } from '@/lib/audit';
 
-const OVERRIDE_ROLES = ['cro', 'c_level', 'revops_rw'];
+const OVERRIDE_ROLES = ['cro', 'revops_rw'];
 
 export async function DELETE(
   request: NextRequest,

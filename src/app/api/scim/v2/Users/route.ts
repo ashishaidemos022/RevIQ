@@ -339,7 +339,7 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-const VALID_ROLES = ['ae', 'commercial_ae', 'enterprise_ae', 'pbm', 'manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+const VALID_ROLES = ['other', 'commercial_ae', 'enterprise_ae', 'pbm', 'leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
 function validateRole(role?: string): string | null {
   if (!role) return null;
@@ -348,15 +348,13 @@ function validateRole(role?: string): string | null {
 }
 
 function mapOktaGroupToRole(groups?: Array<{ display: string }>): string {
-  if (!groups || groups.length === 0) return 'ae';
+  if (!groups || groups.length === 0) return 'other';
 
   const roleMap: Record<string, string> = {
     'RevenueIQ-CRO': 'cro',
     'RevenueIQ-CLevel': 'c_level',
-    'RevenueIQ-VP': 'vp',
-    'RevenueIQ-AVP': 'avp',
-    'RevenueIQ-Manager': 'manager',
-    'RevenueIQ-AE': 'ae',
+    'RevenueIQ-Leader': 'leader',
+    'RevenueIQ-AE': 'other',
     'RevenueIQ-RevOps-RO': 'revops_ro',
     'RevenueIQ-RevOps-RW': 'revops_rw',
     'RevenueIQ-Enterprise-RO': 'enterprise_ro',
@@ -367,5 +365,5 @@ function mapOktaGroupToRole(groups?: Array<{ display: string }>): string {
     if (role) return role;
   }
 
-  return 'ae';
+  return 'other';
 }

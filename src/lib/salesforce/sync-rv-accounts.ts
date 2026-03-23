@@ -5,6 +5,7 @@ interface SalesforceRVAccount {
   Id: string;
   Name: string;
   rvpe__SFAccount__c: string | null;
+  Partner_type__c: string | null;
   Partner_Subtype__c: string | null;
   Region__c: string | null;
   OwnerId: string | null;
@@ -23,7 +24,7 @@ export async function syncRVAccounts(): Promise<RVAccountSyncResult> {
   // Query all RV Accounts
   const rvAccounts: SalesforceRVAccount[] = [];
   const query = conn.query<SalesforceRVAccount>(
-    "SELECT Id, Name, rvpe__SFAccount__c, Partner_Subtype__c, Region__c, OwnerId FROM rvpe__RVAccount__c"
+    "SELECT Id, Name, rvpe__SFAccount__c, Partner_type__c, Partner_Subtype__c, Region__c, OwnerId FROM rvpe__RVAccount__c"
   );
 
   await new Promise<void>((resolve, reject) => {
@@ -49,6 +50,7 @@ export async function syncRVAccounts(): Promise<RVAccountSyncResult> {
     salesforce_rv_id: rv.Id,
     name: rv.Name,
     sf_account_id: rv.rvpe__SFAccount__c,
+    partner_type: rv.Partner_type__c,
     partner_subtype: rv.Partner_Subtype__c,
     region: rv.Region__c,
     owner_sf_id: rv.OwnerId,

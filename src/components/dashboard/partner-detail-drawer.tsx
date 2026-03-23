@@ -38,6 +38,7 @@ interface PartnerDetail {
     id: string;
     name: string;
     region: string | null;
+    partner_type: string | null;
     partner_subtype: string | null;
     pbm_name: string | null;
   };
@@ -293,8 +294,11 @@ export function PartnerDetailDrawer({ partnerId, open, onClose, board, period }:
                 {data.partner.region && (
                   <Badge variant="outline">{data.partner.region}</Badge>
                 )}
+                {data.partner.partner_type && (
+                  <Badge variant="secondary">{data.partner.partner_type}</Badge>
+                )}
                 {data.partner.partner_subtype && (
-                  <Badge variant="secondary">{data.partner.partner_subtype}</Badge>
+                  <Badge variant="outline" className="text-xs">{data.partner.partner_subtype}</Badge>
                 )}
                 {data.partner.pbm_name && (
                   <span className="text-sm text-muted-foreground">

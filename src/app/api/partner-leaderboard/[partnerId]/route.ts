@@ -35,7 +35,7 @@ export async function GET(
     // Fetch the RV account (partner)
     const { data: rvAccount, error: rvError } = await db
       .from('rv_accounts')
-      .select('id, salesforce_rv_id, name, region, partner_subtype, owner_sf_id')
+      .select('id, salesforce_rv_id, name, region, partner_type, partner_subtype, owner_sf_id')
       .eq('id', partnerId)
       .single();
 
@@ -205,7 +205,8 @@ export async function GET(
           id: rvAccount.id,
           name: rvAccount.name,
           region: normalizeRegion(rvAccount.region),
-          partner_subtype: rvAccount.partner_subtype,
+          partner_type: rvAccount.partner_type || null,
+          partner_subtype: rvAccount.partner_subtype || null,
           pbm_name: pbmName,
         },
         kpis: {

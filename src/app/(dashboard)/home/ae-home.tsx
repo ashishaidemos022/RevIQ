@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOpportunities } from "@/hooks/use-opportunities";
@@ -56,32 +56,33 @@ export function AeHome() {
     queryFn: () => apiFetch<{ data: HomeCharts }>(`/api/home/charts${viewAsParam}`),
   });
 
+  // Compute cutoff: end of current quarter + next 3 quarters
+  const cutoffDate = useMemo(() => {
+    const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+    let endQ = fiscalQuarter + 3;
+    let endFY = fiscalYear;
+    if (endQ > 4) { endQ -= 4; endFY += 1; }
+    return getQuarterEndDate(endFY, endQ).toISOString().split("T")[0];
+  }, []);
+
   const {
     data: oppsData,
     isLoading: oppsLoading,
     error: oppsError,
     refetch: refetchOpps,
-  } = useOpportunities({ status: "open", limit: 100 });
+  } = useOpportunities({
+    status: "open",
+    close_date_lte: cutoffDate,
+    sort_by: "close_date",
+    sort_asc: "true",
+    limit: 25,
+  });
 
   const isLoading = kpisLoading || chartsLoading || oppsLoading;
   const kpis = kpisData?.data || null;
   const charts = chartsData?.data || null;
 
-  // Open opportunities with close date up to end of current + next 3 quarters, sorted by close date ascending
-  // Includes past-due open opps (close date in the past but still not closed)
-  const openOpps = useMemo(() => {
-    if (!oppsData?.data) return [];
-    const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
-    let endQ = fiscalQuarter + 3;
-    let endFY = fiscalYear;
-    if (endQ > 4) { endQ -= 4; endFY += 1; }
-    const cutoffDate = getQuarterEndDate(endFY, endQ).toISOString().split("T")[0];
-
-    return [...oppsData.data]
-      .filter((o) => !o.close_date || o.close_date <= cutoffDate)
-      .sort((a, b) => (a.close_date || "").localeCompare(b.close_date || ""))
-      .slice(0, 25);
-  }, [oppsData]);
+  const openOpps = oppsData?.data || [];
 
   const columns: Column<Record<string, unknown>>[] = [
     {

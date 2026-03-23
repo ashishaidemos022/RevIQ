@@ -12,6 +12,9 @@ interface OpportunitiesParams {
   stage?: string;
   type?: string;
   owner_user_id?: string;
+  close_date_lte?: string;
+  sort_by?: string;
+  sort_asc?: string;
   limit?: number;
   offset?: number;
 }

@@ -60,6 +60,16 @@ export async function GET(request: NextRequest) {
       query = query.eq('type', type);
     }
 
+    // Max close date filter
+    const closeDateLte = url.searchParams.get('close_date_lte');
+    if (closeDateLte) {
+      query = query.lte('close_date', closeDateLte);
+    }
+
+    // Sort direction
+    const sortBy = url.searchParams.get('sort_by') || 'close_date';
+    const sortAsc = url.searchParams.get('sort_asc') === 'true';
+
     // Date filters for fiscal year/quarter
     if (fiscalYear && fiscalQuarter) {
       const { getQuarterStartDate, getQuarterEndDate } = await import('@/lib/fiscal');
@@ -76,7 +86,7 @@ export async function GET(request: NextRequest) {
         .lte('close_date', end.toISOString().split('T')[0]);
     }
 
-    query = query.order('close_date', { ascending: false }).range(offset, offset + limit - 1);
+    query = query.order(sortBy, { ascending: sortAsc }).range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 

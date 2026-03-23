@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const q4Col = keys.find(k => /^q4$/i.test(k.trim()));
 
     if (!nameCol && !oktaIdCol) {
-      return NextResponse.json({ error: `Missing Name or Okta User ID column. Found columns: ${keys.join(', ')}` }, { status: 400 });
+      return NextResponse.json({ error: 'Missing Name or Okta User ID column' }, { status: 400 });
     }
     if (!quotaCol) {
       return NextResponse.json({ error: 'Missing quota column (e.g., "Assigned Quota (USD)")' }, { status: 400 });
@@ -61,10 +61,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `User lookup failed: ${usersError.message}` }, { status: 500 });
     }
 
-    // Index by normalized name and okta_id
+    // Strip diacritics for fuzzy name matching
+    const stripDiacritics = (s: string) =>
+      s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+    // Index by normalized name (with and without diacritics) and okta_id
     for (const u of (allUsers || [])) {
-      const normalizedName = u.full_name.toLowerCase().trim();
-      userByName.set(normalizedName, u);
+      const exact = u.full_name.toLowerCase().trim();
+      const stripped = stripDiacritics(u.full_name);
+      userByName.set(exact, u);
+      if (exact !== stripped) userByName.set(stripped, u);
       userByOktaId.set(u.okta_id, u);
     }
 
@@ -86,7 +92,9 @@ export async function POST(request: NextRequest) {
         dbUser = userByOktaId.get(oktaId) || null;
       }
       if (!dbUser && name) {
-        dbUser = userByName.get(name.toLowerCase().trim()) || null;
+        dbUser = userByName.get(name.toLowerCase().trim())
+          || userByName.get(stripDiacritics(name))
+          || null;
       }
 
       if (!dbUser) {

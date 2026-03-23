@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const q4Col = keys.find(k => /^q4$/i.test(k.trim()));
 
     if (!nameCol && !oktaIdCol) {
-      return NextResponse.json({ error: 'Missing Name or Okta User ID column' }, { status: 400 });
+      return NextResponse.json({ error: `Missing Name or Okta User ID column. Found columns: ${keys.join(', ')}` }, { status: 400 });
     }
     if (!quotaCol) {
       return NextResponse.json({ error: 'Missing quota column (e.g., "Assigned Quota (USD)")' }, { status: 400 });

@@ -66,18 +66,10 @@ export function AeHome() {
   const kpis = kpisData?.data || null;
   const charts = chartsData?.data || null;
 
-  // Filter to close dates within next 4 quarters, sorted by ACV descending
+  // Open opportunities sorted by ACV descending
   const openOpps = useMemo(() => {
     if (!oppsData?.data) return [];
-    const today = new Date();
-    // 4 quarters ≈ 12 months from today
-    const cutoff = new Date(today);
-    cutoff.setMonth(cutoff.getMonth() + 12);
-    const cutoffStr = cutoff.toISOString().split("T")[0];
-    const todayStr = today.toISOString().split("T")[0];
-
-    return oppsData.data
-      .filter((o) => o.close_date && o.close_date >= todayStr && o.close_date <= cutoffStr)
+    return [...oppsData.data]
       .sort((a, b) => ((b.acv as number) || 0) - ((a.acv as number) || 0))
       .slice(0, 25);
   }, [oppsData]);

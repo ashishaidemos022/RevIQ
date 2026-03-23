@@ -46,6 +46,21 @@ interface PipelineKpis {
   closingThisQuarter: number;
 }
 
+interface StageRow {
+  stage: string;
+  deals: number;
+  totalAcv: number;
+  weightedAcv: number;
+  avgDaysInStage: number;
+}
+
+interface StagesResponse {
+  data: {
+    stages: StageRow[];
+    opportunities: Opportunity[];
+  };
+}
+
 export function AePipeline() {
   const user = useAuthStore((s) => s.user);
   const viewAsUser = useAuthStore((s) => s.viewAsUser);
@@ -62,8 +77,8 @@ export function AePipeline() {
 
   const quarters = getRollingQuarters(8);
 
-  // Build KPI query params to match current filters
-  const kpiParams = useMemo(() => {
+  // Build query params shared across server-side endpoints
+  const filterParams = useMemo(() => {
     const params = new URLSearchParams();
     if (viewAsUser) params.set('viewAs', viewAsUser.user_id);
     if (typeFilter !== "all") params.set('type', typeFilter);
@@ -73,36 +88,36 @@ export function AePipeline() {
     return params.toString();
   }, [viewAsUser, typeFilter, stageFilter, pilotFilter]);
 
+  // Server-side KPIs (aggregates ALL opps, no 1000-row limit)
   const {
     data: kpisData,
     isLoading: kpisLoading,
   } = useQuery({
-    queryKey: ["pipeline-kpis", kpiParams],
-    queryFn: () => apiFetch<{ data: PipelineKpis }>(`/api/pipeline/kpis${kpiParams ? `?${kpiParams}` : ''}`),
+    queryKey: ["pipeline-kpis", filterParams],
+    queryFn: () => apiFetch<{ data: PipelineKpis }>(`/api/pipeline/kpis${filterParams ? `?${filterParams}` : ''}`),
   });
 
   const kpis = kpisData?.data || { totalPipelineAcv: 0, weightedPipelineAcv: 0, dealCount: 0, avgDealSize: 0, closingThisQuarter: 0 };
 
+  // Server-side stages + full opp list (paginated, no 1000-row limit)
   const {
-    data: oppsData,
-    isLoading: oppsLoading,
-    error,
-    refetch,
-  } = useOpportunities({
-    status: "open",
-    ...(typeFilter !== "all" && { type: typeFilter }),
-    ...(stageFilter !== "all" && { stage: stageFilter }),
-    ...(pilotFilter === "yes" && { is_paid_pilot: true }),
-    ...(pilotFilter === "no" && { is_paid_pilot: false }),
-    limit: 500,
+    data: stagesData,
+    isLoading: stagesLoading,
+    error: stagesError,
+    refetch: refetchStages,
+  } = useQuery({
+    queryKey: ["pipeline-stages", filterParams],
+    queryFn: () => apiFetch<StagesResponse>(`/api/pipeline/stages${filterParams ? `?${filterParams}` : ''}`),
   });
 
-  const isLoading = kpisLoading || oppsLoading;
-  const opps = oppsData?.data || [];
+  const isLoading = kpisLoading || stagesLoading;
 
-  // Filter by close date quarter (for table display only)
+  // All opps from the stages endpoint (complete set)
+  const allOpps = stagesData?.data?.opportunities || [];
+
+  // Filter by close date quarter for table/chart display
   const filteredOpps = useMemo(() => {
-    if (quarterFilter === "all") return opps;
+    if (quarterFilter === "all") return allOpps;
     let fy = fiscalYear;
     let fq = fiscalQuarter;
     if (quarterFilter !== "current") {
@@ -112,25 +127,32 @@ export function AePipeline() {
     }
     const start = getQuarterStartDate(fy, fq);
     const end = getQuarterEndDate(fy, fq);
-    return opps.filter((o) => {
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+    return allOpps.filter((o) => {
       if (!o.close_date) return false;
-      const d = new Date(o.close_date);
-      return d >= start && d <= end;
+      return o.close_date >= startStr && o.close_date <= endStr;
     });
-  }, [opps, quarterFilter, fiscalYear, fiscalQuarter]);
+  }, [allOpps, quarterFilter, fiscalYear, fiscalQuarter]);
 
-  // Pipeline by stage aggregation
+  // Client-side stage aggregation from filtered opps (for quarter-filtered view)
   const stageData = useMemo(() => {
     const stages: Record<
       string,
-      { deals: typeof filteredOpps; totalAcv: number; weightedAcv: number }
+      { deals: typeof filteredOpps; totalAcv: number; weightedAcv: number; totalDays: number; daysCount: number }
     > = {};
     filteredOpps.forEach((o) => {
       const stage = o.stage || "Other";
-      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, weightedAcv: 0 };
+      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, weightedAcv: 0, totalDays: 0, daysCount: 0 };
       stages[stage].deals.push(o);
       stages[stage].totalAcv += o.acv || 0;
       stages[stage].weightedAcv += (o.acv || 0) * ((o.probability || 0) / 100);
+      if (o.last_stage_changed_at) {
+        stages[stage].totalDays += Math.floor(
+          (Date.now() - new Date(o.last_stage_changed_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        stages[stage].daysCount++;
+      }
     });
 
     const stageOrder = [...STAGES, "Other"];
@@ -145,15 +167,7 @@ export function AePipeline() {
         deals: data.deals.length,
         totalAcv: data.totalAcv,
         weightedAcv: data.weightedAcv,
-        avgDaysInStage: Math.round(
-          data.deals.reduce((s, o) => {
-            if (!o.last_stage_changed_at) return s;
-            const days = Math.floor(
-              (Date.now() - new Date(o.last_stage_changed_at).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            return s + days;
-          }, 0) / (data.deals.length || 1)
-        ),
+        avgDaysInStage: data.daysCount > 0 ? Math.round(data.totalDays / data.daysCount) : 0,
         oppList: data.deals,
       }));
   }, [filteredOpps]);
@@ -197,8 +211,8 @@ export function AePipeline() {
   ];
 
   if (isLoading) return <DashboardSkeleton />;
-  if (error)
-    return <ErrorState message="Failed to load pipeline data" onRetry={refetch} />;
+  if (stagesError)
+    return <ErrorState message="Failed to load pipeline data" onRetry={refetchStages} />;
 
   return (
     <div className="space-y-6">

@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery, batchedIn } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credited-opps';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 const MANAGER_PLUS = ['manager', 'avp', 'vp', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
@@ -48,14 +49,16 @@ export async function GET(request: NextRequest) {
     const aeIds = aeMembers.map(ae => ae.id);
     const pbmIds = pbmMembers.map(p => p.id);
 
-    // Get opportunities for AEs (owner-based)
-    const { data: allOpps } = aeIds.length > 0
-      ? await batchedIn(
-          db.from('opportunities').select('owner_user_id, acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date'),
-          'owner_user_id',
-          aeIds
+    // Get opportunities for AEs (owner-based) — paginated to avoid 1000-row cap
+    const allOpps = aeIds.length > 0
+      ? await fetchAll<{ owner_user_id: string | null; acv: number | null; is_closed_won: boolean; is_closed_lost: boolean; is_paid_pilot: boolean; close_date: string | null }>(() =>
+          batchedIn(
+            db.from('opportunities').select('owner_user_id, acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date'),
+            'owner_user_id',
+            aeIds
+          )
         )
-      : { data: [] };
+      : [];
 
     // Resolve PBM credited opportunities
     const pbmAcvMap: Record<string, { qtd: number; ytd: number }> = {};
@@ -107,31 +110,37 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get quotas (annual + current quarter)
-    const { data: quotas } = await batchedIn(
-      db.from('quotas').select('user_id, quota_amount, fiscal_quarter').eq('fiscal_year', fiscalYear).eq('quota_type', 'revenue'),
-      'user_id',
-      allIds
+    // Get quotas (annual + current quarter) — paginated
+    const quotas = await fetchAll<{ user_id: string; quota_amount: number; fiscal_quarter: number | null }>(() =>
+      batchedIn(
+        db.from('quotas').select('user_id, quota_amount, fiscal_quarter').eq('fiscal_year', fiscalYear).eq('quota_type', 'revenue'),
+        'user_id',
+        allIds
+      )
     );
 
-    // Get activities QTD
-    const { data: acts } = await batchedIn(
-      db.from('activities').select('owner_user_id').gte('activity_date', qStartStr).lte('activity_date', qEndStr),
-      'owner_user_id',
-      allIds
+    // Get activities QTD — paginated
+    const acts = await fetchAll<{ owner_user_id: string | null }>(() =>
+      batchedIn(
+        db.from('activities').select('owner_user_id').gte('activity_date', qStartStr).lte('activity_date', qEndStr),
+        'owner_user_id',
+        allIds
+      )
     );
 
-    // Get commissions QTD
-    const { data: comms } = await batchedIn(
-      db.from('commissions').select('user_id, commission_amount, is_finalized').eq('fiscal_year', fiscalYear).eq('fiscal_quarter', fiscalQuarter),
-      'user_id',
-      allIds
+    // Get commissions QTD — paginated
+    const comms = await fetchAll<{ user_id: string; commission_amount: number | null }>(() =>
+      batchedIn(
+        db.from('commissions').select('user_id, commission_amount, is_finalized').eq('fiscal_year', fiscalYear).eq('fiscal_quarter', fiscalQuarter),
+        'user_id',
+        allIds
+      )
     );
 
     // Build shared lookup maps
     const annualQuotaMap: Record<string, number> = {};
     const quarterlyQuotaMap: Record<string, number> = {};
-    (quotas || []).forEach((q: { user_id: string; quota_amount: number; fiscal_quarter: number | null }) => {
+    quotas.forEach((q) => {
       if (q.fiscal_quarter === null || q.fiscal_quarter === undefined) {
         annualQuotaMap[q.user_id] = (annualQuotaMap[q.user_id] || 0) + (q.quota_amount || 0);
       } else if (q.fiscal_quarter === fiscalQuarter) {
@@ -140,12 +149,12 @@ export async function GET(request: NextRequest) {
     });
 
     const activityCount: Record<string, number> = {};
-    (acts || []).forEach((a: { owner_user_id: string | null }) => {
+    acts.forEach((a) => {
       if (a.owner_user_id) activityCount[a.owner_user_id] = (activityCount[a.owner_user_id] || 0) + 1;
     });
 
     const commMap: Record<string, number> = {};
-    (comms || []).forEach((c: { user_id: string; commission_amount: number | null }) => {
+    comms.forEach((c) => {
       commMap[c.user_id] = (commMap[c.user_id] || 0) + (c.commission_amount || 0);
     });
 
@@ -162,7 +171,7 @@ export async function GET(request: NextRequest) {
         activePilots = 0; // TODO: resolve PBM pilot count via credit paths if needed
       } else {
         // AE: use owner-based opps
-        const aeOpps = (allOpps || []).filter((o: { owner_user_id: string | null }) => o.owner_user_id === member.id);
+        const aeOpps = allOpps.filter((o: { owner_user_id: string | null }) => o.owner_user_id === member.id);
         const closedWonQTD = aeOpps.filter((o: { is_closed_won: boolean; close_date: string | null }) =>
           o.is_closed_won && o.close_date && o.close_date >= qStartStr && o.close_date <= qEndStr
         );

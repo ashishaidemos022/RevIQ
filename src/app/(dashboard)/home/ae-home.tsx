@@ -25,6 +25,11 @@ interface HomeKpis {
   quarterPacePercent: number;
 }
 
+interface HomeCharts {
+  acvByMonth: Record<string, number>;
+  pipelineByStage: Record<string, { count: number; acv: number }>;
+}
+
 export function AeHome() {
   const viewAsUser = useAuthStore((s) => s.viewAsUser);
   const viewAsParam = viewAsUser ? `?viewAs=${viewAsUser.user_id}` : '';
@@ -41,14 +46,25 @@ export function AeHome() {
   });
 
   const {
+    data: chartsData,
+    isLoading: chartsLoading,
+    error: chartsError,
+    refetch: refetchCharts,
+  } = useQuery({
+    queryKey: ["home-charts", viewAsUser?.user_id],
+    queryFn: () => apiFetch<{ data: HomeCharts }>(`/api/home/charts${viewAsParam}`),
+  });
+
+  const {
     data: oppsData,
     isLoading: oppsLoading,
     error: oppsError,
     refetch: refetchOpps,
   } = useOpportunities({ limit: 100 });
 
-  const isLoading = kpisLoading || oppsLoading;
+  const isLoading = kpisLoading || chartsLoading || oppsLoading;
   const kpis = kpisData?.data || null;
+  const charts = chartsData?.data || null;
 
   const recentOpps = useMemo(() => {
     if (!oppsData?.data) return [];
@@ -102,11 +118,11 @@ export function AeHome() {
   ];
 
   if (isLoading) return <DashboardSkeleton />;
-  if (kpisError || oppsError)
+  if (kpisError || chartsError || oppsError)
     return (
       <ErrorState
         message="Failed to load dashboard data"
-        onRetry={() => { refetchKpis(); refetchOpps(); }}
+        onRetry={() => { refetchKpis(); refetchCharts(); refetchOpps(); }}
       />
     );
 
@@ -148,7 +164,7 @@ export function AeHome() {
             <CardTitle className="text-sm font-medium">ACV by Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <AcvByMonthChart opportunities={oppsData?.data || []} />
+            <AcvByMonthChart acvByMonth={charts?.acvByMonth} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">
@@ -158,7 +174,7 @@ export function AeHome() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <PipelineByStageChart opportunities={oppsData?.data || []} />
+            <PipelineByStageChart pipelineByStage={charts?.pipelineByStage} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">

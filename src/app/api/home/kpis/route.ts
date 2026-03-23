@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,56 +20,56 @@ export async function GET(request: NextRequest) {
     const fyStartStr = fyStart.toISOString().split('T')[0];
     const fyEndStr = fyEnd.toISOString().split('T')[0];
 
-    // Closed-won QTD
-    let qtdQuery = db
-      .from('opportunities')
-      .select('acv')
-      .eq('is_closed_won', true)
-      .gte('close_date', qStartStr)
-      .lte('close_date', qEndStr);
-    qtdQuery = scopedQuery(qtdQuery, 'owner_user_id', scope);
-    const { data: qtdOpps } = await qtdQuery;
+    // Closed-won QTD (paginated)
+    const qtdOpps = await fetchAll<{ acv: number | null }>(() => {
+      let q = db
+        .from('opportunities')
+        .select('acv')
+        .eq('is_closed_won', true)
+        .gte('close_date', qStartStr)
+        .lte('close_date', qEndStr);
+      return scopedQuery(q, 'owner_user_id', scope);
+    });
 
-    const acvClosedQTD = (qtdOpps || []).reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
-    const dealsClosedQTD = (qtdOpps || []).length;
+    const acvClosedQTD = qtdOpps.reduce((s, o) => s + (o.acv || 0), 0);
+    const dealsClosedQTD = qtdOpps.length;
 
-    // Closed-won YTD
-    let ytdQuery = db
-      .from('opportunities')
-      .select('acv')
-      .eq('is_closed_won', true)
-      .gte('close_date', fyStartStr)
-      .lte('close_date', fyEndStr);
-    ytdQuery = scopedQuery(ytdQuery, 'owner_user_id', scope);
-    const { data: ytdOpps } = await ytdQuery;
+    // Closed-won YTD (paginated)
+    const ytdOpps = await fetchAll<{ acv: number | null }>(() => {
+      let q = db
+        .from('opportunities')
+        .select('acv')
+        .eq('is_closed_won', true)
+        .gte('close_date', fyStartStr)
+        .lte('close_date', fyEndStr);
+      return scopedQuery(q, 'owner_user_id', scope);
+    });
 
-    const acvClosedYTD = (ytdOpps || []).reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
+    const acvClosedYTD = ytdOpps.reduce((s, o) => s + (o.acv || 0), 0);
 
     // Quota
-    const effectiveUserId = (viewAsUser ?? user).user_id;
-    let quotaQuery = db
-      .from('quotas')
-      .select('quota_amount, fiscal_quarter')
-      .eq('fiscal_year', fiscalYear)
-      .eq('quota_type', 'revenue');
+    const quotas = await fetchAll<{ quota_amount: number; fiscal_quarter: number | null }>(() => {
+      let q = db
+        .from('quotas')
+        .select('quota_amount, fiscal_quarter')
+        .eq('fiscal_year', fiscalYear)
+        .eq('quota_type', 'revenue');
+      if (scope.allAccess) {
+        // CRO/C-level: no filter, sum all quotas
+      } else if (scope.userIds.length === 1) {
+        q = q.eq('user_id', scope.userIds[0]);
+      } else {
+        q = scopedQuery(q, 'user_id', scope);
+      }
+      return q;
+    });
 
-    // For individual users (AEs), get their specific quota
-    // For managers+, get aggregate quota for their org
-    if (scope.allAccess) {
-      // CRO/C-level: no filter, sum all quotas
-    } else if (scope.userIds.length === 1) {
-      quotaQuery = quotaQuery.eq('user_id', scope.userIds[0]);
-    } else {
-      quotaQuery = scopedQuery(quotaQuery, 'user_id', scope);
-    }
-    const { data: quotas } = await quotaQuery;
-
-    const annualQuota = (quotas || [])
-      .filter((q: { fiscal_quarter: number | null }) => q.fiscal_quarter === null || q.fiscal_quarter === undefined)
-      .reduce((s: number, q: { quota_amount: number }) => s + (q.quota_amount || 0), 0);
-    const quarterlyQuota = (quotas || [])
-      .filter((q: { fiscal_quarter: number | null }) => q.fiscal_quarter === fiscalQuarter)
-      .reduce((s: number, q: { quota_amount: number }) => s + (q.quota_amount || 0), 0);
+    const annualQuota = quotas
+      .filter(q => q.fiscal_quarter === null || q.fiscal_quarter === undefined)
+      .reduce((s, q) => s + (q.quota_amount || 0), 0);
+    const quarterlyQuota = quotas
+      .filter(q => q.fiscal_quarter === fiscalQuarter)
+      .reduce((s, q) => s + (q.quota_amount || 0), 0);
 
     const quotaAttainmentYTD = annualQuota > 0 ? (acvClosedYTD / annualQuota) * 100 : 0;
     const quotaAttainmentQTD = quarterlyQuota > 0 ? (acvClosedQTD / quarterlyQuota) * 100 : 0;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,30 +17,29 @@ export async function GET(request: NextRequest) {
     const qStartStr = qStart.toISOString().split('T')[0];
     const qEndStr = qEnd.toISOString().split('T')[0];
 
-    // All open opportunities (no limit)
-    let openQuery = db
-      .from('opportunities')
-      .select('acv, probability, close_date')
-      .eq('is_closed_won', false)
-      .eq('is_closed_lost', false);
-    openQuery = scopedQuery(openQuery, 'owner_user_id', scope);
-
-    // Apply filters from query params
+    // Parse filters from query params
     const url = request.nextUrl;
     const typeFilter = url.searchParams.get('type');
     const stageFilter = url.searchParams.get('stage');
     const isPaidPilot = url.searchParams.get('is_paid_pilot');
 
-    if (typeFilter) openQuery = openQuery.eq('type', typeFilter);
-    if (stageFilter) {
-      const stages = stageFilter.split(',');
-      openQuery = openQuery.in('stage', stages);
-    }
-    if (isPaidPilot === 'true') openQuery = openQuery.eq('is_paid_pilot', true);
-    if (isPaidPilot === 'false') openQuery = openQuery.eq('is_paid_pilot', false);
+    // Helper to build the base open-opps query with filters applied
+    const buildOpenQuery = () => {
+      let q = db
+        .from('opportunities')
+        .select('acv, probability, close_date')
+        .eq('is_closed_won', false)
+        .eq('is_closed_lost', false);
+      q = scopedQuery(q, 'owner_user_id', scope);
+      if (typeFilter) q = q.eq('type', typeFilter);
+      if (stageFilter) q = q.in('stage', stageFilter.split(','));
+      if (isPaidPilot === 'true') q = q.eq('is_paid_pilot', true);
+      if (isPaidPilot === 'false') q = q.eq('is_paid_pilot', false);
+      return q;
+    };
 
-    const { data: openOpps } = await openQuery;
-    const opps = openOpps || [];
+    // Fetch ALL open opps (paginated to avoid 1000-row default cap)
+    const opps = await fetchAll<{ acv: number | null; probability: number | null; close_date: string | null }>(buildOpenQuery);
 
     const totalPipelineAcv = opps.reduce((s, o) => s + (o.acv || 0), 0);
     const weightedPipelineAcv = opps.reduce((s, o) => s + (o.acv || 0) * ((o.probability || 0) / 100), 0);

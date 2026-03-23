@@ -12,7 +12,9 @@ import {
 import { Opportunity } from "@/types";
 
 interface PipelineByStageChartProps {
-  opportunities: Opportunity[];
+  opportunities?: Opportunity[];
+  /** Pre-aggregated pipeline by stage (stage → {count, acv}). When provided, opportunities is ignored. */
+  pipelineByStage?: Record<string, { count: number; acv: number }>;
 }
 
 const STAGE_ORDER = [
@@ -26,16 +28,25 @@ const STAGE_ORDER = [
 
 export function PipelineByStageChart({
   opportunities,
+  pipelineByStage,
 }: PipelineByStageChartProps) {
   const data = useMemo(() => {
-    const stageMap: Record<string, number> = {};
+    let stageMap: Record<string, number> = {};
 
-    opportunities
-      .filter((o) => !o.is_closed_won && !o.is_closed_lost)
-      .forEach((o) => {
-        const stage = o.stage || "Other";
-        stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
-      });
+    if (pipelineByStage) {
+      // Use pre-aggregated data
+      for (const [stage, val] of Object.entries(pipelineByStage)) {
+        stageMap[stage] = val.acv;
+      }
+    } else if (opportunities) {
+      // Aggregate from raw opportunities
+      opportunities
+        .filter((o) => !o.is_closed_won && !o.is_closed_lost)
+        .forEach((o) => {
+          const stage = o.stage || "Other";
+          stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
+        });
+    }
 
     return Object.entries(stageMap)
       .sort(([a], [b]) => {
@@ -44,7 +55,7 @@ export function PipelineByStageChart({
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       })
       .map(([stage, acv]) => ({ stage, acv }));
-  }, [opportunities]);
+  }, [opportunities, pipelineByStage]);
 
   const formatCurrency = (val: number) =>
     val >= 1000 ? `$${(val / 1000).toFixed(0)}K` : `$${val}`;

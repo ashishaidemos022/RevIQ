@@ -12,12 +12,15 @@ import {
 import { Opportunity } from "@/types";
 
 interface AcvByMonthChartProps {
-  opportunities: Opportunity[];
+  opportunities?: Opportunity[];
+  /** Pre-aggregated ACV by month (YYYY-MM → amount). When provided, opportunities is ignored. */
+  acvByMonth?: Record<string, number>;
 }
 
-export function AcvByMonthChart({ opportunities }: AcvByMonthChartProps) {
+export function AcvByMonthChart({ opportunities, acvByMonth }: AcvByMonthChartProps) {
   const data = useMemo(() => {
     const months: Record<string, number> = {};
+    const labelMap: Record<string, string> = {};
     const now = new Date();
 
     // Last 12 months
@@ -26,27 +29,34 @@ export function AcvByMonthChart({ opportunities }: AcvByMonthChartProps) {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
       months[key] = 0;
-      // Store label mapping
-      (months as Record<string, unknown>)[`_label_${key}`] = label;
+      labelMap[key] = label;
     }
 
-    opportunities
-      .filter((o) => o.is_closed_won && o.close_date)
-      .forEach((o) => {
-        const d = new Date(o.close_date!);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (acvByMonth) {
+      // Use pre-aggregated data
+      for (const [key, value] of Object.entries(acvByMonth)) {
         if (key in months) {
-          months[key] += o.acv || 0;
+          months[key] = value;
         }
-      });
+      }
+    } else if (opportunities) {
+      // Aggregate from raw opportunities
+      opportunities
+        .filter((o) => o.is_closed_won && o.close_date)
+        .forEach((o) => {
+          const d = new Date(o.close_date!);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          if (key in months) {
+            months[key] += o.acv || 0;
+          }
+        });
+    }
 
-    return Object.entries(months)
-      .filter(([key]) => !key.startsWith("_label_"))
-      .map(([key, value]) => ({
-        month: (months as Record<string, unknown>)[`_label_${key}`] as string,
-        acv: value,
-      }));
-  }, [opportunities]);
+    return Object.entries(months).map(([key, value]) => ({
+      month: labelMap[key],
+      acv: value,
+    }));
+  }, [opportunities, acvByMonth]);
 
   const formatCurrency = (val: number) =>
     val >= 1000 ? `$${(val / 1000).toFixed(0)}K` : `$${val}`;

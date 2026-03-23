@@ -64,13 +64,18 @@ export async function POST(request: NextRequest) {
     // Strip diacritics for fuzzy name matching
     const stripDiacritics = (s: string) =>
       s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    // ASCII-only: strip all non-ASCII chars (handles mojibake like Ã© → empty)
+    const asciiOnly = (s: string) =>
+      s.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').toLowerCase().trim();
 
-    // Index by normalized name (with and without diacritics) and okta_id
+    // Index by normalized name (exact, diacritics-stripped, ascii-only) and okta_id
     for (const u of (allUsers || [])) {
       const exact = u.full_name.toLowerCase().trim();
       const stripped = stripDiacritics(u.full_name);
+      const ascii = asciiOnly(u.full_name);
       userByName.set(exact, u);
       if (exact !== stripped) userByName.set(stripped, u);
+      if (ascii !== exact && ascii !== stripped) userByName.set(ascii, u);
       userByOktaId.set(u.okta_id, u);
     }
 
@@ -94,6 +99,7 @@ export async function POST(request: NextRequest) {
       if (!dbUser && name) {
         dbUser = userByName.get(name.toLowerCase().trim())
           || userByName.get(stripDiacritics(name))
+          || userByName.get(asciiOnly(name))
           || null;
       }
 

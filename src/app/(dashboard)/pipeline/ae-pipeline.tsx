@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOpportunities } from "@/hooks/use-opportunities";
+import { apiFetch } from "@/lib/api";
 import {
   getCurrentFiscalPeriod,
   getQuarterStartDate,
@@ -36,8 +38,17 @@ const DEAL_TYPES = [
   { value: "expansion", label: "Expansion" },
 ];
 
+interface PipelineKpis {
+  totalPipelineAcv: number;
+  weightedPipelineAcv: number;
+  dealCount: number;
+  avgDealSize: number;
+  closingThisQuarter: number;
+}
+
 export function AePipeline() {
   const user = useAuthStore((s) => s.user);
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
   const isManager = user && MANAGER_PLUS_ROLES.includes(user.role as typeof MANAGER_PLUS_ROLES[number]);
 
@@ -51,9 +62,30 @@ export function AePipeline() {
 
   const quarters = getRollingQuarters(8);
 
+  // Build KPI query params to match current filters
+  const kpiParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (viewAsUser) params.set('viewAs', viewAsUser.user_id);
+    if (typeFilter !== "all") params.set('type', typeFilter);
+    if (stageFilter !== "all") params.set('stage', stageFilter);
+    if (pilotFilter === "yes") params.set('is_paid_pilot', 'true');
+    if (pilotFilter === "no") params.set('is_paid_pilot', 'false');
+    return params.toString();
+  }, [viewAsUser, typeFilter, stageFilter, pilotFilter]);
+
+  const {
+    data: kpisData,
+    isLoading: kpisLoading,
+  } = useQuery({
+    queryKey: ["pipeline-kpis", kpiParams],
+    queryFn: () => apiFetch<{ data: PipelineKpis }>(`/api/pipeline/kpis${kpiParams ? `?${kpiParams}` : ''}`),
+  });
+
+  const kpis = kpisData?.data || { totalPipelineAcv: 0, weightedPipelineAcv: 0, dealCount: 0, avgDealSize: 0, closingThisQuarter: 0 };
+
   const {
     data: oppsData,
-    isLoading,
+    isLoading: oppsLoading,
     error,
     refetch,
   } = useOpportunities({
@@ -65,9 +97,10 @@ export function AePipeline() {
     limit: 500,
   });
 
+  const isLoading = kpisLoading || oppsLoading;
   const opps = oppsData?.data || [];
 
-  // Filter by close date quarter
+  // Filter by close date quarter (for table display only)
   const filteredOpps = useMemo(() => {
     if (quarterFilter === "all") return opps;
     let fy = fiscalYear;
@@ -85,27 +118,6 @@ export function AePipeline() {
       return d >= start && d <= end;
     });
   }, [opps, quarterFilter, fiscalYear, fiscalQuarter]);
-
-  // KPIs
-  const kpis = useMemo(() => {
-    const totalPipelineAcv = filteredOpps.reduce((s, o) => s + (o.acv || 0), 0);
-    const weightedPipelineAcv = filteredOpps.reduce(
-      (s, o) => s + (o.acv || 0) * ((o.probability || 0) / 100),
-      0
-    );
-    const dealCount = filteredOpps.length;
-    const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
-
-    const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
-    const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
-    const closingThisQuarter = opps.filter((o) => {
-      if (!o.close_date) return false;
-      const d = new Date(o.close_date);
-      return d >= qStart && d <= qEnd;
-    }).length;
-
-    return { totalPipelineAcv, weightedPipelineAcv, dealCount, avgDealSize, closingThisQuarter };
-  }, [filteredOpps, opps, fiscalYear, fiscalQuarter]);
 
   // Pipeline by stage aggregation
   const stageData = useMemo(() => {

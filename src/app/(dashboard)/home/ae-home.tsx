@@ -1,15 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOpportunities } from "@/hooks/use-opportunities";
-import { useQuotas } from "@/hooks/use-quotas";
-import {
-  getCurrentFiscalPeriod,
-  getQuarterStartDate,
-  getQuarterEndDate,
-  getFiscalYearRange,
-} from "@/lib/fiscal";
+import { apiFetch } from "@/lib/api";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
@@ -21,12 +16,29 @@ import { QuotaGauge } from "@/components/charts/quota-gauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+interface HomeKpis {
+  acvClosedQTD: number;
+  acvClosedYTD: number;
+  dealsClosedQTD: number;
+  quotaAttainmentQTD: number;
+  quotaAttainmentYTD: number;
+  quarterPacePercent: number;
+}
+
 export function AeHome() {
-  const user = useAuthStore((s) => s.user);
   const viewAsUser = useAuthStore((s) => s.viewAsUser);
-  const effectiveUserId = viewAsUser?.user_id ?? user?.user_id;
-  const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+  const viewAsParam = viewAsUser ? `?viewAs=${viewAsUser.user_id}` : '';
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
+
+  const {
+    data: kpisData,
+    isLoading: kpisLoading,
+    error: kpisError,
+    refetch: refetchKpis,
+  } = useQuery({
+    queryKey: ["home-kpis", viewAsUser?.user_id],
+    queryFn: () => apiFetch<{ data: HomeKpis }>(`/api/home/kpis${viewAsParam}`),
+  });
 
   const {
     data: oppsData,
@@ -35,80 +47,8 @@ export function AeHome() {
     refetch: refetchOpps,
   } = useOpportunities({ limit: 100 });
 
-  const { data: quotasData, isLoading: quotasLoading } = useQuotas({
-    fiscal_year: fiscalYear,
-    quota_type: "revenue",
-    user_id: effectiveUserId,
-  });
-
-  const isLoading = oppsLoading || quotasLoading;
-
-  const kpis = useMemo(() => {
-    if (!oppsData?.data) return null;
-
-    const opps = oppsData.data;
-    const quotas = quotasData?.data || [];
-
-    const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
-    const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
-    const { start: fyStart, end: fyEnd } = getFiscalYearRange(fiscalYear);
-
-    const inQuarter = (d: string) => {
-      const date = new Date(d);
-      return date >= qStart && date <= qEnd;
-    };
-    const inYear = (d: string) => {
-      const date = new Date(d);
-      return date >= fyStart && date <= fyEnd;
-    };
-
-    const closedWonQTD = opps.filter(
-      (o) => o.is_closed_won && o.close_date && inQuarter(o.close_date)
-    );
-    const closedWonYTD = opps.filter(
-      (o) => o.is_closed_won && o.close_date && inYear(o.close_date)
-    );
-
-    const acvClosedQTD = closedWonQTD.reduce((s, o) => s + (o.acv || 0), 0);
-    const acvClosedYTD = closedWonYTD.reduce((s, o) => s + (o.acv || 0), 0);
-    const dealsClosedQTD = closedWonQTD.length;
-
-    const annualQuota = quotas.find(
-      (q) => q.fiscal_quarter === null || q.fiscal_quarter === undefined
-    );
-    const quarterlyQuota = quotas.find(
-      (q) => q.fiscal_quarter === fiscalQuarter
-    );
-    const quotaAttainmentYTD = annualQuota
-      ? (acvClosedYTD / annualQuota.quota_amount) * 100
-      : 0;
-    const quotaAttainmentQTD = quarterlyQuota
-      ? (acvClosedQTD / quarterlyQuota.quota_amount) * 100
-      : 0;
-
-    // Quarterly pacing: what % of quota should be hit by now based on days elapsed
-    const now = new Date();
-    const totalDaysInQuarter = Math.ceil(
-      (qEnd.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24)
-    ) + 1;
-    const daysElapsed = Math.max(
-      1,
-      Math.ceil((now.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24))
-    );
-    const quarterPacePercent = Math.min(
-      (daysElapsed / totalDaysInQuarter) * 100,
-      100
-    );
-
-    return {
-      acvClosedQTD,
-      acvClosedYTD,
-      dealsClosedQTD,
-      quotaAttainmentQTD,
-      quotaAttainmentYTD,
-      quarterPacePercent,
-    };
-  }, [oppsData, quotasData, fiscalYear, fiscalQuarter]);
+  const isLoading = kpisLoading || oppsLoading;
+  const kpis = kpisData?.data || null;
 
   const recentOpps = useMemo(() => {
     if (!oppsData?.data) return [];
@@ -162,11 +102,11 @@ export function AeHome() {
   ];
 
   if (isLoading) return <DashboardSkeleton />;
-  if (oppsError)
+  if (kpisError || oppsError)
     return (
       <ErrorState
         message="Failed to load dashboard data"
-        onRetry={refetchOpps}
+        onRetry={() => { refetchKpis(); refetchOpps(); }}
       />
     );
 

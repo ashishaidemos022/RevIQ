@@ -3,11 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { useAuthStore } from "@/stores/auth-store";
 import { getRollingQuarters } from "@/lib/fiscal";
-import { PBM_ROLES } from "@/lib/constants";
-import { PbmPerformance } from "@/components/pbm/pbm-performance";
-import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,20 +60,7 @@ function formatValue(value: number, format: string): string {
   }
 }
 
-export default function PerformancePage() {
-  const user = useAuthStore((s) => s.user);
-  const viewAsUser = useAuthStore((s) => s.viewAsUser);
-  const effectiveRole = viewAsUser?.role ?? user?.role;
-
-  if (effectiveRole && PBM_ROLES.includes(effectiveRole)) {
-    return <PbmPerformance />;
-  }
-
-  return <AePerformance />;
-}
-
-function AePerformance() {
-  const user = useAuthStore((s) => s.user);
+export function PbmPerformance() {
   const [offset, setOffset] = useState(0);
 
   const quarters = useMemo(() => {
@@ -91,11 +74,11 @@ function AePerformance() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["performance", quarters],
+    queryKey: ["pbm-performance", quarters],
     queryFn: () => {
       const params = quarters.map((q) => ({ fy: q.fiscalYear, q: q.fiscalQuarter }));
       return apiFetch<{ data: Record<string, QuarterData> }>(
-        `/api/performance?quarters=${encodeURIComponent(JSON.stringify(params))}`
+        `/api/pbm/performance?quarters=${encodeURIComponent(JSON.stringify(params))}`
       );
     },
   });

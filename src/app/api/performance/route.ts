@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       label: string;
       acvClosed: number;
       dealsClosed: number;
-      quotaAttainment: number;
+      quotaAttainment: number | null;
       activePilots: number;
       pilotConversionRate: number;
       commissionEarned: number;
@@ -133,7 +133,8 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const quotaAttainment = totalQuota > 0 ? (ytdAcvClosed / totalQuota) * 100 : 0;
+      // No quota data before FY2027
+      const quotaAttainment = fy < 2027 ? null : (totalQuota > 0 ? (ytdAcvClosed / totalQuota) * 100 : 0);
 
       results[label] = {
         fiscalYear: fy,

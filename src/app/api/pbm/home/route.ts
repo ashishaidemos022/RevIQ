@@ -4,6 +4,7 @@ import { requireAuth, resolveViewAs, handleAuthError } from '@/lib/auth/middlewa
 import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credited-opps';
 import { getOrgSubtree } from '@/lib/supabase/queries/hierarchy';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
+import { resolveQuotaUserId } from '@/lib/quota-resolver';
 
 export async function GET(request: NextRequest) {
   try {
@@ -88,30 +89,29 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Quota attainment
+    // Quota — use target user's own quota (not sum of subordinates)
     let quotaAttainmentYTD = 0;
     let quotaAttainmentQTD = 0;
-    if (pbmLocalIds.length > 0) {
-      const { data: quotas } = await db
-        .from('quotas')
-        .select('quota_amount, fiscal_quarter')
-        .in('user_id', pbmLocalIds)
-        .eq('fiscal_year', fiscalYear)
-        .eq('quota_type', 'revenue');
+    const quotaUserId = await resolveQuotaUserId(targetUser, db);
+    const { data: quotas } = await db
+      .from('quotas')
+      .select('quota_amount, fiscal_quarter')
+      .eq('user_id', quotaUserId)
+      .eq('fiscal_year', fiscalYear)
+      .eq('quota_type', 'revenue');
 
-      const annualQuota = (quotas || [])
-        .filter(q => q.fiscal_quarter === null)
-        .reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
-      const quarterlyQuota = (quotas || [])
-        .filter(q => q.fiscal_quarter === fiscalQuarter)
-        .reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
+    const annualQuota = (quotas || [])
+      .filter(q => q.fiscal_quarter === null)
+      .reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
+    const quarterlyQuota = (quotas || [])
+      .filter(q => q.fiscal_quarter === fiscalQuarter)
+      .reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
 
-      if (annualQuota > 0) {
-        quotaAttainmentYTD = (acvClosedYTD / annualQuota) * 100;
-      }
-      if (quarterlyQuota > 0) {
-        quotaAttainmentQTD = (acvClosedQTD / quarterlyQuota) * 100;
-      }
+    if (annualQuota > 0) {
+      quotaAttainmentYTD = (acvClosedYTD / annualQuota) * 100;
+    }
+    if (quarterlyQuota > 0) {
+      quotaAttainmentQTD = (acvClosedQTD / quarterlyQuota) * 100;
     }
 
     return NextResponse.json({

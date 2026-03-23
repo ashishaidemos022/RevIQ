@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { resolveQuotaUserId } from '@/lib/quota-resolver';
 
 export async function GET(request: NextRequest) {
   try {
@@ -112,19 +113,21 @@ export async function GET(request: NextRequest) {
         totalActivities = count || 0;
       }
 
-      // Quota for attainment — paginated
-      const quotas = fy < 2027 ? [] : await fetchAll<{ quota_amount: number }>(() =>
-        applyScope(
-          db.from('quotas')
-            .select('quota_amount')
-            .eq('fiscal_year', fy)
-            .eq('quota_type', 'revenue')
-            .is('fiscal_quarter', null),
-          'user_id'
-        )
-      );
+      // Quota — use target user's own quota (not sum of subordinates)
+      const targetUser = viewAsUser ?? user;
+      const quotaUserId = ownerId || await resolveQuotaUserId(targetUser, db);
 
-      const totalQuota = quotas.reduce((s, q) => s + (q.quota_amount || 0), 0);
+      let totalQuota = 0;
+      if (fy >= 2027) {
+        const { data: quotaRows } = await db
+          .from('quotas')
+          .select('quota_amount')
+          .eq('user_id', quotaUserId)
+          .eq('fiscal_year', fy)
+          .eq('quota_type', 'revenue')
+          .is('fiscal_quarter', null);
+        totalQuota = (quotaRows || []).reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
+      }
 
       // Get YTD ACV for attainment (all quarters in same FY up to current quarter)
       let ytdAcvClosed = 0;

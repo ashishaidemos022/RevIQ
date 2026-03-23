@@ -4,6 +4,7 @@ import { requireAuth, resolveViewAs, handleAuthError } from '@/lib/auth/middlewa
 import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credited-opps';
 import { getOrgSubtree } from '@/lib/supabase/queries/hierarchy';
 import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
+import { resolveQuotaUserId } from '@/lib/quota-resolver';
 
 export async function GET(request: NextRequest) {
   try {
@@ -132,14 +133,15 @@ export async function GET(request: NextRequest) {
           .reduce((s, o) => s + (parseFloat(String(o.acv)) || 0), 0);
       }
 
-      // No quota data before FY2027
+      // Quota — use target user's own quota (not sum of subordinates)
       let quotaAttainment: number | null = fy < 2027 ? null : 0;
       let annualQuota: number | null = fy < 2027 ? null : 0;
-      if (fy >= 2027 && pbmLocalIds.length > 0) {
+      if (fy >= 2027) {
+        const quotaUserId = await resolveQuotaUserId(targetUser, db);
         const { data: quotas } = await db
           .from('quotas')
           .select('quota_amount')
-          .in('user_id', pbmLocalIds)
+          .eq('user_id', quotaUserId)
           .eq('fiscal_year', fy)
           .eq('quota_type', 'revenue')
           .is('fiscal_quarter', null);

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOpportunities } from "@/hooks/use-opportunities";
+import { getCurrentFiscalPeriod, getQuarterEndDate } from "@/lib/fiscal";
 import { apiFetch } from "@/lib/api";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
@@ -66,11 +67,19 @@ export function AeHome() {
   const kpis = kpisData?.data || null;
   const charts = chartsData?.data || null;
 
-  // Open opportunities sorted by ACV descending
+  // Open opportunities closing within this + next 3 quarters, sorted by close date ascending
   const openOpps = useMemo(() => {
     if (!oppsData?.data) return [];
+    const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+    // End of 4th quarter from now (current + 3 ahead)
+    let endQ = fiscalQuarter + 3;
+    let endFY = fiscalYear;
+    if (endQ > 4) { endQ -= 4; endFY += 1; }
+    const cutoffDate = getQuarterEndDate(endFY, endQ).toISOString().split("T")[0];
+
     return [...oppsData.data]
-      .sort((a, b) => ((b.acv as number) || 0) - ((a.acv as number) || 0))
+      .filter((o) => o.close_date && o.close_date <= cutoffDate)
+      .sort((a, b) => (a.close_date || "").localeCompare(b.close_date || ""))
       .slice(0, 25);
   }, [oppsData]);
 

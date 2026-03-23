@@ -60,15 +60,26 @@ export function AeHome() {
     isLoading: oppsLoading,
     error: oppsError,
     refetch: refetchOpps,
-  } = useOpportunities({ limit: 100 });
+  } = useOpportunities({ status: "open", limit: 100 });
 
   const isLoading = kpisLoading || chartsLoading || oppsLoading;
   const kpis = kpisData?.data || null;
   const charts = chartsData?.data || null;
 
-  const recentOpps = useMemo(() => {
+  // Filter to close dates within next 4 quarters, sorted by ACV descending
+  const openOpps = useMemo(() => {
     if (!oppsData?.data) return [];
-    return oppsData.data.slice(0, 25);
+    const today = new Date();
+    // 4 quarters ≈ 12 months from today
+    const cutoff = new Date(today);
+    cutoff.setMonth(cutoff.getMonth() + 12);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const todayStr = today.toISOString().split("T")[0];
+
+    return oppsData.data
+      .filter((o) => o.close_date && o.close_date >= todayStr && o.close_date <= cutoffStr)
+      .sort((a, b) => ((b.acv as number) || 0) - ((a.acv as number) || 0))
+      .slice(0, 25);
   }, [oppsData]);
 
   const columns: Column<Record<string, unknown>>[] = [
@@ -195,12 +206,12 @@ export function AeHome() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">
-            Recent Opportunities
+            Open Opportunities
           </CardTitle>
         </CardHeader>
         <CardContent>
           <DataTable
-            data={recentOpps as unknown as Record<string, unknown>[]}
+            data={openOpps as unknown as Record<string, unknown>[]}
             columns={columns}
             pageSize={25}
             onRowClick={(row) => setSelectedOpp(row.id as string)}

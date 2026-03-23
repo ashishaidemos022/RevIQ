@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     // Detect columns - support flexible naming
     const keys = Object.keys(rows[0]);
-    const nameCol = keys.find(k => /^name$/i.test(k.trim()));
+    const nameCol = keys.find(k => /^(full\s*)?name$/i.test(k.trim()));
     const oktaIdCol = keys.find(k => /okta.*id/i.test(k.trim()));
     const quotaCol = keys.find(k => /quota|assigned/i.test(k.trim()));
     const icrCol = keys.find(k => /icr|commission|rate/i.test(k.trim()));
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     const q3Col = keys.find(k => /^q3$/i.test(k.trim()));
     const q4Col = keys.find(k => /^q4$/i.test(k.trim()));
 
-    if (!oktaIdCol) {
-      return NextResponse.json({ error: 'Missing Okta User ID column' }, { status: 400 });
+    if (!nameCol && !oktaIdCol) {
+      return NextResponse.json({ error: 'Missing Name or Okta User ID column' }, { status: 400 });
     }
     if (!quotaCol) {
       return NextResponse.json({ error: 'Missing quota column (e.g., "Assigned Quota (USD)")' }, { status: 400 });
@@ -47,21 +47,26 @@ export async function POST(request: NextRequest) {
     const db = getSupabaseClient();
     const { fiscalYear } = getCurrentFiscalPeriod();
 
-    // Resolve okta_ids to user UUIDs
-    const oktaIds = rows
-      .map(r => String(r[oktaIdCol] || '').trim())
-      .filter(Boolean);
+    // Build user lookup map — support both name-based and okta-id-based resolution
+    const userByName = new Map<string, { id: string; okta_id: string; full_name: string; role: string }>();
+    const userByOktaId = new Map<string, { id: string; okta_id: string; full_name: string; role: string }>();
 
-    const { data: users, error: usersError } = await db
+    // Fetch all active users for name matching
+    const { data: allUsers, error: usersError } = await db
       .from('users')
       .select('id, okta_id, full_name, role')
-      .in('okta_id', oktaIds);
+      .eq('is_active', true);
 
     if (usersError) {
       return NextResponse.json({ error: `User lookup failed: ${usersError.message}` }, { status: 500 });
     }
 
-    const userMap = new Map((users || []).map(u => [u.okta_id, u]));
+    // Index by normalized name and okta_id
+    for (const u of (allUsers || [])) {
+      const normalizedName = u.full_name.toLowerCase().trim();
+      userByName.set(normalizedName, u);
+      userByOktaId.set(u.okta_id, u);
+    }
 
     const results = {
       processed: 0,
@@ -72,17 +77,21 @@ export async function POST(request: NextRequest) {
     };
 
     for (const row of rows) {
-      const oktaId = String(row[oktaIdCol] || '').trim();
-      const name = nameCol ? String(row[nameCol] || '').trim() : oktaId;
+      const name = nameCol ? String(row[nameCol] || '').trim() : '';
+      const oktaId = oktaIdCol ? String(row[oktaIdCol] || '').trim() : '';
 
-      if (!oktaId) {
-        results.skipped.push(name || 'Unknown - no Okta ID');
-        continue;
+      // Resolve user: try okta_id first, then name
+      let dbUser = null;
+      if (oktaId) {
+        dbUser = userByOktaId.get(oktaId) || null;
+      }
+      if (!dbUser && name) {
+        dbUser = userByName.get(name.toLowerCase().trim()) || null;
       }
 
-      const dbUser = userMap.get(oktaId);
       if (!dbUser) {
-        results.skipped.push(`${name} (Okta ID not found in users table)`);
+        const label = name || oktaId || 'Unknown';
+        results.errors.push(`${label} — not found in users table`);
         continue;
       }
 
@@ -93,7 +102,7 @@ export async function POST(request: NextRequest) {
         : parseFloat(String(rawQuota).replace(/[$,]/g, ''));
 
       if (isNaN(quotaAmount) || quotaAmount <= 0) {
-        results.skipped.push(`${name} (invalid quota: ${rawQuota})`);
+        results.skipped.push(`${dbUser.full_name} (invalid quota: ${rawQuota})`);
         continue;
       }
 
@@ -131,7 +140,7 @@ export async function POST(request: NextRequest) {
       const { error: quotaErr } = await db.from('quotas').insert(quotaRows);
 
       if (quotaErr) {
-        results.errors.push(`${name}: quota insert - ${quotaErr.message}`);
+        results.errors.push(`${dbUser.full_name}: quota insert — ${quotaErr.message}`);
         continue;
       }
 
@@ -171,7 +180,7 @@ export async function POST(request: NextRequest) {
             });
 
           if (rateErr) {
-            results.errors.push(`${name}: commission rate - ${rateErr.message}`);
+            results.errors.push(`${dbUser.full_name}: commission rate — ${rateErr.message}`);
           } else {
             results.commission_rates_upserted++;
           }

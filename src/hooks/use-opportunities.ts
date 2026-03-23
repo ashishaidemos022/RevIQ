@@ -15,6 +15,7 @@ interface OpportunitiesParams {
   close_date_lte?: string;
   sort_by?: string;
   sort_asc?: string;
+  viewAs?: string;
   limit?: number;
   offset?: number;
 }

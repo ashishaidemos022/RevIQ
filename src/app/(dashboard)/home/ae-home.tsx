@@ -75,6 +75,7 @@ export function AeHome() {
     close_date_lte: cutoffDate,
     sort_by: "acv",
     sort_asc: "false",
+    viewAs: viewAsUser?.user_id,
     limit: 25,
   });
 

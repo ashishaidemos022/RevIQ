@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
         .lte('close_date', end.toISOString().split('T')[0]);
     }
 
-    query = query.order(sortBy, { ascending: sortAsc }).range(offset, offset + limit - 1);
+    query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false }).range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 

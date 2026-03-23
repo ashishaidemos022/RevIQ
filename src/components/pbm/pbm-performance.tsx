@@ -13,13 +13,13 @@ import { cn } from "@/lib/utils";
 import {
   BarChart,
   Bar,
-  LineChart,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
 
 interface QuarterData {
@@ -29,6 +29,7 @@ interface QuarterData {
   acvClosed: number;
   dealsClosed: number;
   quotaAttainment: number | null;
+  annualQuota: number | null;
   activePilots: number | null;
   pilotConversionRate: number | null;
   commissionEarned: number | null;
@@ -212,46 +213,56 @@ export function PbmPerformance() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Activity Volume</CardTitle>
+            <CardTitle className="text-sm font-medium">Deals Closed</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={quarterResults}>
+              <BarChart data={quarterResults}>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="totalActivities"
-                  stroke="hsl(var(--chart-2))"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-              </LineChart>
+                <Bar dataKey="dealsClosed" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Quota Attainment %</CardTitle>
+            <CardTitle className="text-sm font-medium">ACV Closed vs Quota</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={quarterResults}>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
-                <Tooltip formatter={(val) => `${Number(val).toFixed(1)}%`} />
-                <ReferenceLine y={100} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-                <Line
-                  type="monotone"
-                  dataKey="quotaAttainment"
-                  stroke="hsl(var(--chart-3))"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {quarterResults.some((q) => q.annualQuota !== null) ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <ComposedChart data={quarterResults.filter((q) => q.annualQuota !== null)}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCurrencyShort} />
+                  <Tooltip
+                    formatter={(val, name) => [
+                      new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number(val)),
+                      name === "acvClosed" ? "ACV Closed (YTD)" : "Annual Quota",
+                    ]}
+                  />
+                  <Legend
+                    formatter={(value) => (value === "acvClosed" ? "ACV Closed (YTD)" : "Annual Quota")}
+                    wrapperStyle={{ fontSize: 11 }}
+                  />
+                  <Bar dataKey="acvClosed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Line
+                    type="monotone"
+                    dataKey="annualQuota"
+                    stroke="hsl(var(--chart-3))"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ r: 4 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[250px] text-sm text-muted-foreground">
+                Quota data available from FY2027
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

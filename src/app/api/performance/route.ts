@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       acvClosed: number;
       dealsClosed: number;
       quotaAttainment: number | null;
+      annualQuota: number | null;
       activePilots: number | null;
       pilotConversionRate: number | null;
       commissionEarned: number | null;
@@ -155,6 +156,7 @@ export async function GET(request: NextRequest) {
         acvClosed,
         dealsClosed,
         quotaAttainment,
+        annualQuota: fy < 2027 ? null : totalQuota,
         activePilots,
         pilotConversionRate,
         commissionEarned,

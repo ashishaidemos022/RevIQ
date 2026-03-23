@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
 
       // No quota data before FY2027
       let quotaAttainment: number | null = fy < 2027 ? null : 0;
+      let annualQuota: number | null = fy < 2027 ? null : 0;
       if (fy >= 2027 && pbmLocalIds.length > 0) {
         const { data: quotas } = await db
           .from('quotas')
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest) {
           .eq('quota_type', 'revenue')
           .is('fiscal_quarter', null);
         const totalQuota = (quotas || []).reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
+        annualQuota = totalQuota;
         if (totalQuota > 0) quotaAttainment = (ytdAcvClosed / totalQuota) * 100;
       }
 
@@ -153,6 +155,7 @@ export async function GET(request: NextRequest) {
         acvClosed,
         dealsClosed,
         quotaAttainment,
+        annualQuota,
         activePilots,
         pilotConversionRate,
         commissionEarned,

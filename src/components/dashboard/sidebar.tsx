@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
+import { useTeamComposition } from "@/hooks/use-team-composition";
 import { NAV_ITEMS } from "@/lib/constants";
 import { UserRole } from "@/types";
 import {
@@ -39,6 +40,9 @@ export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const viewAsUser = useAuthStore((s) => s.viewAsUser);
   const userRole = (viewAsUser?.role ?? user?.role) as UserRole | undefined;
+  const { view } = useTeamComposition();
+
+  const hasAeReports = view === "ae" || view === "both";
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border bg-sidebar z-30">
@@ -53,6 +57,11 @@ export function Sidebar() {
           {NAV_ITEMS.map((item) => {
             // Role check
             if (item.roles !== "all" && userRole && !item.roles.includes(userRole)) {
+              return null;
+            }
+
+            // Hide AE-only pages for users without AE reports
+            if (item.requiresAeReports && !hasAeReports) {
               return null;
             }
 

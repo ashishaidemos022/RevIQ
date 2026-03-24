@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { COMPARE_COLORS } from "@/lib/chart-colors";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
@@ -52,11 +51,10 @@ function formatValue(value: number, format: string): string {
 
 function getDelta(a: number, b: number) {
   const diff = a - b;
-  if (Math.abs(diff) < 0.5) return { direction: "flat" as const, value: 0, diff: 0 };
+  if (Math.abs(diff) < 0.5) return { direction: "flat" as const, value: 0 };
   return {
     direction: diff > 0 ? ("up" as const) : ("down" as const),
     value: b !== 0 ? Math.abs(Math.round(((a - b) / b) * 100)) : 0,
-    diff,
   };
 }
 
@@ -72,44 +70,70 @@ export function CompareKpiGrid({ entities, mode }: CompareKpiGridProps) {
   };
 
   return (
-    <div className="space-y-3">
-      {KPI_DEFS.map((kpi) => (
-        <Card key={kpi.key}>
-          <CardContent className="py-3 px-4">
-            <div className="text-xs font-medium text-muted-foreground mb-2">
-              {kpi.label}
-              {mode === "perRep" && kpi.key !== "attainment" && (
-                <span className="ml-1">(per rep)</span>
-              )}
-            </div>
-            <div className={cn(
-              "grid gap-4",
-              showDelta ? "grid-cols-[1fr_auto_1fr]" : `grid-cols-${entities.length}`
-            )}>
-              {showDelta ? (
-                <>
-                  {/* Entity A */}
-                  <div className="text-center">
-                    <div className="text-xs text-muted-foreground mb-1" style={{ color: COMPARE_COLORS[0] }}>
-                      {entities[0].name}
-                      {entities[0].teamSize !== undefined && (
-                        <span className="text-muted-foreground"> ({entities[0].teamSize} reps)</span>
-                      )}
-                    </div>
-                    <div className="text-lg font-semibold">
-                      {formatValue(getValue(entities[0], kpi.key), kpi.format)}
-                    </div>
-                  </div>
-
-                  {/* Delta */}
-                  {(() => {
-                    const delta = getDelta(getValue(entities[0], kpi.key), getValue(entities[1], kpi.key));
+    <Card>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto rounded-lg">
+          <table className="w-full text-sm">
+            {/* Talkdesk-branded header with entity names */}
+            <thead>
+              <tr
+                className="text-white"
+                style={{ background: "linear-gradient(135deg, #5405bd 0%, #360379 100%)" }}
+              >
+                <th className="text-left py-3 px-4 font-semibold rounded-tl-lg">
+                  Metric
+                  {mode === "perRep" && (
+                    <span className="ml-1 text-xs font-normal opacity-80">(per rep)</span>
+                  )}
+                </th>
+                {entities.map((entity, i) => (
+                  <th key={entity.id} className={cn(
+                    "text-right py-3 px-4 font-semibold",
+                    i === entities.length - 1 && !showDelta && "rounded-tr-lg"
+                  )}>
+                    <div>{entity.name}</div>
+                    {entity.teamSize !== undefined && (
+                      <div className="text-xs font-normal opacity-80">
+                        {entity.teamSize} reps
+                      </div>
+                    )}
+                  </th>
+                ))}
+                {showDelta && (
+                  <th className="text-center py-3 px-4 font-semibold rounded-tr-lg" style={{ color: "#ffcc00" }}>
+                    Delta
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {KPI_DEFS.map((kpi, rowIdx) => (
+                <tr
+                  key={kpi.key}
+                  className={cn(
+                    "border-b last:border-0",
+                    rowIdx % 2 === 0 ? "bg-background" : "bg-muted/30"
+                  )}
+                >
+                  <td className="py-3 px-4 font-medium text-muted-foreground">
+                    {kpi.label}
+                  </td>
+                  {entities.map((entity) => (
+                    <td key={entity.id} className="text-right py-3 px-4 font-semibold tabular-nums">
+                      {formatValue(getValue(entity, kpi.key), kpi.format)}
+                    </td>
+                  ))}
+                  {showDelta && (() => {
+                    const delta = getDelta(
+                      getValue(entities[0], kpi.key),
+                      getValue(entities[1], kpi.key)
+                    );
                     return (
-                      <div className="flex items-center justify-center px-2">
-                        <div className="flex items-center gap-1">
-                          {delta.direction === "up" && <TrendingUp className="h-4 w-4 text-green-600" />}
-                          {delta.direction === "down" && <TrendingDown className="h-4 w-4 text-red-600" />}
-                          {delta.direction === "flat" && <Minus className="h-4 w-4 text-muted-foreground" />}
+                      <td className="text-center py-3 px-4">
+                        <span className="inline-flex items-center gap-1">
+                          {delta.direction === "up" && <TrendingUp className="h-3.5 w-3.5 text-green-600" />}
+                          {delta.direction === "down" && <TrendingDown className="h-3.5 w-3.5 text-red-600" />}
+                          {delta.direction === "flat" && <Minus className="h-3.5 w-3.5 text-muted-foreground" />}
                           {delta.value > 0 && (
                             <span className={cn(
                               "text-xs font-medium",
@@ -119,43 +143,16 @@ export function CompareKpiGrid({ entities, mode }: CompareKpiGridProps) {
                               {delta.value}%
                             </span>
                           )}
-                        </div>
-                      </div>
+                        </span>
+                      </td>
                     );
                   })()}
-
-                  {/* Entity B */}
-                  <div className="text-center">
-                    <div className="text-xs text-muted-foreground mb-1" style={{ color: COMPARE_COLORS[1] }}>
-                      {entities[1].name}
-                      {entities[1].teamSize !== undefined && (
-                        <span className="text-muted-foreground"> ({entities[1].teamSize} reps)</span>
-                      )}
-                    </div>
-                    <div className="text-lg font-semibold">
-                      {formatValue(getValue(entities[1], kpi.key), kpi.format)}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                entities.map((entity, i) => (
-                  <div key={entity.id} className="text-center">
-                    <div className="text-xs text-muted-foreground mb-1" style={{ color: COMPARE_COLORS[i] }}>
-                      {entity.name}
-                      {entity.teamSize !== undefined && (
-                        <span className="text-muted-foreground"> ({entity.teamSize} reps)</span>
-                      )}
-                    </div>
-                    <div className="text-lg font-semibold">
-                      {formatValue(getValue(entity, kpi.key), kpi.format)}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

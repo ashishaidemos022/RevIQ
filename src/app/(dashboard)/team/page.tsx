@@ -231,6 +231,7 @@ export default function TeamPage() {
             <CompareSelectionBar
               count={selectedIds.size}
               maxSelections={MAX_COMPARE}
+              selectedNames={selectedAes.map((ae) => ae.full_name)}
               onCompare={() => setViewMode("compare")}
               onClear={() => setSelectedIds(new Set())}
             />

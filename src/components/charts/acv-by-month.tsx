@@ -108,7 +108,7 @@ export function AcvByMonthChart({ opportunities, acvByMonth, acvDeals }: AcvByMo
           <Tooltip formatter={(val) => fmtCurrency(Number(val))} />
           <Bar
             dataKey="acv"
-            fill="hsl(var(--primary))"
+            fill="#7c3aed"
             radius={[4, 4, 0, 0]}
             onClick={acvDeals ? handleBarClick : undefined}
             style={acvDeals ? { cursor: "pointer" } : undefined}

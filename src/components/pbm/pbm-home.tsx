@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePbmHome } from "@/hooks/use-pbm-home";
 import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
+import { apiFetch } from "@/lib/api";
 import {
   getCurrentFiscalPeriod,
   getQuarterStartDate,
@@ -19,7 +21,14 @@ import { PipelineByStageChart } from "@/components/charts/pipeline-by-stage";
 import { QuotaGauge } from "@/components/charts/quota-gauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Opportunity } from "@/types";
+
+interface PbmCharts {
+  acvByMonth: Record<string, number>;
+  acvDeals?: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>>;
+  pipelineByStage: Record<string, { count: number; acv: number }>;
+  pipelineByMonthAndGroup?: Record<string, Record<string, { count: number; acv: number }>>;
+  pipelineDeals?: Record<string, Array<{ id: string; name: string; owner: string; acv: number; stage: string }>>;
+}
 
 export function PbmHome() {
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
@@ -36,7 +45,17 @@ export function PbmHome() {
     isLoading: oppsLoading,
   } = usePbmOpportunities({ limit: 100 });
 
-  const isLoading = homeLoading || oppsLoading;
+  const {
+    data: chartsResponse,
+    isLoading: chartsLoading,
+  } = useQuery({
+    queryKey: ["pbm-charts"],
+    queryFn: () => apiFetch<{ data: PbmCharts }>("/api/pbm/charts"),
+  });
+
+  const charts = chartsResponse?.data;
+
+  const isLoading = homeLoading || oppsLoading || chartsLoading;
 
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
 
@@ -53,8 +72,6 @@ export function PbmHome() {
     );
     return Math.min((elapsed / totalDays) * 100, 100);
   }, [fiscalYear, fiscalQuarter]);
-
-  const oppsAsOpportunities = (oppsData?.data || []) as unknown as Opportunity[];
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("en-US", {
@@ -168,17 +185,21 @@ export function PbmHome() {
             <CardTitle className="text-sm font-medium">ACV by Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <AcvByMonthChart opportunities={oppsAsOpportunities} />
+            <AcvByMonthChart acvByMonth={charts?.acvByMonth} acvDeals={charts?.acvDeals} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
-              Pipeline by Stage
+              Pipeline by Close Month
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <PipelineByStageChart opportunities={oppsAsOpportunities} />
+            <PipelineByStageChart
+              pipelineByMonthAndGroup={charts?.pipelineByMonthAndGroup}
+              pipelineDeals={charts?.pipelineDeals}
+              pipelineByStage={charts?.pipelineByStage}
+            />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">

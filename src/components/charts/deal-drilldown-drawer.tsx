@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 export interface DrillDownDeal {
@@ -46,13 +46,10 @@ export function DealDrilldownDrawer({
   const totalAcv = deals.reduce((sum, d) => sum + d.acv, 0);
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-2xl overflow-y-auto"
-      >
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             {accentColor && (
               <span
                 className="h-3 w-3 rounded-full shrink-0"
@@ -60,23 +57,20 @@ export function DealDrilldownDrawer({
               />
             )}
             {title}
-          </SheetTitle>
-          {subtitle && <SheetDescription>{subtitle}</SheetDescription>}
-        </SheetHeader>
-
-        <div className="px-4 pb-2">
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          </DialogTitle>
+          {subtitle && <DialogDescription>{subtitle}</DialogDescription>}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground pt-1">
             <span>{deals.length} deal{deals.length !== 1 ? "s" : ""}</span>
             <span className="font-semibold text-foreground">{fmtCurrency(totalAcv)}</span>
           </div>
-        </div>
+        </DialogHeader>
 
-        <div className="px-4 pb-4">
+        <div className="overflow-y-auto -mx-4 px-4 flex-1 min-h-0">
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">#</th>
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-muted/80 backdrop-blur border-b">
+                  <th className="text-left py-2.5 px-3 font-medium text-muted-foreground w-10">#</th>
                   <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Deal</th>
                   <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Owner</th>
                   {showStage && (
@@ -94,7 +88,7 @@ export function DealDrilldownDrawer({
                       i % 2 === 0 ? "bg-background" : "bg-muted/20"
                     )}
                   >
-                    <td className="py-2 px-3 text-muted-foreground tabular-nums w-8">
+                    <td className="py-2 px-3 text-muted-foreground tabular-nums w-10">
                       {i + 1}
                     </td>
                     <td className="py-2 px-3 font-medium" title={deal.name}>
@@ -117,7 +111,7 @@ export function DealDrilldownDrawer({
             </table>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

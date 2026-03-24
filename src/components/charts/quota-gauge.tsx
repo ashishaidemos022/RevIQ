@@ -40,9 +40,10 @@ export function QuotaGauge({ attainment, expectedPace }: QuotaGaugeProps) {
         ? "At Risk"
         : "Behind";
 
-  // The gauge shows attainment against the expected pace
-  // If pacing, the "full" ring represents expected pace, fill represents actual
-  const gaugeMax = showPacing ? Math.max(expectedPace, attainment) : 100;
+  // The gauge arc represents actual attainment out of 100% quarterly quota.
+  // e.g., 90% attainment → 90% filled arc, 10% empty.
+  // Pacing info (color, status label) still reflects pace comparison.
+  const gaugeMax = 100;
   const capped = Math.min(attainment, gaugeMax);
   const remaining = Math.max(gaugeMax - capped, 0);
 

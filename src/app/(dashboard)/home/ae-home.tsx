@@ -28,6 +28,7 @@ interface HomeKpis {
 
 interface HomeCharts {
   acvByMonth: Record<string, number>;
+  acvDeals?: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>>;
   pipelineByStage: Record<string, { count: number; acv: number }>;
   pipelineByMonthAndGroup?: Record<string, Record<string, { count: number; acv: number }>>;
   pipelineDeals?: Record<string, Array<{ id: string; name: string; owner: string; acv: number; stage: string }>>;
@@ -180,7 +181,7 @@ export function AeHome() {
             <CardTitle className="text-sm font-medium">ACV by Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <AcvByMonthChart acvByMonth={charts?.acvByMonth} />
+            <AcvByMonthChart acvByMonth={charts?.acvByMonth} acvDeals={charts?.acvDeals} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">

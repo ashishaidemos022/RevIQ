@@ -52,22 +52,42 @@ export async function GET(request: NextRequest) {
     const scope = await resolveDataScope(user, viewAsUser);
     const db = getSupabaseClient();
 
-    // ACV by month: closed-won opps with ACV and close_date
-    const closedOpps = await fetchAll<{ acv: number | null; close_date: string | null }>(() => {
+    // ACV by month: closed-won opps with ACV, close_date, deal name, owner
+    const closedOpps = await fetchAll<{
+      id: string;
+      name: string | null;
+      acv: number | null;
+      close_date: string | null;
+      users: { full_name: string } | null;
+    }>(() => {
       let q = db
         .from('opportunities')
-        .select('acv, close_date')
+        .select('id, name, acv, close_date, users!opportunities_owner_user_id_fkey(full_name)')
         .eq('is_closed_won', true)
         .not('close_date', 'is', null);
       return scopedQuery(q, 'owner_user_id', scope);
     });
 
-    // Group by month
+    // Group by month + collect deal-level data
     const acvByMonth: Record<string, number> = {};
+    const acvDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>> = {};
     for (const o of closedOpps) {
       if (!o.close_date) continue;
       const month = o.close_date.substring(0, 7); // YYYY-MM
       acvByMonth[month] = (acvByMonth[month] || 0) + (o.acv || 0);
+
+      if (!acvDeals[month]) acvDeals[month] = [];
+      acvDeals[month].push({
+        id: o.id,
+        name: o.name || 'Unnamed',
+        owner: o.users?.full_name || 'Unknown',
+        acv: o.acv || 0,
+      });
+    }
+
+    // Sort ACV deals by ACV descending
+    for (const key of Object.keys(acvDeals)) {
+      acvDeals[key].sort((a, b) => b.acv - a.acv);
     }
 
     // Pipeline by stage group + close month: open opps in current & next fiscal quarter
@@ -143,6 +163,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         acvByMonth,
+        acvDeals,
         pipelineByStage,
         pipelineByMonthAndGroup,
         pipelineDeals,

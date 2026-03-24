@@ -11,8 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Opportunity } from "@/types";
-import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { DealDrilldownDrawer, DrillDownDeal } from "./deal-drilldown-drawer";
 
 export interface PipelineDeal {
   id: string;
@@ -49,7 +48,6 @@ function formatMonthLabel(yyyyMM: string): string {
   return `${MONTH_LABELS[month] || month} '${year.slice(2)}`;
 }
 
-/** Reverse lookup: formatted label → raw YYYY-MM key */
 function reverseMonthLabel(label: string, months: string[]): string | undefined {
   return months.find((m) => formatMonthLabel(m) === label);
 }
@@ -86,10 +84,9 @@ export function PipelineByStageChart({
   const [drillDown, setDrillDown] = useState<{
     month: string;
     group: string;
-    deals: PipelineDeal[];
+    deals: DrillDownDeal[];
   } | null>(null);
 
-  // Keep raw month keys for reverse lookup
   const rawMonths = useMemo(
     () => (pipelineByMonthAndGroup ? Object.keys(pipelineByMonthAndGroup).sort() : []),
     [pipelineByMonthAndGroup],
@@ -187,9 +184,9 @@ export function PipelineByStageChart({
     );
   }
 
-  // New: stacked vertical bar chart by close month with stage groups + drill-down
+  // New: stacked vertical bar chart by close month with stage groups + drawer drill-down
   return (
-    <div>
+    <>
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={data} className="cursor-pointer">
           <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -210,67 +207,14 @@ export function PipelineByStageChart({
         </BarChart>
       </ResponsiveContainer>
 
-      {/* Drill-down deal list */}
-      {drillDown && (
-        <div className="mt-3 rounded-lg border bg-muted/30">
-          <div className="flex items-center justify-between px-3 py-2 border-b">
-            <div className="flex items-center gap-2">
-              <span
-                className="h-2.5 w-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: GROUP_COLORS[drillDown.group] || "#94a3b8" }}
-              />
-              <span className="text-xs font-semibold">
-                {drillDown.month} — {drillDown.group}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                ({drillDown.deals.length} deal{drillDown.deals.length !== 1 ? "s" : ""})
-              </span>
-            </div>
-            <button
-              onClick={() => setDrillDown(null)}
-              className="rounded p-0.5 hover:bg-muted"
-            >
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          </div>
-          <div className="max-h-[240px] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-muted-foreground border-b">
-                  <th className="text-left py-1.5 px-3 font-medium">Deal</th>
-                  <th className="text-left py-1.5 px-3 font-medium">Owner</th>
-                  <th className="text-left py-1.5 px-3 font-medium">Stage</th>
-                  <th className="text-right py-1.5 px-3 font-medium">ACV</th>
-                </tr>
-              </thead>
-              <tbody>
-                {drillDown.deals.map((deal, i) => (
-                  <tr
-                    key={deal.id}
-                    className={cn(
-                      "border-b last:border-0",
-                      i % 2 === 0 ? "bg-background" : "bg-muted/20"
-                    )}
-                  >
-                    <td className="py-1.5 px-3 font-medium truncate max-w-[180px]" title={deal.name}>
-                      {deal.name}
-                    </td>
-                    <td className="py-1.5 px-3 text-muted-foreground truncate max-w-[120px]" title={deal.owner}>
-                      {deal.owner}
-                    </td>
-                    <td className="py-1.5 px-3 text-muted-foreground truncate max-w-[140px]" title={deal.stage}>
-                      {deal.stage}
-                    </td>
-                    <td className="py-1.5 px-3 text-right font-semibold tabular-nums">
-                      {fmtCurrency(deal.acv)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
+      <DealDrilldownDrawer
+        open={!!drillDown}
+        onClose={() => setDrillDown(null)}
+        title={drillDown ? `${drillDown.month} — ${drillDown.group}` : ""}
+        deals={drillDown?.deals || []}
+        showStage
+        accentColor={drillDown ? GROUP_COLORS[drillDown.group] : undefined}
+      />
+    </>
   );
 }

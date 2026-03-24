@@ -1,16 +1,21 @@
 import { UserRole } from '@/types';
 
+/** Roles that have data pages (Home, Pipeline, Pilots, Activities, Performance, Usage) */
+const DATA_PAGE_ROLES: UserRole[] = ['commercial_ae', 'enterprise_ae', 'pbm', 'leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+/** Roles that have activity data (AE-side only, not PBM) */
+const ACTIVITY_ROLES: UserRole[] = ['commercial_ae', 'enterprise_ae', 'leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
+
 export const NAV_ITEMS = [
-  { label: 'Home', href: '/home', icon: 'Home', roles: 'all' as const },
-  { label: 'Pipeline', href: '/pipeline', icon: 'BarChart3', roles: 'all' as const },
-  { label: 'Paid Pilots', href: '/pilots', icon: 'FlaskConical', roles: 'all' as const },
+  { label: 'Home', href: '/home', icon: 'Home', roles: DATA_PAGE_ROLES },
+  { label: 'Pipeline', href: '/pipeline', icon: 'BarChart3', roles: DATA_PAGE_ROLES },
+  { label: 'Paid Pilots', href: '/pilots', icon: 'FlaskConical', roles: DATA_PAGE_ROLES },
   {
     label: 'Activities',
     href: '/activities',
     icon: 'Zap',
-    roles: ['other', 'commercial_ae', 'enterprise_ae', 'leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'] as UserRole[],
+    roles: ACTIVITY_ROLES,
   },
-  { label: 'Performance', href: '/performance', icon: 'TrendingUp', roles: 'all' as const },
+  { label: 'Performance', href: '/performance', icon: 'TrendingUp', roles: DATA_PAGE_ROLES },
   { label: 'AE Leaderboards', href: '/leaderboard', icon: 'Trophy', roles: 'all' as const },
   { label: 'PBM Leaderboards', href: '/pbm-leaderboard', icon: 'Handshake', roles: 'all' as const },
   {
@@ -19,7 +24,7 @@ export const NAV_ITEMS = [
     icon: 'Building2',
     roles: ['revops_rw', 'revops_ro', 'enterprise_ro'] as UserRole[],
   },
-  { label: 'Usage', href: '/usage', icon: 'Radio', roles: 'all' as const },
+  { label: 'Usage', href: '/usage', icon: 'Radio', roles: DATA_PAGE_ROLES },
   {
     label: 'Team View',
     href: '/team',

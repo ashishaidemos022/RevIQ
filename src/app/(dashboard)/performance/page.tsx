@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { getRollingQuarters } from "@/lib/fiscal";
 import { PBM_ROLES } from "@/lib/constants";
 import { PbmPerformance } from "@/components/pbm/pbm-performance";
-import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
+import { DealDrilldownDrawer, DrillDownDeal } from "@/components/charts/deal-drilldown-drawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus } from "lucide-react";
@@ -24,8 +24,14 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
+
+interface DealRecord {
+  id: string;
+  name: string;
+  owner: string;
+  acv: number;
+}
 
 interface QuarterData {
   fiscalYear: number;
@@ -39,6 +45,8 @@ interface QuarterData {
   pilotConversionRate: number | null;
   commissionEarned: number | null;
   totalActivities: number | null;
+  acvDeals?: DealRecord[];
+  dealsClosedDeals?: DealRecord[];
 }
 
 const METRICS = [
@@ -47,7 +55,6 @@ const METRICS = [
   { key: "quotaAttainment", label: "Quota Attainment %", format: "percent" },
   { key: "activePilots", label: "Active Pilots", format: "number" },
   { key: "pilotConversionRate", label: "Pilot Conversion Rate", format: "percent" },
-  { key: "commissionEarned", label: "Commission Earned", format: "currency" },
   { key: "totalActivities", label: "Total Activities", format: "number" },
 ] as const;
 
@@ -79,8 +86,11 @@ export default function PerformancePage() {
 }
 
 function AePerformance() {
-  const user = useAuthStore((s) => s.user);
   const [offset, setOffset] = useState(0);
+  const [drillDown, setDrillDown] = useState<{
+    title: string;
+    deals: DrillDownDeal[];
+  } | null>(null);
 
   const quarters = useMemo(() => {
     const all = getRollingQuarters(8 + offset);
@@ -116,6 +126,29 @@ function AePerformance() {
 
   const formatCurrencyShort = (val: number) =>
     val >= 1000 ? `$${(val / 1000).toFixed(0)}K` : `$${val}`;
+
+  const fmtCurrency = (val: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleAcvBarClick = useCallback((barData: any) => {
+    const label = barData?.label || barData?.payload?.label;
+    if (!label || !perfData?.data) return;
+    const qd = perfData.data[label];
+    if (qd?.acvDeals && qd.acvDeals.length > 0) {
+      setDrillDown({ title: `${label} — ACV Closed`, deals: qd.acvDeals });
+    }
+  }, [perfData]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleDealsBarClick = useCallback((barData: any) => {
+    const label = barData?.label || barData?.payload?.label;
+    if (!label || !perfData?.data) return;
+    const qd = perfData.data[label];
+    if (qd?.dealsClosedDeals && qd.dealsClosedDeals.length > 0) {
+      setDrillDown({ title: `${label} — Deals Closed`, deals: qd.dealsClosedDeals });
+    }
+  }, [perfData]);
 
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load performance data" onRetry={refetch} />;
@@ -213,17 +246,17 @@ function AePerformance() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={quarterResults}>
+              <BarChart data={quarterResults} className="cursor-pointer">
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCurrencyShort} />
-                <Tooltip
-                  formatter={(val) =>
-                    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(
-                      Number(val)
-                    )
-                  }
+                <Tooltip formatter={(val) => fmtCurrency(Number(val))} />
+                <Bar
+                  dataKey="acvClosed"
+                  fill="#7c3aed"
+                  radius={[4, 4, 0, 0]}
+                  onClick={handleAcvBarClick}
+                  style={{ cursor: "pointer" }}
                 />
-                <Bar dataKey="acvClosed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -235,11 +268,17 @@ function AePerformance() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={quarterResults}>
+              <BarChart data={quarterResults} className="cursor-pointer">
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="dealsClosed" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="dealsClosed"
+                  fill="#14b8a6"
+                  radius={[4, 4, 0, 0]}
+                  onClick={handleDealsBarClick}
+                  style={{ cursor: "pointer" }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -257,7 +296,7 @@ function AePerformance() {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCurrencyShort} />
                   <Tooltip
                     formatter={(val, name) => [
-                      new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number(val)),
+                      fmtCurrency(Number(val)),
                       name === "acvClosed" ? "ACV Closed (YTD)" : "Annual Quota",
                     ]}
                   />
@@ -265,11 +304,11 @@ function AePerformance() {
                     formatter={(value) => (value === "acvClosed" ? "ACV Closed (YTD)" : "Annual Quota")}
                     wrapperStyle={{ fontSize: 11 }}
                   />
-                  <Bar dataKey="acvClosed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="acvClosed" fill="#7c3aed" radius={[4, 4, 0, 0]} />
                   <Line
                     type="monotone"
                     dataKey="annualQuota"
-                    stroke="hsl(var(--chart-3))"
+                    stroke="#eab308"
                     strokeWidth={2}
                     strokeDasharray="5 5"
                     dot={{ r: 4 }}
@@ -284,6 +323,13 @@ function AePerformance() {
           </CardContent>
         </Card>
       </div>
+
+      <DealDrilldownDrawer
+        open={!!drillDown}
+        onClose={() => setDrillDown(null)}
+        title={drillDown?.title || ""}
+        deals={drillDown?.deals || []}
+      />
     </div>
   );
 }

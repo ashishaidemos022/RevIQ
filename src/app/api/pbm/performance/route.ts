@@ -5,6 +5,7 @@ import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credite
 import { getOrgSubtree } from '@/lib/supabase/queries/hierarchy';
 import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,22 +45,26 @@ export async function GET(request: NextRequest) {
 
     // Fetch all credited opportunities with relevant fields
     let allCreditedOpps: Array<{
+      id: string;
+      name: string | null;
       salesforce_opportunity_id: string;
       acv: string | number | null;
+      sub_type: string | null;
       close_date: string | null;
       is_closed_won: boolean;
       is_closed_lost: boolean;
       is_paid_pilot: boolean;
       paid_pilot_start_date: string | null;
+      users: { full_name: string } | null;
     }> = [];
 
     for (let i = 0; i < creditedOppSfIds.length; i += 500) {
       const batch = creditedOppSfIds.slice(i, i + 500);
       const { data: opps } = await db
         .from('opportunities')
-        .select('salesforce_opportunity_id, acv, close_date, is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date')
+        .select('id, name, salesforce_opportunity_id, acv, sub_type, close_date, is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date, users!opportunities_owner_user_id_fkey(full_name)')
         .in('salesforce_opportunity_id', batch);
-      if (opps) allCreditedOpps = allCreditedOpps.concat(opps);
+      if (opps) allCreditedOpps = allCreditedOpps.concat(opps as unknown as typeof allCreditedOpps);
     }
 
     const results: Record<string, unknown> = {};
@@ -76,7 +81,19 @@ export async function GET(request: NextRequest) {
         o => o.is_closed_won && o.close_date && o.close_date >= startStr && o.close_date <= endStr
       );
       const acvClosed = closedInQ.reduce((s, o) => s + (parseFloat(String(o.acv)) || 0), 0);
-      const dealsClosed = closedInQ.length;
+      // Deals Closed: only count deals with a valid sub_type AND acv > 0
+      const countableOpps = closedInQ.filter(
+        o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (parseFloat(String(o.acv)) || 0) > 0
+      );
+      const dealsClosed = countableOpps.length;
+
+      // Deal-level data for drill-down
+      const acvDeals = closedInQ
+        .map(o => ({ id: o.id, name: o.name || 'Unnamed', owner: o.users?.full_name || 'Unknown', acv: parseFloat(String(o.acv)) || 0 }))
+        .sort((a, b) => b.acv - a.acv);
+      const dealsClosedDeals = countableOpps
+        .map(o => ({ id: o.id, name: o.name || 'Unnamed', owner: o.users?.full_name || 'Unknown', acv: parseFloat(String(o.acv)) || 0 }))
+        .sort((a, b) => b.acv - a.acv);
 
       // These metrics are N/A before FY2027
       let activePilots: number | null = null;
@@ -162,6 +179,8 @@ export async function GET(request: NextRequest) {
         pilotConversionRate,
         commissionEarned,
         totalActivities,
+        acvDeals,
+        dealsClosedDeals,
       };
     }
 

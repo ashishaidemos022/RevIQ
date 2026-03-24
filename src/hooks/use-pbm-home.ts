@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth-store";
 import { apiFetch } from "@/lib/api";
 
 export interface PbmHomeData {
@@ -14,8 +15,9 @@ export interface PbmHomeData {
 }
 
 export function usePbmHome() {
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
   return useQuery<PbmHomeData>({
-    queryKey: ["pbm-home"],
+    queryKey: ["pbm-home", viewAsUser?.user_id ?? null],
     queryFn: () => apiFetch("/api/pbm/home"),
   });
 }

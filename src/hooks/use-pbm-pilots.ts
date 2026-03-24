@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth-store";
 import { apiFetch } from "@/lib/api";
 import { PbmOpportunity } from "./use-pbm-opportunities";
 
@@ -18,8 +19,9 @@ interface PbmPilotsResponse {
 }
 
 export function usePbmPilots() {
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
   return useQuery<PbmPilotsResponse>({
-    queryKey: ["pbm-pilots"],
+    queryKey: ["pbm-pilots", viewAsUser?.user_id ?? null],
     queryFn: () => apiFetch("/api/pbm/pilots"),
   });
 }

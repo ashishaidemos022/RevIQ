@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth-store";
 import { apiFetch } from "@/lib/api";
 
 interface PbmOpportunitiesParams {
@@ -39,6 +40,7 @@ interface PbmOpportunitiesResponse {
 }
 
 export function usePbmOpportunities(params: PbmOpportunitiesParams = {}) {
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -47,7 +49,7 @@ export function usePbmOpportunities(params: PbmOpportunitiesParams = {}) {
   });
 
   return useQuery<PbmOpportunitiesResponse>({
-    queryKey: ["pbm-opportunities", params],
+    queryKey: ["pbm-opportunities", params, viewAsUser?.user_id ?? null],
     queryFn: () => apiFetch(`/api/pbm/opportunities?${searchParams.toString()}`),
   });
 }

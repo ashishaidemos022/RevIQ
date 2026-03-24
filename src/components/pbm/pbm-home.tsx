@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth-store";
 import { usePbmHome } from "@/hooks/use-pbm-home";
 import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
 import { apiFetch } from "@/lib/api";
@@ -32,6 +33,8 @@ interface PbmCharts {
 
 export function PbmHome() {
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
+  const viewAsId = viewAsUser?.user_id ?? null;
 
   const {
     data: homeData,
@@ -49,7 +52,7 @@ export function PbmHome() {
     data: chartsResponse,
     isLoading: chartsLoading,
   } = useQuery({
-    queryKey: ["pbm-charts"],
+    queryKey: ["pbm-charts", viewAsId],
     queryFn: () => apiFetch<{ data: PbmCharts }>("/api/pbm/charts"),
   });
 

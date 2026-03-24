@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth-store";
 import { apiFetch } from "@/lib/api";
 import { getRollingQuarters } from "@/lib/fiscal";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
@@ -76,6 +77,7 @@ export function PbmPerformance() {
     title: string;
     deals: DrillDownDeal[];
   } | null>(null);
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
 
   const quarters = useMemo(() => {
     const all = getRollingQuarters(8 + offset);
@@ -88,7 +90,7 @@ export function PbmPerformance() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["pbm-performance", quarters],
+    queryKey: ["pbm-performance", quarters, viewAsUser?.user_id ?? null],
     queryFn: () => {
       const params = quarters.map((q) => ({ fy: q.fiscalYear, q: q.fiscalQuarter }));
       return apiFetch<{ data: Record<string, QuarterData> }>(

@@ -217,6 +217,72 @@ export async function GET(request: NextRequest) {
     const totalPilots = aeData.reduce((s, ae) => s + ae.active_pilots, 0);
     const totalActivities = aeData.reduce((s, ae) => s + ae.activities_qtd, 0);
 
+    // Build manager groups from user_hierarchy
+    const hierarchyRows = await fetchAll<{ user_id: string; manager_id: string }>(() =>
+      batchedIn(
+        db.from('user_hierarchy')
+          .select('user_id, manager_id')
+          .is('effective_to', null),
+        'user_id',
+        allIds
+      )
+    );
+
+    const memberToManager: Record<string, string> = {};
+    const managerIdSet = new Set<string>();
+    hierarchyRows.forEach(row => {
+      memberToManager[row.user_id] = row.manager_id;
+      managerIdSet.add(row.manager_id);
+    });
+
+    // Fetch manager user info for names
+    const managerIds = [...managerIdSet];
+    const managerInfoMap: Record<string, { full_name: string; role: string }> = {};
+    if (managerIds.length > 0) {
+      const { data: managers } = await batchedIn(
+        db.from('users').select('id, full_name, role'),
+        'id',
+        managerIds
+      );
+      (managers || []).forEach(m => {
+        managerInfoMap[m.id] = { full_name: m.full_name, role: m.role };
+      });
+    }
+
+    // Group aeData by manager, compute rolled-up KPIs
+    const groupMap = new Map<string, typeof aeData>();
+    aeData.forEach(ae => {
+      const mgr = memberToManager[ae.id] || '__unassigned__';
+      if (!groupMap.has(mgr)) groupMap.set(mgr, []);
+      groupMap.get(mgr)!.push(ae);
+    });
+
+    const managerGroups = [...groupMap.entries()].map(([managerId, members]) => {
+      const info = managerInfoMap[managerId];
+      const withQuota = members.filter(m => m.annual_quota > 0);
+      const withQQuota = members.filter(m => m.quarterly_quota > 0);
+      return {
+        managerId: managerId === '__unassigned__' ? null : managerId,
+        managerName: info?.full_name ?? 'Unassigned',
+        managerRole: info?.role ?? '',
+        memberIds: members.map(m => m.id),
+        memberCount: members.length,
+        summary: {
+          acvClosedQTD: members.reduce((s, m) => s + m.acv_closed_qtd, 0),
+          acvClosedYTD: members.reduce((s, m) => s + m.acv_closed_ytd, 0),
+          avgAttainmentQTD: withQQuota.length > 0
+            ? withQQuota.reduce((s, m) => s + m.attainment_qtd, 0) / withQQuota.length
+            : 0,
+          avgAttainmentYTD: withQuota.length > 0
+            ? withQuota.reduce((s, m) => s + m.attainment, 0) / withQuota.length
+            : 0,
+          activePilots: members.reduce((s, m) => s + m.active_pilots, 0),
+          activitiesQTD: members.reduce((s, m) => s + m.activities_qtd, 0),
+          commissionQTD: members.reduce((s, m) => s + m.commission_qtd, 0),
+        },
+      };
+    }).sort((a, b) => (a.managerName).localeCompare(b.managerName));
+
     return NextResponse.json({
       data: {
         aes: aeData,
@@ -227,6 +293,7 @@ export async function GET(request: NextRequest) {
           activePilots: totalPilots,
           activitiesQTD: totalActivities,
         },
+        managerGroups,
       },
     });
   } catch (error) {

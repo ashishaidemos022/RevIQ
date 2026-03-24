@@ -9,6 +9,7 @@ interface CompareSelectionBarProps {
   minSelections?: number;
   maxSelections?: number;
   selectedNames?: string[];
+  mode?: "individual" | "team";
   onCompare: () => void;
   onClear: () => void;
 }
@@ -18,9 +19,11 @@ export function CompareSelectionBar({
   minSelections = 2,
   maxSelections = 4,
   selectedNames = [],
+  mode = "individual",
   onCompare,
   onClear,
 }: CompareSelectionBarProps) {
+  const entityLabel = mode === "team" ? "teams" : "members";
   const canCompare = count >= minSelections;
   const atMax = count >= maxSelections;
 
@@ -37,7 +40,7 @@ export function CompareSelectionBar({
           <GitCompareArrows className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm font-medium shrink-0">
-              {count} selected
+              {count} {entityLabel} selected
             </span>
             {selectedNames.length > 0 && (
               <span className="text-sm text-muted-foreground truncate hidden sm:inline">
@@ -64,7 +67,7 @@ export function CompareSelectionBar({
           </Button>
           <Button size="sm" disabled={!canCompare} onClick={onCompare}>
             <GitCompareArrows className="mr-1 h-3.5 w-3.5" />
-            Compare
+            {mode === "team" ? "Compare Teams" : "Compare"}
           </Button>
         </div>
       </div>

@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
       pilotConversionRate: number | null;
       commissionEarned: number | null;
       totalActivities: number | null;
+      acvDeals: { id: string; name: string; owner: string; acv: number }[];
+      dealsClosedDeals: { id: string; name: string; owner: string; acv: number }[];
     }> = {};
 
     // Helper to apply owner/scope filter

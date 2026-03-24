@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -51,10 +51,20 @@ const MAX_COMPARE = 4;
 
 export default function TeamPage() {
   const user = useAuthStore((s) => s.user);
+  const viewAsUser = useAuthStore((s) => s.viewAsUser);
   const isManager = user && MANAGER_PLUS_ROLES.includes(user.role as typeof MANAGER_PLUS_ROLES[number]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"roster" | "compare">("roster");
+
+  // Reset selection when ViewAs changes
+  const viewAsId = viewAsUser?.user_id ?? null;
+  const prevViewAsRef = useRef(viewAsId);
+  if (prevViewAsRef.current !== viewAsId) {
+    prevViewAsRef.current = viewAsId;
+    setSelectedIds(new Set());
+    setViewMode("roster");
+  }
 
   const {
     data: teamData,
@@ -62,7 +72,7 @@ export default function TeamPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["team"],
+    queryKey: ["team", viewAsId],
     queryFn: () => apiFetch<TeamResponse>("/api/team"),
     enabled: !!isManager,
   });

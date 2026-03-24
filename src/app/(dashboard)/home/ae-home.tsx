@@ -29,6 +29,7 @@ interface HomeKpis {
 interface HomeCharts {
   acvByMonth: Record<string, number>;
   pipelineByStage: Record<string, { count: number; acv: number }>;
+  pipelineByMonthAndGroup?: Record<string, Record<string, { count: number; acv: number }>>;
 }
 
 export function AeHome() {
@@ -184,11 +185,14 @@ export function AeHome() {
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
-              Pipeline by Stage
+              Pipeline by Close Month
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <PipelineByStageChart pipelineByStage={charts?.pipelineByStage} />
+            <PipelineByStageChart
+              pipelineByMonthAndGroup={charts?.pipelineByMonthAndGroup}
+              pipelineByStage={charts?.pipelineByStage}
+            />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">

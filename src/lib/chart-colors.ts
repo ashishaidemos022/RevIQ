@@ -1,19 +1,26 @@
 /**
  * Comparison chart color palette.
- * Uses CSS custom properties from the theme (--chart-1 through --chart-4).
- * Max 4 entities can be compared simultaneously.
+ *
+ * Hardcoded hex values are required because Recharts renders SVG directly
+ * and CSS custom properties (hsl(var(--chart-x))) don't resolve in SVG
+ * fill/stroke attributes. These colors match the Talkdesk theme:
+ *
+ * 1. Purple (#7c3aed)  — Talkdesk brand
+ * 2. Teal   (#14b8a6)  — high contrast against purple
+ * 3. Gold   (#eab308)  — Talkdesk accent
+ * 4. Rose   (#f43f5e)  — warm contrast
  */
 export const COMPARE_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-2))",
+  "#7c3aed",
+  "#14b8a6",
+  "#eab308",
+  "#f43f5e",
 ] as const;
 
-/** Softer fills for area/radar charts (20% opacity) */
+/** Softer fills for area/radar charts */
 export const COMPARE_FILLS = [
-  "hsl(var(--chart-1) / 0.2)",
-  "hsl(var(--chart-3) / 0.2)",
-  "hsl(var(--chart-4) / 0.2)",
-  "hsl(var(--chart-2) / 0.2)",
+  "rgba(124, 58, 237, 0.2)",
+  "rgba(20, 184, 166, 0.2)",
+  "rgba(234, 179, 8, 0.2)",
+  "rgba(244, 63, 94, 0.2)",
 ] as const;

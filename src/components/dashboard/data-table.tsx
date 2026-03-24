@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,16 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
   className?: string;
+  /** Enable row selection with checkboxes */
+  selectable?: boolean;
+  /** Set of selected row keys */
+  selectedKeys?: Set<string>;
+  /** Callback when selection changes */
+  onSelectionChange?: (keys: Set<string>) => void;
+  /** Extract a unique key from each row */
+  rowKey?: (row: T) => string;
+  /** Maximum number of rows that can be selected */
+  maxSelections?: number;
 }
 
 type SortDirection = "asc" | "desc" | null;
@@ -39,6 +50,11 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   emptyMessage = "No data available",
   className,
+  selectable = false,
+  selectedKeys,
+  onSelectionChange,
+  rowKey,
+  maxSelections,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
@@ -83,6 +99,9 @@ export function DataTable<T extends Record<string, unknown>>({
         <Table>
           <TableHeader>
             <TableRow>
+              {selectable && (
+                <TableHead className="w-10" />
+              )}
               {columns.map((col) => (
                 <TableHead
                   key={col.key}
@@ -113,24 +132,47 @@ export function DataTable<T extends Record<string, unknown>>({
           <TableBody>
             {pageData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={columns.length + (selectable ? 1 : 0)} className="text-center py-8 text-muted-foreground">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
             ) : (
-              pageData.map((row, idx) => (
-                <TableRow
-                  key={idx}
-                  className={onRowClick ? "cursor-pointer hover:bg-muted/50" : undefined}
-                  onClick={() => onRowClick?.(row)}
-                >
-                  {columns.map((col) => (
-                    <TableCell key={col.key} className={col.className}>
-                      {col.render ? col.render(row) : (row[col.key] as React.ReactNode) ?? "—"}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              pageData.map((row, idx) => {
+                const key = selectable && rowKey ? rowKey(row) : String(idx);
+                const isSelected = selectable && selectedKeys?.has(key);
+                const atMax = selectable && maxSelections != null && selectedKeys != null && selectedKeys.size >= maxSelections && !isSelected;
+                return (
+                  <TableRow
+                    key={key}
+                    className={cn(
+                      onRowClick && "cursor-pointer hover:bg-muted/50",
+                      isSelected && "bg-primary/5"
+                    )}
+                    onClick={() => onRowClick?.(row)}
+                  >
+                    {selectable && (
+                      <TableCell className="w-10">
+                        <Checkbox
+                          checked={isSelected}
+                          disabled={atMax}
+                          onCheckedChange={(checked) => {
+                            if (!selectedKeys || !onSelectionChange || !rowKey) return;
+                            const next = new Set(selectedKeys);
+                            if (checked) next.add(key);
+                            else next.delete(key);
+                            onSelectionChange(next);
+                          }}
+                        />
+                      </TableCell>
+                    )}
+                    {columns.map((col) => (
+                      <TableCell key={col.key} className={col.className}>
+                        {col.render ? col.render(row) : (row[col.key] as React.ReactNode) ?? "—"}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

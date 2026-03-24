@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -13,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CompareSelectionBar } from "@/components/team/compare-selection-bar";
+import { ComparePanel } from "@/components/team/compare-panel";
 
 interface AeData {
   id: string;
@@ -44,9 +47,14 @@ interface TeamResponse {
   };
 }
 
+const MAX_COMPARE = 4;
+
 export default function TeamPage() {
   const user = useAuthStore((s) => s.user);
   const isManager = user && MANAGER_PLUS_ROLES.includes(user.role as typeof MANAGER_PLUS_ROLES[number]);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"roster" | "compare">("roster");
 
   const {
     data: teamData,
@@ -143,6 +151,18 @@ export default function TeamPage() {
     },
   ];
 
+  const { aes, summary } = teamData?.data || {
+    aes: [],
+    summary: { acvClosedQTD: 0, avgAttainment: 0, avgAttainmentQTD: 0, activePilots: 0, activitiesQTD: 0 },
+  };
+
+  const canShowCompare = aes.length >= 2;
+
+  const selectedAes = useMemo(
+    () => aes.filter((ae) => selectedIds.has(ae.id)),
+    [aes, selectedIds]
+  );
+
   if (!isManager) {
     return (
       <EmptyState
@@ -156,8 +176,6 @@ export default function TeamPage() {
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load team data" onRetry={refetch} />;
 
-  const { aes, summary } = teamData?.data || { aes: [], summary: { acvClosedQTD: 0, avgAttainment: 0, avgAttainmentQTD: 0, activePilots: 0, activitiesQTD: 0 } };
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -165,36 +183,60 @@ export default function TeamPage() {
         Team View
       </h1>
 
-      {/* Team KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <KpiCard label="Total ACV Closed (QTD)" value={summary.acvClosedQTD} format="currency" />
-        <KpiCard label="Avg Attainment QTD" value={summary.avgAttainmentQTD} format="percent" />
-        <KpiCard label="Avg Attainment YTD" value={summary.avgAttainment} format="percent" />
-        <KpiCard label="Total Active Pilots" value={summary.activePilots} format="number" />
-        <KpiCard label="Total Activities QTD" value={summary.activitiesQTD} format="number" />
-      </div>
+      {viewMode === "compare" && selectedAes.length >= 2 ? (
+        <ComparePanel
+          selectedAes={selectedAes}
+          onBack={() => setViewMode("roster")}
+        />
+      ) : (
+        <>
+          {/* Team KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <KpiCard label="Total ACV Closed (QTD)" value={summary.acvClosedQTD} format="currency" />
+            <KpiCard label="Avg Attainment QTD" value={summary.avgAttainmentQTD} format="percent" />
+            <KpiCard label="Avg Attainment YTD" value={summary.avgAttainment} format="percent" />
+            <KpiCard label="Total Active Pilots" value={summary.activePilots} format="number" />
+            <KpiCard label="Total Activities QTD" value={summary.activitiesQTD} format="number" />
+          </div>
 
-      {/* Team Roster Table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Team Roster</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {aes.length === 0 ? (
-            <EmptyState
-              title="No team members"
-              description="No AEs found in your org tree"
-              icon={Users}
-            />
-          ) : (
-            <DataTable
-              data={aes as unknown as Record<string, unknown>[]}
-              columns={columns}
-              pageSize={25}
+          {/* Team Roster Table */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Team Roster</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {aes.length === 0 ? (
+                <EmptyState
+                  title="No team members"
+                  description="No AEs found in your org tree"
+                  icon={Users}
+                />
+              ) : (
+                <DataTable
+                  data={aes as unknown as Record<string, unknown>[]}
+                  columns={columns}
+                  pageSize={25}
+                  selectable={canShowCompare}
+                  selectedKeys={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                  rowKey={(row) => row.id as string}
+                  maxSelections={MAX_COMPARE}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Compare Selection Bar */}
+          {canShowCompare && (
+            <CompareSelectionBar
+              count={selectedIds.size}
+              maxSelections={MAX_COMPARE}
+              onCompare={() => setViewMode("compare")}
+              onClear={() => setSelectedIds(new Set())}
             />
           )}
-        </CardContent>
-      </Card>
+        </>
+      )}
     </div>
   );
 }

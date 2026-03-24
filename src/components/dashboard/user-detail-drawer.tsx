@@ -108,6 +108,50 @@ function KpiMini({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function DealsList({ data }: { data: UserDetail }) {
+  const filteredDeals = data.deals
+    .filter((d) => d.acv != null && d.acv > 0)
+    .sort((a, b) => {
+      const acvDiff = ((b.acv as number) || 0) - ((a.acv as number) || 0);
+      if (acvDiff !== 0) return acvDiff;
+      return (b.close_date || "").localeCompare(a.close_date || "");
+    });
+
+  return (
+    <div>
+      <h3 className="text-sm font-medium mb-3">
+        {boardLabel(data.board)} — {periodLabel(data.period)} ({filteredDeals.length})
+      </h3>
+      {filteredDeals.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">No deals found</p>
+      ) : (
+        <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+          {filteredDeals.map((deal) => (
+            <div key={deal.id} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/30 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{deal.account_name || "—"}</div>
+                <div className="text-xs text-muted-foreground truncate">{deal.name}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="font-medium">{deal.acv ? formatCurrency(deal.acv) : "—"}</div>
+                <Badge
+                  variant={
+                    deal.is_closed_won ? "default" :
+                    deal.is_closed_lost ? "destructive" : "secondary"
+                  }
+                  className="text-[10px]"
+                >
+                  {deal.stage}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function UserDetailDrawer({ userId, open, onClose, board, period, apiPrefix = "/api/leaderboard" }: UserDetailDrawerProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["user-leaderboard-detail", userId, board, period, apiPrefix],
@@ -204,39 +248,7 @@ export function UserDetailDrawer({ userId, open, onClose, board, period, apiPref
                 )}
               </div>
             ) : (
-              <div>
-                <h3 className="text-sm font-medium mb-3">
-                  {boardLabel(data.board)} — {periodLabel(data.period)} ({data.deals.length})
-                </h3>
-                {data.deals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">No deals found</p>
-                ) : (
-                  <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                    {data.deals
-                      .sort((a, b) => ((b.acv as number) || 0) - ((a.acv as number) || 0))
-                      .map((deal) => (
-                        <div key={deal.id} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/30 text-sm">
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate font-medium">{deal.account_name || "—"}</div>
-                            <div className="text-xs text-muted-foreground truncate">{deal.name}</div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="font-medium">{deal.acv ? formatCurrency(deal.acv) : "—"}</div>
-                            <Badge
-                              variant={
-                                deal.is_closed_won ? "default" :
-                                deal.is_closed_lost ? "destructive" : "secondary"
-                              }
-                              className="text-[10px]"
-                            >
-                              {deal.stage}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
+              <DealsList data={data} />
             )}
           </div>
         )}

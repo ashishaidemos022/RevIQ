@@ -88,6 +88,7 @@ export async function GET(
         `)
         .eq('owner_user_id', userId)
         .gte('close_date', '2025-02-01')
+        .order('id')
         .range(offset, offset + pageSize - 1);
 
       if (!page || page.length === 0) {

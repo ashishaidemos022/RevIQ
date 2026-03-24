@@ -90,6 +90,7 @@ export async function GET(
         .from('rv_accounts')
         .select('name, owner_sf_id')
         .not('owner_sf_id', 'is', null)
+        .order('id')
         .range(rvOffset, rvOffset + 999);
       if (!rvPage || rvPage.length === 0) break;
       rvPage.forEach(ra => rvAccountOwnerMap.set(ra.name, ra.owner_sf_id));
@@ -106,6 +107,7 @@ export async function GET(
         .select('salesforce_opportunity_id')
         .eq('channel_owner_sf_id', pbmSfId)
         .not('salesforce_opportunity_id', 'is', null)
+        .order('id')
         .range(partnerOffset, partnerOffset + 999);
       if (!partnerPage || partnerPage.length === 0) break;
       partnerPage.forEach(p => sfPartnerOppIds.add(p.salesforce_opportunity_id));
@@ -133,6 +135,7 @@ export async function GET(
         `)
         .eq('channel_owner_sf_id', pbmSfId)
         .gte('close_date', '2025-02-01')
+        .order('id')
         .range(offset, offset + pageSize - 1);
       if (!page || page.length === 0) break;
       page.forEach(o => allOppMap.set(o.salesforce_opportunity_id, o));
@@ -161,6 +164,7 @@ export async function GET(
             `)
             .in('rv_account_sf_id', batch)
             .gte('close_date', '2025-02-01')
+            .order('id')
             .range(rvOffset2, rvOffset2 + pageSize - 1);
           if (!page || page.length === 0) break;
           page.forEach(o => { if (!allOppMap.has(o.salesforce_opportunity_id)) allOppMap.set(o.salesforce_opportunity_id, o); });

@@ -131,6 +131,7 @@ export async function GET(request: NextRequest) {
         .select('id, rv_account_sf_id, rv_account_type, opportunity_source, acv, close_date, is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date, sf_created_date, created_at, stage, owner_user_id')
         .not('rv_account_sf_id', 'is', null)
         .gte('close_date', minDate)
+        .order('id')
         .range(offset, offset + pageSize - 1);
 
       if (!page || page.length === 0) {

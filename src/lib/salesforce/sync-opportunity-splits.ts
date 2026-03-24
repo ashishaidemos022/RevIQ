@@ -41,6 +41,7 @@ export async function syncOpportunitySplits(): Promise<OpportunitySplitSyncResul
     const { data: page } = await db
       .from('opportunities')
       .select('salesforce_opportunity_id')
+      .order('id')
       .range(offset, offset + pageSize - 1);
 
     if (!page || page.length === 0) {
@@ -105,6 +106,7 @@ export async function syncOpportunitySplits(): Promise<OpportunitySplitSyncResul
     const { data: page } = await db
       .from('opportunities')
       .select('id, salesforce_opportunity_id')
+      .order('id')
       .range(offset, offset + pageSize - 1);
 
     if (!page || page.length === 0) {

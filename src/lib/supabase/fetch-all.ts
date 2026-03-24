@@ -19,7 +19,7 @@ export async function fetchAll<T = Record<string, unknown>>(
   let offset = 0;
 
   while (true) {
-    const { data, error } = await buildQuery().range(offset, offset + PAGE_SIZE - 1);
+    const { data, error } = await buildQuery().order('id').range(offset, offset + PAGE_SIZE - 1);
 
     if (error) {
       throw error;

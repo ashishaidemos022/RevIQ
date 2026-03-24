@@ -39,6 +39,7 @@ export async function resolvePbmCreditedOpps(
       .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id')
       .not('channel_owner_sf_id', 'is', null)
       .in('channel_owner_sf_id', pbmSfIds)
+      .order('id')
       .range(offset, offset + pageSize - 1);
     if (!opps || opps.length === 0) break;
     opps.forEach(o => {
@@ -65,6 +66,7 @@ export async function resolvePbmCreditedOpps(
       .select('name, owner_sf_id')
       .not('owner_sf_id', 'is', null)
       .in('owner_sf_id', pbmSfIds)
+      .order('id')
       .range(offset, offset + pageSize - 1);
     if (!rvPage || rvPage.length === 0) break;
     rvPage.forEach(ra => {
@@ -86,6 +88,7 @@ export async function resolvePbmCreditedOpps(
           .from('opportunities')
           .select('salesforce_opportunity_id, rv_account_sf_id')
           .in('rv_account_sf_id', batch)
+          .order('id')
           .range(offset, offset + pageSize - 1);
         if (!opps || opps.length === 0) break;
         opps.forEach(o => {
@@ -113,6 +116,7 @@ export async function resolvePbmCreditedOpps(
       .not('channel_owner_sf_id', 'is', null)
       .not('salesforce_opportunity_id', 'is', null)
       .in('channel_owner_sf_id', pbmSfIds)
+      .order('id')
       .range(offset, offset + pageSize - 1);
     if (!partners || partners.length === 0) break;
     partners.forEach(p => {

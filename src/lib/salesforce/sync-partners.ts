@@ -77,6 +77,7 @@ export async function syncPartners(): Promise<PartnerSyncResult> {
     const { data: opps, error: oppErr } = await db
       .from('opportunities')
       .select('id, salesforce_opportunity_id')
+      .order('id')
       .range(offset, offset + pageSize - 1);
     if (oppErr) {
       console.error('[PARTNER_SYNC] Error loading opportunities:', oppErr.message);

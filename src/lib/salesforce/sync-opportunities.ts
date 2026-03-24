@@ -107,6 +107,7 @@ export async function syncSalesforceOpportunities(): Promise<OpportunitySyncResu
     const { data: page } = await db
       .from('accounts')
       .select('id, salesforce_account_id')
+      .order('id')
       .range(offset, offset + pageSize - 1);
 
     if (!page || page.length === 0) {

@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
         .from('rv_accounts')
         .select('name, owner_sf_id')
         .not('owner_sf_id', 'is', null)
+        .order('id')
         .range(rvOffset, rvOffset + rvPageSize - 1);
       if (!rvPage || rvPage.length === 0) break;
       rvPage.forEach(ra => rvAccountOwnerMap.set(ra.name, ra.owner_sf_id));
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
           .not('channel_owner_sf_id', 'is', null)
           .not('salesforce_opportunity_id', 'is', null)
           .in('channel_owner_sf_id', pbmSfIds)
+          .order('id')
           .range(partnerOffset, partnerOffset + partnerPageSize - 1);
         if (!partnerPage || partnerPage.length === 0) break;
         partnerPage.forEach(p => {

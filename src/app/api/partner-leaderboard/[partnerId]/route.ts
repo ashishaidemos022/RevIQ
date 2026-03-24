@@ -73,6 +73,7 @@ export async function GET(
         `)
         .not('rv_account_sf_id', 'is', null)
         .gte('close_date', minDate)
+        .order('id')
         .range(offset, offset + pageSize - 1);
 
       if (!page || page.length === 0) {

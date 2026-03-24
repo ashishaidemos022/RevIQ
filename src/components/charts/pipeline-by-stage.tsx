@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import {
   BarChart,
   Bar,
@@ -11,10 +11,22 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Opportunity } from "@/types";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export interface PipelineDeal {
+  id: string;
+  name: string;
+  owner: string;
+  acv: number;
+  stage: string;
+}
 
 interface PipelineByStageChartProps {
   /** New grouped data: month → stage group → {count, acv} */
   pipelineByMonthAndGroup?: Record<string, Record<string, { count: number; acv: number }>>;
+  /** Deal-level data keyed by "month|group" for drill-down */
+  pipelineDeals?: Record<string, PipelineDeal[]>;
   /** Legacy flat data (fallback) */
   pipelineByStage?: Record<string, { count: number; acv: number }>;
   /** Raw opportunities fallback (used by pipeline page & PBM) */
@@ -37,6 +49,11 @@ function formatMonthLabel(yyyyMM: string): string {
   return `${MONTH_LABELS[month] || month} '${year.slice(2)}`;
 }
 
+/** Reverse lookup: formatted label → raw YYYY-MM key */
+function reverseMonthLabel(label: string, months: string[]): string | undefined {
+  return months.find((m) => formatMonthLabel(m) === label);
+}
+
 const STAGE_ORDER = [
   "Discovery",
   "Qualification",
@@ -46,13 +63,39 @@ const STAGE_ORDER = [
   "Closed Lost",
 ];
 
+const fmtCurrency = (val: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(val);
+
+const shortCurrency = (val: number) =>
+  val >= 1000000
+    ? `$${(val / 1000000).toFixed(1)}M`
+    : val >= 1000
+      ? `$${(val / 1000).toFixed(0)}K`
+      : `$${val}`;
+
 export function PipelineByStageChart({
   pipelineByMonthAndGroup,
+  pipelineDeals,
   pipelineByStage,
   opportunities,
 }: PipelineByStageChartProps) {
+  const [drillDown, setDrillDown] = useState<{
+    month: string;
+    group: string;
+    deals: PipelineDeal[];
+  } | null>(null);
+
+  // Keep raw month keys for reverse lookup
+  const rawMonths = useMemo(
+    () => (pipelineByMonthAndGroup ? Object.keys(pipelineByMonthAndGroup).sort() : []),
+    [pipelineByMonthAndGroup],
+  );
+
   const { data, groups, isLegacy } = useMemo(() => {
-    // Prefer the new grouped-by-month format
     if (pipelineByMonthAndGroup && Object.keys(pipelineByMonthAndGroup).length > 0) {
       const allGroups = new Set<string>();
       const months = Object.keys(pipelineByMonthAndGroup).sort();
@@ -71,7 +114,6 @@ export function PipelineByStageChart({
         return entry;
       });
 
-      // Ensure consistent ordering: SS0-SS2 first, Qualified Pipeline second
       const orderedGroups = [...allGroups].sort((a, b) => {
         if (a === "SS0-SS2") return -1;
         if (b === "SS0-SS2") return 1;
@@ -81,7 +123,6 @@ export function PipelineByStageChart({
       return { data: chartData, groups: orderedGroups, isLegacy: false };
     }
 
-    // Fallback: legacy flat pipelineByStage
     if (pipelineByStage) {
       const chartData = Object.entries(pipelineByStage)
         .sort(([a], [b]) => {
@@ -93,7 +134,6 @@ export function PipelineByStageChart({
       return { data: chartData, groups: ["acv"], isLegacy: true };
     }
 
-    // Fallback: raw opportunities (pipeline page & PBM)
     if (opportunities) {
       const stageMap: Record<string, number> = {};
       opportunities
@@ -115,28 +155,30 @@ export function PipelineByStageChart({
     return { data: [], groups: [], isLegacy: true };
   }, [pipelineByMonthAndGroup, pipelineByStage, opportunities]);
 
-  const formatCurrency = (val: number) =>
-    val >= 1000000
-      ? `$${(val / 1000000).toFixed(1)}M`
-      : val >= 1000
-        ? `$${(val / 1000).toFixed(0)}K`
-        : `$${val}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleBarClick = useCallback((groupKey: string) => (barData: any) => {
+    if (!pipelineDeals) return;
+    const monthLabel = barData?.month || barData?.payload?.month;
+    if (!monthLabel) return;
+    const rawMonth = reverseMonthLabel(monthLabel, rawMonths);
+    if (!rawMonth) return;
+    const dealKey = `${rawMonth}|${groupKey}`;
+    const deals = pipelineDeals[dealKey];
+    if (deals && deals.length > 0) {
+      setDrillDown({ month: monthLabel, group: groupKey, deals });
+    }
+  }, [pipelineDeals, rawMonths]);
 
   if (data.length === 0) return null;
 
-  const currencyTooltip = (val: unknown) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(Number(val));
+  const currencyTooltip = (val: unknown) => fmtCurrency(Number(val));
 
   // Legacy: horizontal bar chart by stage (pipeline page, PBM)
   if (isLegacy) {
     return (
       <ResponsiveContainer width="100%" height={250}>
         <BarChart data={data} layout="vertical">
-          <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={formatCurrency} />
+          <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={shortCurrency} />
           <YAxis type="category" dataKey="stage" tick={{ fontSize: 11 }} width={100} />
           <Tooltip formatter={currencyTooltip} />
           <Bar dataKey="acv" fill="#7c3aed" radius={[0, 4, 4, 0]} />
@@ -145,24 +187,90 @@ export function PipelineByStageChart({
     );
   }
 
-  // New: stacked vertical bar chart by close month with stage groups
+  // New: stacked vertical bar chart by close month with stage groups + drill-down
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data}>
-        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCurrency} width={70} />
-        <Tooltip formatter={currencyTooltip} />
-        <Legend />
-        {groups.map((group) => (
-          <Bar
-            key={group}
-            dataKey={group}
-            stackId="pipeline"
-            fill={GROUP_COLORS[group] || "#94a3b8"}
-            radius={group === groups[groups.length - 1] ? [4, 4, 0, 0] : undefined}
-          />
-        ))}
-      </BarChart>
-    </ResponsiveContainer>
+    <div>
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={data} className="cursor-pointer">
+          <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={shortCurrency} width={70} />
+          <Tooltip formatter={currencyTooltip} />
+          <Legend />
+          {groups.map((group) => (
+            <Bar
+              key={group}
+              dataKey={group}
+              stackId="pipeline"
+              fill={GROUP_COLORS[group] || "#94a3b8"}
+              radius={group === groups[groups.length - 1] ? [4, 4, 0, 0] : undefined}
+              onClick={handleBarClick(group)}
+              style={{ cursor: "pointer" }}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+
+      {/* Drill-down deal list */}
+      {drillDown && (
+        <div className="mt-3 rounded-lg border bg-muted/30">
+          <div className="flex items-center justify-between px-3 py-2 border-b">
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: GROUP_COLORS[drillDown.group] || "#94a3b8" }}
+              />
+              <span className="text-xs font-semibold">
+                {drillDown.month} — {drillDown.group}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                ({drillDown.deals.length} deal{drillDown.deals.length !== 1 ? "s" : ""})
+              </span>
+            </div>
+            <button
+              onClick={() => setDrillDown(null)}
+              className="rounded p-0.5 hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+          <div className="max-h-[240px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted-foreground border-b">
+                  <th className="text-left py-1.5 px-3 font-medium">Deal</th>
+                  <th className="text-left py-1.5 px-3 font-medium">Owner</th>
+                  <th className="text-left py-1.5 px-3 font-medium">Stage</th>
+                  <th className="text-right py-1.5 px-3 font-medium">ACV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {drillDown.deals.map((deal, i) => (
+                  <tr
+                    key={deal.id}
+                    className={cn(
+                      "border-b last:border-0",
+                      i % 2 === 0 ? "bg-background" : "bg-muted/20"
+                    )}
+                  >
+                    <td className="py-1.5 px-3 font-medium truncate max-w-[180px]" title={deal.name}>
+                      {deal.name}
+                    </td>
+                    <td className="py-1.5 px-3 text-muted-foreground truncate max-w-[120px]" title={deal.owner}>
+                      {deal.owner}
+                    </td>
+                    <td className="py-1.5 px-3 text-muted-foreground truncate max-w-[140px]" title={deal.stage}>
+                      {deal.stage}
+                    </td>
+                    <td className="py-1.5 px-3 text-right font-semibold tabular-nums">
+                      {fmtCurrency(deal.acv)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

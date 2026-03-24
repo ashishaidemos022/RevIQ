@@ -30,6 +30,7 @@ interface HomeCharts {
   acvByMonth: Record<string, number>;
   pipelineByStage: Record<string, { count: number; acv: number }>;
   pipelineByMonthAndGroup?: Record<string, Record<string, { count: number; acv: number }>>;
+  pipelineDeals?: Record<string, Array<{ id: string; name: string; owner: string; acv: number; stage: string }>>;
 }
 
 export function AeHome() {
@@ -191,6 +192,7 @@ export function AeHome() {
           <CardContent>
             <PipelineByStageChart
               pipelineByMonthAndGroup={charts?.pipelineByMonthAndGroup}
+              pipelineDeals={charts?.pipelineDeals}
               pipelineByStage={charts?.pipelineByStage}
             />
           </CardContent>

@@ -81,10 +81,18 @@ export async function GET(request: NextRequest) {
     const startStr = rangeStart.toISOString().split('T')[0];
     const endStr = rangeEnd.toISOString().split('T')[0];
 
-    const openOpps = await fetchAll<{ stage: string | null; acv: number | null; close_date: string | null }>(() => {
+    const openOpps = await fetchAll<{
+      id: string;
+      name: string | null;
+      stage: string | null;
+      acv: number | null;
+      close_date: string | null;
+      owner_user_id: string | null;
+      users: { full_name: string } | null;
+    }>(() => {
       let q = db
         .from('opportunities')
-        .select('stage, acv, close_date')
+        .select('id, name, stage, acv, close_date, owner_user_id, users!opportunities_owner_user_id_fkey(full_name)')
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false)
         .gte('close_date', startStr)
@@ -96,6 +104,8 @@ export async function GET(request: NextRequest) {
     // Shape: { "2026-03": { "SS0-SS2": { count, acv }, "Qualified Pipeline": { count, acv } } }
     const pipelineByMonthAndGroup: Record<string, Record<string, { count: number; acv: number }>> = {};
     const pipelineByStage: Record<string, { count: number; acv: number }> = {};
+    // Deal-level data keyed by "month|group" for drill-down
+    const pipelineDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number; stage: string }>> = {};
     for (const o of openOpps) {
       if (!o.close_date) continue;
       const group = getStageGroup(o.stage || '');
@@ -107,6 +117,17 @@ export async function GET(request: NextRequest) {
       pipelineByMonthAndGroup[month][group].count++;
       pipelineByMonthAndGroup[month][group].acv += o.acv || 0;
 
+      // Deal-level data for drill-down
+      const dealKey = `${month}|${group}`;
+      if (!pipelineDeals[dealKey]) pipelineDeals[dealKey] = [];
+      pipelineDeals[dealKey].push({
+        id: o.id,
+        name: o.name || 'Unnamed',
+        owner: o.users?.full_name || 'Unknown',
+        acv: o.acv || 0,
+        stage: o.stage || 'Unknown',
+      });
+
       // Flat view for backward compat
       const stage = o.stage || 'Other';
       if (!pipelineByStage[stage]) pipelineByStage[stage] = { count: 0, acv: 0 };
@@ -114,11 +135,17 @@ export async function GET(request: NextRequest) {
       pipelineByStage[stage].acv += o.acv || 0;
     }
 
+    // Sort deals by ACV descending
+    for (const key of Object.keys(pipelineDeals)) {
+      pipelineDeals[key].sort((a, b) => b.acv - a.acv);
+    }
+
     return NextResponse.json({
       data: {
         acvByMonth,
         pipelineByStage,
         pipelineByMonthAndGroup,
+        pipelineDeals,
       },
     });
   } catch (error) {

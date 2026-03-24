@@ -69,11 +69,35 @@ export async function GET(request: NextRequest) {
     const quotaAttainmentYTD = annualQuota > 0 ? (acvClosedYTD / annualQuota) * 100 : 0;
     const quotaAttainmentQTD = quarterlyQuota > 0 ? (acvClosedQTD / quarterlyQuota) * 100 : 0;
 
-    // Quarterly pacing
+    // Quarterly pacing: 20% after Month 1, 50% after Month 2, 100% by end of Month 3
     const now = new Date();
-    const totalDaysInQuarter = Math.ceil((qEnd.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const daysElapsed = Math.max(1, Math.ceil((now.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24)));
-    const quarterPacePercent = Math.min((daysElapsed / totalDaysInQuarter) * 100, 100);
+    const qStartMonth = qStart.getMonth(); // 0-indexed month of quarter start
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Determine which month of the quarter we're in (0, 1, or 2)
+    // Handle year wrap for Q4 (Nov, Dec = calendarYear, Jan = calendarYear+1)
+    let monthInQuarter: number;
+    const qStartYear = qStart.getFullYear();
+    const monthsSinceStart = (currentYear - qStartYear) * 12 + (currentMonth - qStartMonth);
+    monthInQuarter = Math.max(0, Math.min(2, monthsSinceStart));
+
+    // Milestone targets: end of month 0 → 20%, end of month 1 → 50%, end of month 2 → 100%
+    const milestones = [20, 50, 100];
+    const prevMilestone = monthInQuarter === 0 ? 0 : milestones[monthInQuarter - 1];
+    const nextMilestone = milestones[monthInQuarter];
+
+    // Calculate progress within the current month
+    const monthStart = new Date(currentYear, currentMonth, 1);
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0); // last day of month
+    const totalDaysInMonth = monthEnd.getDate();
+    const dayOfMonth = Math.min(now.getDate(), totalDaysInMonth);
+    const monthProgress = dayOfMonth / totalDaysInMonth;
+
+    const quarterPacePercent = Math.min(
+      prevMilestone + (nextMilestone - prevMilestone) * monthProgress,
+      100
+    );
 
     return NextResponse.json({
       data: {

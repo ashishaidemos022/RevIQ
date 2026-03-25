@@ -156,7 +156,6 @@ export function GroupedRosterTable({
             <TableHead className="text-right">Attainment YTD</TableHead>
             <TableHead className="text-right">Pilots</TableHead>
             <TableHead className="text-right">Activities</TableHead>
-            <TableHead className="text-right">Commission QTD</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -273,7 +272,6 @@ function GroupSection({
         <TableCell className="text-right">{renderAttainment(s.avgAttainmentYTD)}</TableCell>
         <TableCell className="text-right font-semibold">{s.activePilots}</TableCell>
         <TableCell className="text-right font-semibold">{s.activitiesQTD.toLocaleString()}</TableCell>
-        <TableCell className="text-right font-semibold">{formatCurrency(s.commissionQTD)}</TableCell>
       </TableRow>
 
       {/* Individual AE rows (when expanded) */}
@@ -310,7 +308,6 @@ function GroupSection({
               <TableCell className="text-right">{renderAttainment(ae.attainment)}</TableCell>
               <TableCell className="text-right">{ae.active_pilots}</TableCell>
               <TableCell className="text-right">{ae.activities_qtd.toLocaleString()}</TableCell>
-              <TableCell className="text-right">{formatCurrency(ae.commission_qtd)}</TableCell>
             </TableRow>
           );
         })}

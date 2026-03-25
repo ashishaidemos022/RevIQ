@@ -351,22 +351,20 @@ export async function GET(request: NextRequest) {
       };
     }).sort((a, b) => (a.managerName).localeCompare(b.managerName));
 
-    // Add leader groups for leaders who manage subtrees but aren't direct managers of AEs
-    const existingManagerIds = new Set(managerGroups.map(g => g.managerId).filter(Boolean));
+    // Update or add leader groups to include full subtree (not just direct reports)
+    const existingGroupIndex = new Map(managerGroups.map((g, i) => [g.managerId, i]));
+    const aeDataMapForGroups = new Map(aeData.map(ae => [ae.id, ae]));
     for (const lr of leaderRows) {
-      if (existingManagerIds.has(lr.id)) continue; // already a direct manager group
-      // Get the AE/PBM IDs in this leader's subtree
       const { getOrgSubtree } = await import('@/lib/supabase/queries/hierarchy');
       const subtreeIds = await getOrgSubtree(lr.id);
-      const aeDataMap = new Map(aeData.map(ae => [ae.id, ae]));
       const subtreeMembers = subtreeIds
-        .map(id => aeDataMap.get(id))
+        .map(id => aeDataMapForGroups.get(id))
         .filter(Boolean) as typeof aeData;
       if (subtreeMembers.length === 0) continue;
 
       const withQuota = subtreeMembers.filter(m => m.annual_quota > 0);
       const withQQuota = subtreeMembers.filter(m => m.quarterly_quota > 0);
-      managerGroups.push({
+      const groupData = {
         managerId: lr.id,
         managerName: lr.full_name,
         managerRole: lr.role,
@@ -383,7 +381,15 @@ export async function GET(request: NextRequest) {
           activitiesQTD: lr.activities_qtd,
           commissionQTD: 0,
         },
-      });
+      };
+
+      const existingIdx = existingGroupIndex.get(lr.id);
+      if (existingIdx !== undefined) {
+        // Replace existing group with full subtree version
+        managerGroups[existingIdx] = groupData;
+      } else {
+        managerGroups.push(groupData);
+      }
     }
     managerGroups.sort((a, b) => a.managerName.localeCompare(b.managerName));
 

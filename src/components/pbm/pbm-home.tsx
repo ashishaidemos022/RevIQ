@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { usePbmHome } from "@/hooks/use-pbm-home";
 import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
 import { apiFetch } from "@/lib/api";
+import { getCurrentFiscalPeriod, getQuarterEndDate } from "@/lib/fiscal";
 
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
@@ -39,10 +40,24 @@ export function PbmHome() {
     refetch: refetchHome,
   } = usePbmHome();
 
+  const cutoffDate = useMemo(() => {
+    const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+    let endQ = fiscalQuarter + 3;
+    let endFY = fiscalYear;
+    if (endQ > 4) { endQ -= 4; endFY += 1; }
+    return getQuarterEndDate(endFY, endQ).toISOString().split("T")[0];
+  }, []);
+
   const {
     data: oppsData,
     isLoading: oppsLoading,
-  } = usePbmOpportunities({ limit: 100 });
+  } = usePbmOpportunities({
+    status: "open",
+    close_date_lte: cutoffDate,
+    sort_by: "acv",
+    sort_asc: "false",
+    limit: 25,
+  });
 
   const {
     data: chartsResponse,
@@ -203,7 +218,7 @@ export function PbmHome() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">
-            My Opportunities
+            Open Opportunities
           </CardTitle>
         </CardHeader>
         <CardContent>

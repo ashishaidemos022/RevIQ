@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
 
     const status = url.searchParams.get('status'); // open | closed_won | closed_lost | all
     const isPaidPilot = url.searchParams.get('is_paid_pilot');
+    const sortBy = url.searchParams.get('sort_by') || 'close_date'; // acv | close_date
+    const sortAsc = url.searchParams.get('sort_asc') === 'true';
+    const closeDateLte = url.searchParams.get('close_date_lte');
     const limit = parseInt(url.searchParams.get('limit') || '200');
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
@@ -59,15 +62,23 @@ export async function GET(request: NextRequest) {
         query = query.eq('is_paid_pilot', false);
       }
 
+      if (closeDateLte) {
+        query = query.lte('close_date', closeDateLte);
+      }
+
       const { data } = await query;
       if (data) allOpps = allOpps.concat(data as OppRow[]);
     }
 
-    // Sort by close_date descending
+    // Sort
     allOpps.sort((a, b) => {
-      const da = (a.close_date as string) || '';
-      const db2 = (b.close_date as string) || '';
-      return db2.localeCompare(da);
+      const aVal = sortBy === 'acv' ? ((a.acv as number) || 0) : ((a.close_date as string) || '');
+      const bVal = sortBy === 'acv' ? ((b.acv as number) || 0) : ((b.close_date as string) || '');
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortAsc ? aVal - bVal : bVal - aVal;
+      }
+      const cmp = String(aVal).localeCompare(String(bVal));
+      return sortAsc ? cmp : -cmp;
     });
 
     const total = allOpps.length;

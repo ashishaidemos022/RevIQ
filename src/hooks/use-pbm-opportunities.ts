@@ -7,6 +7,9 @@ import { apiFetch } from "@/lib/api";
 interface PbmOpportunitiesParams {
   status?: "open" | "closed_won" | "closed_lost" | "all";
   is_paid_pilot?: boolean;
+  sort_by?: "acv" | "close_date";
+  sort_asc?: string;
+  close_date_lte?: string;
   limit?: number;
   offset?: number;
 }

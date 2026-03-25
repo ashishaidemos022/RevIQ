@@ -351,6 +351,42 @@ export async function GET(request: NextRequest) {
       };
     }).sort((a, b) => (a.managerName).localeCompare(b.managerName));
 
+    // Add leader groups for leaders who manage subtrees but aren't direct managers of AEs
+    const existingManagerIds = new Set(managerGroups.map(g => g.managerId).filter(Boolean));
+    for (const lr of leaderRows) {
+      if (existingManagerIds.has(lr.id)) continue; // already a direct manager group
+      // Get the AE/PBM IDs in this leader's subtree
+      const { getOrgSubtree } = await import('@/lib/supabase/queries/hierarchy');
+      const subtreeIds = await getOrgSubtree(lr.id);
+      const aeDataMap = new Map(aeData.map(ae => [ae.id, ae]));
+      const subtreeMembers = subtreeIds
+        .map(id => aeDataMap.get(id))
+        .filter(Boolean) as typeof aeData;
+      if (subtreeMembers.length === 0) continue;
+
+      const withQuota = subtreeMembers.filter(m => m.annual_quota > 0);
+      const withQQuota = subtreeMembers.filter(m => m.quarterly_quota > 0);
+      managerGroups.push({
+        managerId: lr.id,
+        managerName: lr.full_name,
+        managerRole: lr.role,
+        memberIds: subtreeMembers.map(m => m.id),
+        memberCount: subtreeMembers.length,
+        summary: {
+          acvClosedQTD: lr.acv_closed_qtd,
+          acvClosedYTD: lr.acv_closed_ytd,
+          avgAttainmentQTD: withQQuota.length > 0
+            ? withQQuota.reduce((s, m) => s + m.attainment_qtd, 0) / withQQuota.length : 0,
+          avgAttainmentYTD: withQuota.length > 0
+            ? withQuota.reduce((s, m) => s + m.attainment, 0) / withQuota.length : 0,
+          activePilots: lr.active_pilots,
+          activitiesQTD: lr.activities_qtd,
+          commissionQTD: 0,
+        },
+      });
+    }
+    managerGroups.sort((a, b) => a.managerName.localeCompare(b.managerName));
+
     return NextResponse.json({
       data: {
         aes: allData,

@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, List, LayoutGrid, Search, Network } from "lucide-react";
+import { Users, List, Search, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CompareSelectionBar } from "@/components/team/compare-selection-bar";
 import { ComparePanel } from "@/components/team/compare-panel";
@@ -428,7 +428,7 @@ export default function TeamPage() {
                         onClick={() => handleRosterViewChange("grouped")}
                         title="Grouped by manager"
                       >
-                        <LayoutGrid className="h-3.5 w-3.5" />
+                        <Network className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   )}

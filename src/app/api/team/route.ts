@@ -227,6 +227,64 @@ export async function GET(request: NextRequest) {
     const totalPilots = aeData.reduce((s, ae) => s + ae.active_pilots, 0);
     const totalActivities = aeData.reduce((s, ae) => s + ae.activities_qtd, 0);
 
+    // Fetch leaders in scope (not AEs or PBMs) who manage reports
+    let leadersQuery = db
+      .from('users')
+      .select('id, full_name, email, role, region, salesforce_user_id')
+      .eq('role', 'leader')
+      .eq('is_active', true);
+    leadersQuery = scopedQuery(leadersQuery, 'id', scope);
+    const { data: leaders } = await leadersQuery;
+
+    // For each leader, aggregate their subtree's metrics from aeData
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const leaderRows: any[] = [];
+    if (leaders && leaders.length > 0) {
+      const { getOrgSubtree } = await import('@/lib/supabase/queries/hierarchy');
+      const aeDataMap = new Map(aeData.map(ae => [ae.id, ae]));
+
+      for (const leader of leaders) {
+        const subtreeIds = await getOrgSubtree(leader.id);
+        const subtreeMembers = subtreeIds
+          .map(id => aeDataMap.get(id))
+          .filter(Boolean) as typeof aeData;
+
+        if (subtreeMembers.length === 0) continue;
+
+        const totalAcvQTD = subtreeMembers.reduce((s, m) => s + m.acv_closed_qtd, 0);
+        const totalAcvYTD = subtreeMembers.reduce((s, m) => s + m.acv_closed_ytd, 0);
+        const withAnnualQuota = subtreeMembers.filter(m => m.annual_quota > 0);
+        const withQuarterlyQuota = subtreeMembers.filter(m => m.quarterly_quota > 0);
+        const avgAttainmentYTD = withAnnualQuota.length > 0
+          ? withAnnualQuota.reduce((s, m) => s + m.attainment, 0) / withAnnualQuota.length : 0;
+        const avgAttainmentQTD = withQuarterlyQuota.length > 0
+          ? withQuarterlyQuota.reduce((s, m) => s + m.attainment_qtd, 0) / withQuarterlyQuota.length : 0;
+
+        leaderRows.push({
+          id: leader.id,
+          full_name: leader.full_name,
+          email: leader.email,
+          role: leader.role,
+          region: leader.region,
+          salesforce_user_id: leader.salesforce_user_id,
+          acv_closed_qtd: totalAcvQTD,
+          acv_closed_ytd: totalAcvYTD,
+          annual_quota: 0,
+          quarterly_quota: 0,
+          attainment: avgAttainmentYTD,
+          attainment_qtd: avgAttainmentQTD,
+          active_pilots: subtreeMembers.reduce((s, m) => s + m.active_pilots, 0),
+          activities_qtd: subtreeMembers.reduce((s, m) => s + m.activities_qtd, 0),
+          commission_qtd: 0,
+          is_leader_aggregate: true,
+          team_size: subtreeMembers.length,
+        });
+      }
+    }
+
+    // Combine AE/PBM data with leader aggregate rows
+    const allData = [...aeData, ...leaderRows];
+
     // Build manager groups from user_hierarchy
     const hierarchyRows = await fetchAll<{ user_id: string; manager_id: string }>(() =>
       batchedIn(
@@ -295,7 +353,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data: {
-        aes: aeData,
+        aes: allData,
         summary: {
           acvClosedQTD: totalAcvQTD,
           avgAttainment,

@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, List, LayoutGrid, Search } from "lucide-react";
+import { Users, List, LayoutGrid, Search, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CompareSelectionBar } from "@/components/team/compare-selection-bar";
 import { ComparePanel } from "@/components/team/compare-panel";
@@ -42,6 +42,8 @@ interface AeData {
   active_pilots: number;
   activities_qtd: number;
   commission_qtd: number;
+  is_leader_aggregate?: boolean;
+  team_size?: number;
 }
 
 interface ManagerGroup {
@@ -85,6 +87,7 @@ const ROLE_FILTER_OPTIONS = [
   { value: "commercial_ae", label: "Commercial AE" },
   { value: "enterprise_ae", label: "Enterprise AE" },
   { value: "pbm", label: "PBM" },
+  { value: "leader", label: "Leader" },
 ];
 
 export default function TeamPage() {
@@ -151,12 +154,25 @@ export default function TeamPage() {
   );
 
   const columns: Column<Record<string, unknown>>[] = [
-    { key: "full_name", header: "Name" },
+    {
+      key: "full_name",
+      header: "Name",
+      render: (row) => (
+        <span className={row.is_leader_aggregate ? "font-semibold" : ""}>
+          {row.full_name as string}
+          {row.is_leader_aggregate ? (
+            <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">
+              ({row.team_size as number} reports)
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
     {
       key: "role",
       header: "Role",
       render: (row) => (
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant={row.is_leader_aggregate ? "default" : "outline"} className="text-[10px]">
           {formatRole(row.role as string)}
         </Badge>
       ),
@@ -179,17 +195,17 @@ export default function TeamPage() {
     {
       key: "annual_quota",
       header: "Annual Quota",
-      render: (row) => formatCurrency(row.annual_quota as number),
+      render: (row) => row.is_leader_aggregate ? "—" : formatCurrency(row.annual_quota as number),
     },
     {
       key: "attainment_qtd",
       header: "Attainment QTD",
-      render: (row) => renderAttainment(row.attainment_qtd as number),
+      render: (row) => row.is_leader_aggregate ? `Avg ${(row.attainment_qtd as number).toFixed(1)}%` : renderAttainment(row.attainment_qtd as number),
     },
     {
       key: "attainment",
       header: "Attainment YTD",
-      render: (row) => renderAttainment(row.attainment as number),
+      render: (row) => row.is_leader_aggregate ? `Avg ${(row.attainment as number).toFixed(1)}%` : renderAttainment(row.attainment as number),
     },
     {
       key: "active_pilots",
@@ -200,11 +216,6 @@ export default function TeamPage() {
       key: "activities_qtd",
       header: "Activities QTD",
       render: (row) => (row.activities_qtd as number).toLocaleString(),
-    },
-    {
-      key: "commission_qtd",
-      header: "Commission QTD",
-      render: (row) => formatCurrency(row.commission_qtd as number),
     },
   ];
 
@@ -334,7 +345,7 @@ export default function TeamPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-        <Users className="h-6 w-6" />
+        <Network className="h-6 w-6" />
         Team View
       </h1>
 

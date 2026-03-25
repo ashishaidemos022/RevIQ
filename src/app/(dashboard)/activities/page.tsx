@@ -199,7 +199,14 @@ export default function ActivitiesPage() {
               <BarChart data={weeklyData}>
                 <XAxis dataKey="week" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
+                <Tooltip
+                  cursor={{ fill: "rgba(0,0,0,0.05)" }}
+                  contentStyle={{
+                    backgroundColor: "var(--color-card)",
+                    borderColor: "var(--color-border)",
+                    borderRadius: 8,
+                  }}
+                />
                 <Legend />
                 {chartTypes.map((t) => (
                   <Bar

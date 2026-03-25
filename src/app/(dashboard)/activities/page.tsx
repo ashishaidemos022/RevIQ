@@ -34,10 +34,10 @@ import {
 } from "recharts";
 
 const ACTIVITY_TYPES = [
-  { value: "call", label: "Calls", color: "#7c3aed", countKey: "call_count" as const },
-  { value: "email", label: "Emails", color: "#14b8a6", countKey: "email_count" as const },
-  { value: "meeting", label: "Meetings", color: "#eab308", countKey: "meeting_count" as const },
-  { value: "linkedin", label: "LinkedIn", color: "#f43f5e", countKey: "linkedin_count" as const },
+  { value: "call", label: "Calls", color: "#5405BD", countKey: "call_count" as const },
+  { value: "email", label: "Emails", color: "#14C3B7", countKey: "email_count" as const },
+  { value: "meeting", label: "Meetings", color: "#FFCC00", countKey: "meeting_count" as const },
+  { value: "linkedin", label: "LinkedIn", color: "#8023F9", countKey: "linkedin_count" as const },
 ];
 
 type CountKey = "call_count" | "email_count" | "meeting_count" | "linkedin_count";

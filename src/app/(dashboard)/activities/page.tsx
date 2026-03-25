@@ -60,7 +60,6 @@ export default function ActivitiesPage() {
   } = useActivities({
     date_from: qStart.toISOString().split("T")[0],
     date_to: qEnd.toISOString().split("T")[0],
-    limit: 5000,
   });
 
   const rows = activitiesData?.data || [];

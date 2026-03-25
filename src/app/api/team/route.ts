@@ -214,9 +214,20 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Team summary — only sum AE data (not PBMs, to avoid double-counting credited opps)
+    // Team summary — query total ACV directly from opportunities (matches Home KPIs logic)
+    const summaryOpps = await fetchAll<{ acv: number | null }>(() => {
+      let q = db
+        .from('opportunities')
+        .select('acv')
+        .eq('is_closed_won', true)
+        .gte('close_date', qStartStr)
+        .lte('close_date', qEndStr);
+      return scopedQuery(q, 'owner_user_id', scope);
+    });
+    const totalAcvQTD = summaryOpps.reduce((s, o) => s + (o.acv || 0), 0);
+
+    // Attainment averages from AE-only data (exclude PBMs to avoid double-counting)
     const aeOnlyData = aeData.filter(ae => AE_ROLES.includes(ae.role as typeof AE_ROLES[number]));
-    const totalAcvQTD = aeOnlyData.reduce((s, ae) => s + ae.acv_closed_qtd, 0);
     const membersWithAnnualQuota = aeOnlyData.filter(ae => ae.annual_quota > 0);
     const membersWithQuarterlyQuota = aeOnlyData.filter(ae => ae.quarterly_quota > 0);
     const avgAttainment = membersWithAnnualQuota.length > 0

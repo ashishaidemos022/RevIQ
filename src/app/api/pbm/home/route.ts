@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch credited opps with close data
     let acvClosedQTD = 0;
+    let cxaAcvClosedQTD = 0;
     let acvClosedYTD = 0;
     let dealsClosedQTD = 0;
 
@@ -49,12 +50,13 @@ export async function GET(request: NextRequest) {
         const batch = creditedOppSfIds.slice(i, i + 500);
         const { data: opps } = await db
           .from('opportunities')
-          .select('salesforce_opportunity_id, acv, close_date, is_closed_won, sub_type')
+          .select('salesforce_opportunity_id, acv, ai_acv, close_date, is_closed_won, sub_type')
           .eq('is_closed_won', true)
           .in('salesforce_opportunity_id', batch);
 
         (opps || []).forEach(o => {
           const acv = parseFloat(o.acv) || 0;
+          const aiAcv = parseFloat(o.ai_acv) || 0;
           const cd = o.close_date || '';
 
           if (cd >= fyStartStr && cd <= fyEndStr) {
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
           }
           if (cd >= qStart && cd <= qEnd) {
             acvClosedQTD += acv;
+            cxaAcvClosedQTD += aiAcv;
             if (o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && acv > 0) {
               dealsClosedQTD++;
             }
@@ -141,6 +144,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       acv_closed_qtd: acvClosedQTD,
+      cxa_acv_closed_qtd: cxaAcvClosedQTD,
       acv_closed_ytd: acvClosedYTD,
       deals_closed_qtd: dealsClosedQTD,
       quota_attainment_qtd: quotaAttainmentQTD,

@@ -23,10 +23,10 @@ export async function GET(request: NextRequest) {
     const fyEndStr = fyEnd.toISOString().split('T')[0];
 
     // Closed-won QTD (paginated)
-    const qtdOpps = await fetchAll<{ acv: number | null; sub_type: string | null }>(() => {
+    const qtdOpps = await fetchAll<{ acv: number | null; ai_acv: number | null; sub_type: string | null }>(() => {
       let q = db
         .from('opportunities')
-        .select('acv, sub_type')
+        .select('acv, ai_acv, sub_type')
         .eq('is_closed_won', true)
         .gte('close_date', qStartStr)
         .lte('close_date', qEndStr);
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     });
 
     const acvClosedQTD = qtdOpps.reduce((s, o) => s + (o.acv || 0), 0);
+    const cxaAcvClosedQTD = qtdOpps.reduce((s, o) => s + (o.ai_acv || 0), 0);
     const dealsClosedQTD = qtdOpps.filter(
       o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
     ).length;
@@ -105,6 +106,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         acvClosedQTD,
+        cxaAcvClosedQTD,
         acvClosedYTD,
         dealsClosedQTD,
         quotaAttainmentQTD,

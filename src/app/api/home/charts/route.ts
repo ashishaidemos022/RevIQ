@@ -17,17 +17,18 @@ export async function GET(request: NextRequest) {
     const scope = await resolveDataScope(user, viewAsUser);
     const db = getSupabaseClient();
 
-    // ACV by month: closed-won opps with ACV, close_date, deal name, owner
+    // ACV by month: closed-won opps with ACV, ai_acv, close_date, deal name, owner
     const closedOpps = await fetchAll<{
       id: string;
       name: string | null;
       acv: number | null;
+      ai_acv: number | null;
       close_date: string | null;
       users: { full_name: string } | null;
     }>(() => {
       let q = db
         .from('opportunities')
-        .select('id, name, acv, close_date, users!opportunities_owner_user_id_fkey(full_name)')
+        .select('id, name, acv, ai_acv, close_date, users!opportunities_owner_user_id_fkey(full_name)')
         .eq('is_closed_won', true)
         .not('close_date', 'is', null);
       return scopedQuery(q, 'owner_user_id', scope);
@@ -35,11 +36,18 @@ export async function GET(request: NextRequest) {
 
     // Group by month + collect deal-level data
     const acvByMonth: Record<string, number> = {};
+    const cxaAcvByMonth: Record<string, number> = {};
+    const ccaasAcvByMonth: Record<string, number> = {};
     const acvDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>> = {};
     for (const o of closedOpps) {
       if (!o.close_date) continue;
       const month = o.close_date.substring(0, 7); // YYYY-MM
-      acvByMonth[month] = (acvByMonth[month] || 0) + (o.acv || 0);
+      const acv = o.acv || 0;
+      const cxaAcv = o.ai_acv || 0;
+      const ccaasAcv = acv - cxaAcv;
+      acvByMonth[month] = (acvByMonth[month] || 0) + acv;
+      cxaAcvByMonth[month] = (cxaAcvByMonth[month] || 0) + cxaAcv;
+      ccaasAcvByMonth[month] = (ccaasAcvByMonth[month] || 0) + ccaasAcv;
 
       if (!acvDeals[month]) acvDeals[month] = [];
       acvDeals[month].push({
@@ -128,6 +136,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         acvByMonth,
+        cxaAcvByMonth,
+        ccaasAcvByMonth,
         acvDeals,
         pipelineByStage,
         pipelineByMonthAndGroup,

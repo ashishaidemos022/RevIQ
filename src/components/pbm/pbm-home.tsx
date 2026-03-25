@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 
 interface PbmCharts {
   acvByMonth: Record<string, number>;
+  cxaAcvByMonth?: Record<string, number>;
+  ccaasAcvByMonth?: Record<string, number>;
   acvDeals?: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>>;
   pipelineByStage: Record<string, { count: number; acv: number }>;
   pipelineByMonthAndGroup?: Record<string, Record<string, { count: number; acv: number }>>;
@@ -149,10 +151,15 @@ export function PbmHome() {
         PBM Home Dashboard
       </h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard
           label="ACV Closed QTD"
           value={d?.acv_closed_qtd || 0}
+          format="currency"
+        />
+        <KpiCard
+          label="CXA ACV Closed QTD"
+          value={d?.cxa_acv_closed_qtd || 0}
           format="currency"
         />
         <KpiCard
@@ -183,7 +190,7 @@ export function PbmHome() {
             <CardTitle className="text-sm font-medium">ACV by Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <AcvByMonthChart acvByMonth={charts?.acvByMonth} acvDeals={charts?.acvDeals} />
+            <AcvByMonthChart acvByMonth={charts?.acvByMonth} cxaAcvByMonth={charts?.cxaAcvByMonth} ccaasAcvByMonth={charts?.ccaasAcvByMonth} acvDeals={charts?.acvDeals} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-1">

@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       name: string | null;
       stage: string | null;
       acv: number | null;
+      ai_acv: number | null;
       close_date: string | null;
       is_closed_won: boolean;
       is_closed_lost: boolean;
@@ -50,20 +51,26 @@ export async function GET(request: NextRequest) {
       const batch = creditedOppSfIds.slice(i, i + 500);
       const { data } = await db
         .from('opportunities')
-        .select('id, salesforce_opportunity_id, name, stage, acv, close_date, is_closed_won, is_closed_lost, users!opportunities_owner_user_id_fkey(full_name)')
+        .select('id, salesforce_opportunity_id, name, stage, acv, ai_acv, close_date, is_closed_won, is_closed_lost, users!opportunities_owner_user_id_fkey(full_name)')
         .in('salesforce_opportunity_id', batch);
       if (data) allOpps = allOpps.concat(data as unknown as OppRow[]);
     }
 
     // --- ACV by Month (closed-won) ---
     const acvByMonth: Record<string, number> = {};
+    const cxaAcvByMonth: Record<string, number> = {};
+    const ccaasAcvByMonth: Record<string, number> = {};
     const acvDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>> = {};
 
     for (const o of allOpps) {
       if (!o.is_closed_won || !o.close_date) continue;
       const month = o.close_date.substring(0, 7);
       const acv = parseFloat(String(o.acv)) || 0;
+      const cxaAcv = parseFloat(String(o.ai_acv)) || 0;
+      const ccaasAcv = acv - cxaAcv;
       acvByMonth[month] = (acvByMonth[month] || 0) + acv;
+      cxaAcvByMonth[month] = (cxaAcvByMonth[month] || 0) + cxaAcv;
+      ccaasAcvByMonth[month] = (ccaasAcvByMonth[month] || 0) + ccaasAcv;
 
       if (!acvDeals[month]) acvDeals[month] = [];
       acvDeals[month].push({
@@ -127,6 +134,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         acvByMonth,
+        cxaAcvByMonth,
+        ccaasAcvByMonth,
         acvDeals,
         pipelineByStage,
         pipelineByMonthAndGroup,

@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 
 export interface PbmHomeData {
   acv_closed_qtd: number;
+  cxa_acv_closed_qtd: number;
   acv_closed_ytd: number;
   deals_closed_qtd: number;
   quota_attainment_qtd: number;

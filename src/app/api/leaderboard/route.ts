@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod, getQuarterLabel } from '@/lib/fiscal';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(request: NextRequest) {
   try {
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
     if (board === 'revenue') {
       let query = db
         .from('opportunities')
-        .select('owner_user_id, acv')
+        .select('owner_user_id, acv, sub_type')
         .eq('is_closed_won', true)
         .in('owner_user_id', aeIds);
       if (startStr) query = query.gte('close_date', startStr);
@@ -136,11 +137,13 @@ export async function GET(request: NextRequest) {
 
       // Aggregate per AE
       const aeData: Record<string, { acv: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null }) => {
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; sub_type: string | null }) => {
         const id = o.owner_user_id || '';
         if (!aeData[id]) aeData[id] = { acv: 0, deals: 0 };
         aeData[id].acv += o.acv || 0;
-        aeData[id].deals++;
+        if (o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0) {
+          aeData[id].deals++;
+        }
       });
 
       allAEs.forEach(ae => {

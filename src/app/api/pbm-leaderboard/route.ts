@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod } from '@/lib/fiscal';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(request: NextRequest) {
   try {
@@ -173,12 +174,12 @@ export async function GET(request: NextRequest) {
      */
 
     if (board === 'revenue') {
-      const pbmData: Record<string, { acv: number; deals: Set<string> }> = {};
+      const pbmData: Record<string, { acv: number; deals: Set<string>; countableDeals: Set<string> }> = {};
 
       if (pbmSfIds.length > 0) {
         let oppQuery = db
           .from('opportunities')
-          .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv')
+          .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, sub_type')
           .eq('is_closed_won', true)
           .or('channel_owner_sf_id.not.is.null,rv_account_sf_id.not.is.null');
         if (startStr) oppQuery = oppQuery.gte('close_date', startStr);
@@ -194,7 +195,7 @@ export async function GET(request: NextRequest) {
             const batch = oppSfIdsFromPartners.slice(i, i + 500);
             let q = db
               .from('opportunities')
-              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv')
+              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, sub_type')
               .eq('is_closed_won', true)
               .in('salesforce_opportunity_id', batch);
             if (startStr) q = q.gte('close_date', startStr);
@@ -216,12 +217,15 @@ export async function GET(request: NextRequest) {
           const oppSfId = o.salesforce_opportunity_id;
           const creditedPbms = new Set<string>();
 
+          const isCountable = o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && acv > 0;
+
           const creditPbm = (localId: string) => {
             if (creditedPbms.has(localId)) return;
             creditedPbms.add(localId);
-            if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: new Set() };
+            if (!pbmData[localId]) pbmData[localId] = { acv: 0, deals: new Set(), countableDeals: new Set() };
             pbmData[localId].acv += acv;
             pbmData[localId].deals.add(oppSfId);
+            if (isCountable) pbmData[localId].countableDeals.add(oppSfId);
           };
 
           // Credit 1: Channel Owner on Opportunity
@@ -251,7 +255,7 @@ export async function GET(request: NextRequest) {
       }
 
       allPBMs.forEach(pbm => {
-        const data = pbmData[pbm.id] || { acv: 0, deals: new Set() };
+        const data = pbmData[pbm.id] || { acv: 0, deals: new Set(), countableDeals: new Set() };
         entries.push({
           rank: 0,
           user_id: pbm.id,
@@ -261,7 +265,7 @@ export async function GET(request: NextRequest) {
           primary_metric: data.acv,
           secondary_metrics: {
             acv_closed: data.acv,
-            deals_closed: data.deals.size,
+            deals_closed: data.countableDeals.size,
           },
           is_current_user: pbm.id === (viewAsUser?.user_id ?? user.user_id),
         });

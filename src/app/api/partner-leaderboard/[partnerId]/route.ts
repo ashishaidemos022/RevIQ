@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro'];
 
@@ -130,6 +131,7 @@ export async function GET(
       opportunity_source: o.opportunity_source,
       rv_account_type: o.rv_account_type,
       sf_created_date: o.sf_created_date,
+      sub_type: o.sub_type,
     }));
 
     // Compute date range for the selected period
@@ -196,7 +198,7 @@ export async function GET(
       quarterlyTrend.push({
         quarter: `Q${q}`,
         acv: qDeals.reduce((s, d) => s + ((d.acv as number) || 0), 0),
-        deals: qDeals.length,
+        deals: qDeals.filter(d => d.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(d.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && ((d.acv as number) || 0) > 0).length,
       });
     }
 
@@ -213,8 +215,8 @@ export async function GET(
         kpis: {
           acv_closed_qtd: acvClosedQTD,
           acv_closed_ytd: acvClosedYTD,
-          deals_closed_qtd: closedWonQTD.length,
-          deals_closed_ytd: closedWonYTD.length,
+          deals_closed_qtd: closedWonQTD.filter(d => d.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(d.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && ((d.acv as number) || 0) > 0).length,
+          deals_closed_ytd: closedWonYTD.filter(d => d.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(d.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && ((d.acv as number) || 0) > 0).length,
           pipeline_acv: pipelineACV,
           open_deals: openDeals.length,
           active_pilots: activePilots.length,

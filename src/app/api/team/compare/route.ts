@@ -15,6 +15,7 @@ import {
 } from '@/lib/fiscal';
 import { getDirectReports } from '@/lib/supabase/queries/hierarchy';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 const MANAGER_PLUS = ['leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
@@ -104,10 +105,10 @@ export async function GET(request: NextRequest) {
         const endStr = getQuarterEndDate(q.fiscalYear, q.fiscalQuarter).toISOString().split('T')[0];
 
         // Closed-won ACV
-        const closedOpps = await fetchAll<{ acv: number | null }>(() =>
+        const closedOpps = await fetchAll<{ acv: number | null; sub_type: string | null }>(() =>
           batchedIn(
             db.from('opportunities')
-              .select('acv')
+              .select('acv, sub_type')
               .eq('is_closed_won', true)
               .gte('close_date', startStr)
               .lte('close_date', endStr),
@@ -117,7 +118,9 @@ export async function GET(request: NextRequest) {
         );
 
         const acvClosed = closedOpps.reduce((s, o) => s + (o.acv || 0), 0);
-        const dealsClosed = closedOpps.length;
+        const dealsClosed = closedOpps.filter(
+          o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
+        ).length;
 
         // Activities count
         let actQuery = db

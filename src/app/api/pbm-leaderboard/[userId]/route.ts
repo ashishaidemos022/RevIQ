@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(
   request: NextRequest,
@@ -131,7 +132,7 @@ export async function GET(
           id, salesforce_opportunity_id, name, acv, close_date, stage,
           is_closed_won, is_closed_lost, is_paid_pilot, pilot_status,
           paid_pilot_start_date, record_type_name, opportunity_source,
-          sf_created_date, account_id, channel_owner_sf_id, rv_account_sf_id
+          sf_created_date, account_id, channel_owner_sf_id, rv_account_sf_id, sub_type
         `)
         .eq('channel_owner_sf_id', pbmSfId)
         .gte('close_date', '2025-02-01')
@@ -160,7 +161,7 @@ export async function GET(
               id, salesforce_opportunity_id, name, acv, close_date, stage,
               is_closed_won, is_closed_lost, is_paid_pilot, pilot_status,
               paid_pilot_start_date, record_type_name, opportunity_source,
-              sf_created_date, account_id, channel_owner_sf_id, rv_account_sf_id
+              sf_created_date, account_id, channel_owner_sf_id, rv_account_sf_id, sub_type
             `)
             .in('rv_account_sf_id', batch)
             .gte('close_date', '2025-02-01')
@@ -185,7 +186,7 @@ export async function GET(
             id, salesforce_opportunity_id, name, acv, close_date, stage,
             is_closed_won, is_closed_lost, is_paid_pilot, pilot_status,
             paid_pilot_start_date, record_type_name, opportunity_source,
-            sf_created_date, account_id, channel_owner_sf_id, rv_account_sf_id
+            sf_created_date, account_id, channel_owner_sf_id, rv_account_sf_id, sub_type
           `)
           .in('salesforce_opportunity_id', batch)
           .gte('close_date', '2025-02-01');
@@ -265,8 +266,8 @@ export async function GET(
         kpis: {
           acv_closed_qtd: acvClosedQTD,
           acv_closed_ytd: acvClosedYTD,
-          deals_closed_qtd: closedWonQTD.length,
-          deals_closed_ytd: closedWonYTD.length,
+          deals_closed_qtd: closedWonQTD.filter(o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (parseFloat(o.acv as string) || 0) > 0).length,
+          deals_closed_ytd: closedWonYTD.filter(o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (parseFloat(o.acv as string) || 0) > 0).length,
           pipeline_acv: pipelineACV,
           open_deals: openDeals.length,
         },

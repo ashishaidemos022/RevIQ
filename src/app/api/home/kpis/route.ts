@@ -4,6 +4,7 @@ import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQu
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,10 +23,10 @@ export async function GET(request: NextRequest) {
     const fyEndStr = fyEnd.toISOString().split('T')[0];
 
     // Closed-won QTD (paginated)
-    const qtdOpps = await fetchAll<{ acv: number | null }>(() => {
+    const qtdOpps = await fetchAll<{ acv: number | null; sub_type: string | null }>(() => {
       let q = db
         .from('opportunities')
-        .select('acv')
+        .select('acv, sub_type')
         .eq('is_closed_won', true)
         .gte('close_date', qStartStr)
         .lte('close_date', qEndStr);
@@ -33,7 +34,9 @@ export async function GET(request: NextRequest) {
     });
 
     const acvClosedQTD = qtdOpps.reduce((s, o) => s + (o.acv || 0), 0);
-    const dealsClosedQTD = qtdOpps.length;
+    const dealsClosedQTD = qtdOpps.filter(
+      o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
+    ).length;
 
     // Closed-won YTD (paginated)
     const ytdOpps = await fetchAll<{ acv: number | null }>(() => {

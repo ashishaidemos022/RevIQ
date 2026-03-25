@@ -5,6 +5,7 @@ import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credite
 import { getOrgSubtree } from '@/lib/supabase/queries/hierarchy';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
         const batch = creditedOppSfIds.slice(i, i + 500);
         const { data: opps } = await db
           .from('opportunities')
-          .select('salesforce_opportunity_id, acv, close_date, is_closed_won')
+          .select('salesforce_opportunity_id, acv, close_date, is_closed_won, sub_type')
           .eq('is_closed_won', true)
           .in('salesforce_opportunity_id', batch);
 
@@ -61,7 +62,9 @@ export async function GET(request: NextRequest) {
           }
           if (cd >= qStart && cd <= qEnd) {
             acvClosedQTD += acv;
-            dealsClosedQTD++;
+            if (o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && acv > 0) {
+              dealsClosedQTD++;
+            }
           }
         });
       }

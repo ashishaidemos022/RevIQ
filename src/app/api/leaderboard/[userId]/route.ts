@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
+import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
 export async function GET(
   request: NextRequest,
@@ -84,7 +85,7 @@ export async function GET(
           id, name, acv, close_date, stage, is_closed_won, is_closed_lost,
           is_paid_pilot, pilot_status, paid_pilot_start_date,
           record_type_name, opportunity_source, sf_created_date,
-          account_id
+          account_id, sub_type
         `)
         .eq('owner_user_id', userId)
         .gte('close_date', '2025-02-01')
@@ -190,8 +191,8 @@ export async function GET(
         kpis: {
           acv_closed_qtd: acvClosedQTD,
           acv_closed_ytd: acvClosedYTD,
-          deals_closed_qtd: closedWonQTD.length,
-          deals_closed_ytd: closedWonYTD.length,
+          deals_closed_qtd: closedWonQTD.filter(o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && ((o.acv as number) || 0) > 0).length,
+          deals_closed_ytd: closedWonYTD.filter(o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && ((o.acv as number) || 0) > 0).length,
           pipeline_acv: pipelineACV,
           open_deals: openDeals.length,
         },

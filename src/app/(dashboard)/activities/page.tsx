@@ -68,17 +68,25 @@ export default function ActivitiesPage() {
 
   // Weekly trend chart data (stacked by type) — all weeks in the quarter
   const weeklyData = useMemo(() => {
+    // Helper to format date as YYYY-MM-DD without timezone issues
+    const toDateKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    // Helper to get Monday of the week for a given date (local time)
+    const getMonday = (d: Date) => {
+      const result = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const day = result.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      result.setDate(result.getDate() + diff);
+      return result;
+    };
+
     const weeks: Record<string, Record<string, number | string>> = {};
 
     // Pre-fill all weeks in the quarter
-    const cursor = new Date(qStart);
-    // Align to Monday
-    const cursorDay = cursor.getDay();
-    const diff = cursorDay === 0 ? -6 : 1 - cursorDay;
-    cursor.setDate(cursor.getDate() + diff);
-
+    const cursor = getMonday(qStart);
     while (cursor <= qEnd) {
-      const weekKey = cursor.toISOString().split("T")[0];
+      const weekKey = toDateKey(cursor);
       const label = cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       weeks[weekKey] = { week: label, call_count: 0, email_count: 0, meeting_count: 0, linkedin_count: 0 };
       cursor.setDate(cursor.getDate() + 7);
@@ -86,12 +94,11 @@ export default function ActivitiesPage() {
 
     // Fill in actual data
     rows.forEach((row) => {
-      const date = new Date(row.activity_date);
-      const day = date.getDay();
-      const mondayDiff = date.getDate() - day + (day === 0 ? -6 : 1);
-      const weekStart = new Date(date);
-      weekStart.setDate(mondayDiff);
-      const weekKey = weekStart.toISOString().split("T")[0];
+      // Parse activity_date as local date (not UTC)
+      const [y, m, d] = row.activity_date.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      const monday = getMonday(date);
+      const weekKey = toDateKey(monday);
 
       if (weeks[weekKey]) {
         weeks[weekKey].call_count = (Number(weeks[weekKey].call_count) || 0) + (row.call_count || 0);

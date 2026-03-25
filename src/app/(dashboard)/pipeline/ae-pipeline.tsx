@@ -30,8 +30,9 @@ import {
 } from "@/components/ui/select";
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
 import { Opportunity } from "@/types";
+import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
 
-const STAGES = ["Discovery", "Qualification", "Proposal", "Negotiation"];
+const STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
 const DEAL_TYPES = [
   { value: "new_business", label: "New Business" },
   { value: "renewal", label: "Renewal" },

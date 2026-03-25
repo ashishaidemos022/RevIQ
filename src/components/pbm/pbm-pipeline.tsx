@@ -26,8 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
+import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
 
-const STAGES = ["Discovery", "Qualification", "Proposal", "Negotiation"];
+const STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
 
 export function PbmPipeline() {
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();

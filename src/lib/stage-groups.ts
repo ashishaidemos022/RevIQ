@@ -1,5 +1,5 @@
 /** Stages excluded from open pipeline entirely (closed/dead/won) */
-const EXCLUDED_STAGES = [
+export const EXCLUDED_STAGES = [
   'Closed Lost',
   'Dead-Duplicate',
   'Stage 6-Closed-Won: Finance Approved',
@@ -9,7 +9,7 @@ const EXCLUDED_STAGES = [
 ];
 
 /** Early pipeline stages (SS0–SS2) */
-const SS0_SS2_STAGES = [
+export const SS0_SS2_STAGES = [
   'Stage 0',
   'Stage 1-Business Discovery',
   'Stage 1-Renewal Placeholder',
@@ -18,7 +18,7 @@ const SS0_SS2_STAGES = [
 ];
 
 /** Qualified pipeline stages (SS3+) */
-const QUALIFIED_STAGES = [
+export const QUALIFIED_STAGES = [
   'Stage 3-Evaluation',
   'Stage 3-Proposal',
   'Stage 4-Shortlist',

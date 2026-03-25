@@ -14,7 +14,7 @@ export type QuotaType = 'revenue' | 'pilots' | 'pipeline' | 'activities';
 export type ForecastCategory = 'commit' | 'best_case' | 'pipeline' | 'omitted';
 export type OpportunityType = 'new_business' | 'renewal' | 'expansion';
 export type ActivityType = 'call' | 'email' | 'linkedin' | 'meeting';
-export type SyncType = 'salesforce' | 'looker' | 'scim' | 'snowflake';
+export type SyncType = 'salesforce' | 'scim' | 'snowflake';
 export type SyncStatus = 'running' | 'success' | 'partial' | 'failed' | 'warning';
 export type Theme = 'light' | 'dark';
 
@@ -214,7 +214,6 @@ export interface UsageMetric {
   metric_date: string;
   product_type: string;
   interaction_count: number;
-  looker_query_id: string | null;
   fetched_at: string;
 }
 

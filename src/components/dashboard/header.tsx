@@ -155,12 +155,11 @@ export function Header() {
 
   const { data: lastSync } = useQuery({
     queryKey: ["sync-last"],
-    queryFn: () => apiFetch<{ salesforce: string | null; looker: string | null; snowflake: string | null }>("/api/sync/last"),
+    queryFn: () => apiFetch<{ salesforce: string | null; snowflake: string | null }>("/api/sync/last"),
     refetchInterval: 60_000,
   });
 
   const sf = formatRelativeTime(lastSync?.salesforce ?? null);
-  const looker = formatRelativeTime(lastSync?.looker ?? null);
   const snowflakeStatus = formatRelativeTime(lastSync?.snowflake ?? null);
 
   const initials = user?.full_name
@@ -199,8 +198,6 @@ export function Header() {
 
         <div className="hidden md:flex items-center gap-2 text-xs">
           <span className={staleStyles[sf.stale]}>SF: {sf.text}</span>
-          <span className="text-border">|</span>
-          <span className={staleStyles[looker.stale]}>Looker: {looker.text}</span>
           <span className="text-border">|</span>
           <span className={staleStyles[snowflakeStatus.stale]}>Snowflake: {snowflakeStatus.text}</span>
         </div>

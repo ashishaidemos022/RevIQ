@@ -135,18 +135,6 @@ export function SyncTab() {
             <Button
               variant="outline"
               disabled={!!syncing}
-              onClick={() => syncMutation.mutate("looker")}
-            >
-              {syncing === "looker" ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Sync Looker Usage
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!!syncing}
               onClick={() => syncMutation.mutate("snowflake")}
             >
               {syncing === "snowflake" ? (

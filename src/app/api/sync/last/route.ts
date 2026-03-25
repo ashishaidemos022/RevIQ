@@ -17,15 +17,6 @@ export async function GET() {
       .limit(1)
       .single();
 
-    const { data: lookerSync } = await db
-      .from('sync_log')
-      .select('completed_at')
-      .eq('sync_type', 'looker')
-      .in('status', ['success', 'partial'])
-      .order('completed_at', { ascending: false })
-      .limit(1)
-      .single();
-
     const { data: snowflakeSync } = await db
       .from('sync_log')
       .select('completed_at')
@@ -37,7 +28,6 @@ export async function GET() {
 
     return NextResponse.json({
       salesforce: sfSync?.completed_at || null,
-      looker: lookerSync?.completed_at || null,
       snowflake: snowflakeSync?.completed_at || null,
     });
   } catch (error) {

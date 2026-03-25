@@ -34,10 +34,10 @@ import {
 } from "recharts";
 
 const ACTIVITY_TYPES = [
-  { value: "call", label: "Calls", color: "hsl(var(--chart-1))", countKey: "call_count" as const },
-  { value: "email", label: "Emails", color: "hsl(var(--chart-2))", countKey: "email_count" as const },
-  { value: "meeting", label: "Meetings", color: "hsl(var(--chart-3))", countKey: "meeting_count" as const },
-  { value: "linkedin", label: "LinkedIn", color: "hsl(var(--chart-4))", countKey: "linkedin_count" as const },
+  { value: "call", label: "Calls", color: "#7c3aed", countKey: "call_count" as const },
+  { value: "email", label: "Emails", color: "#14b8a6", countKey: "email_count" as const },
+  { value: "meeting", label: "Meetings", color: "#eab308", countKey: "meeting_count" as const },
+  { value: "linkedin", label: "LinkedIn", color: "#f43f5e", countKey: "linkedin_count" as const },
 ];
 
 type CountKey = "call_count" | "email_count" | "meeting_count" | "linkedin_count";
@@ -66,33 +66,45 @@ export default function ActivitiesPage() {
   const rows = activitiesData?.data || [];
   const totals = activitiesData?.totals;
 
-  // Weekly trend chart data (stacked by type)
+  // Weekly trend chart data (stacked by type) — all weeks in the quarter
   const weeklyData = useMemo(() => {
     const weeks: Record<string, Record<string, number | string>> = {};
 
+    // Pre-fill all weeks in the quarter
+    const cursor = new Date(qStart);
+    // Align to Monday
+    const cursorDay = cursor.getDay();
+    const diff = cursorDay === 0 ? -6 : 1 - cursorDay;
+    cursor.setDate(cursor.getDate() + diff);
+
+    while (cursor <= qEnd) {
+      const weekKey = cursor.toISOString().split("T")[0];
+      const label = cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      weeks[weekKey] = { week: label, call_count: 0, email_count: 0, meeting_count: 0, linkedin_count: 0 };
+      cursor.setDate(cursor.getDate() + 7);
+    }
+
+    // Fill in actual data
     rows.forEach((row) => {
       const date = new Date(row.activity_date);
-      // Get start of week (Monday)
       const day = date.getDay();
-      const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+      const mondayDiff = date.getDate() - day + (day === 0 ? -6 : 1);
       const weekStart = new Date(date);
-      weekStart.setDate(diff);
+      weekStart.setDate(mondayDiff);
       const weekKey = weekStart.toISOString().split("T")[0];
-      const label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-      if (!weeks[weekKey]) {
-        weeks[weekKey] = { week: label, call_count: 0, email_count: 0, meeting_count: 0, linkedin_count: 0 };
+      if (weeks[weekKey]) {
+        weeks[weekKey].call_count = (Number(weeks[weekKey].call_count) || 0) + (row.call_count || 0);
+        weeks[weekKey].email_count = (Number(weeks[weekKey].email_count) || 0) + (row.email_count || 0);
+        weeks[weekKey].meeting_count = (Number(weeks[weekKey].meeting_count) || 0) + (row.meeting_count || 0);
+        weeks[weekKey].linkedin_count = (Number(weeks[weekKey].linkedin_count) || 0) + (row.linkedin_count || 0);
       }
-      weeks[weekKey].call_count = (Number(weeks[weekKey].call_count) || 0) + (row.call_count || 0);
-      weeks[weekKey].email_count = (Number(weeks[weekKey].email_count) || 0) + (row.email_count || 0);
-      weeks[weekKey].meeting_count = (Number(weeks[weekKey].meeting_count) || 0) + (row.meeting_count || 0);
-      weeks[weekKey].linkedin_count = (Number(weeks[weekKey].linkedin_count) || 0) + (row.linkedin_count || 0);
     });
 
     return Object.entries(weeks)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, data]) => data);
-  }, [rows]);
+  }, [rows, qStart, qEnd]);
 
   // Activity by AE (Managers+ only)
   const aeActivityData = useMemo(() => {
@@ -127,7 +139,6 @@ export default function ActivitiesPage() {
     { key: "meeting", header: "Meetings" },
     { key: "linkedin", header: "LinkedIn" },
     { key: "total", header: "Total" },
-    { key: "lastDate", header: "Last Activity" },
   ];
 
   // Filter chart data visually when a type filter is selected
@@ -141,7 +152,9 @@ export default function ActivitiesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">Activities</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Activities ({qStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {qEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})
+        </h1>
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={typeFilter} onValueChange={(v) => v && setTypeFilter(v)}>

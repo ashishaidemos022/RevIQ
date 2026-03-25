@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sync-opportunities",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-activities",
+      "schedule": "0 7 * * *"
     }
   ]
 }

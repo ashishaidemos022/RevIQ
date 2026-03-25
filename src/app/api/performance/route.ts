@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
+import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery, batchedIn } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
@@ -123,15 +123,44 @@ export async function GET(request: NextRequest) {
 
         commissionEarned = comms.reduce((s, c) => s + (c.commission_amount || 0), 0);
 
-        // Activities — use server-side count (no 1000-row issue)
-        let actQuery = db
-          .from('activities')
-          .select('id', { count: 'exact', head: true })
-          .gte('activity_date', startStr)
-          .lte('activity_date', endStr);
-        actQuery = applyScope(actQuery, 'owner_user_id');
-        const { count } = await actQuery;
-        totalActivities = count || 0;
+        // Activities from activity_daily_summary via SF IDs
+        if (ownerId) {
+          const { data: ownerSfRow } = await db
+            .from('users')
+            .select('salesforce_user_id')
+            .eq('id', ownerId)
+            .single();
+          if (ownerSfRow?.salesforce_user_id) {
+            const actRows = await fetchAll<{ activity_count: number }>(() =>
+              db.from('activity_daily_summary')
+                .select('activity_count')
+                .eq('owner_sf_id', ownerSfRow.salesforce_user_id)
+                .gte('activity_date', startStr)
+                .lte('activity_date', endStr)
+            );
+            totalActivities = actRows.reduce((s, r) => s + (r.activity_count || 0), 0);
+          }
+        } else {
+          // Scoped query — resolve all user SF IDs in scope
+          const scopeUserIds = scope.allAccess ? null : scope.userIds;
+          let sfQuery = db.from('users').select('salesforce_user_id').not('salesforce_user_id', 'is', null);
+          if (scopeUserIds) sfQuery = sfQuery.in('id', scopeUserIds);
+          const { data: sfRows } = await sfQuery;
+          const sfIds = (sfRows || []).map((u: { salesforce_user_id: string }) => u.salesforce_user_id);
+          if (sfIds.length > 0) {
+            const actRows = await fetchAll<{ activity_count: number }>(() =>
+              batchedIn(
+                db.from('activity_daily_summary')
+                  .select('activity_count')
+                  .gte('activity_date', startStr)
+                  .lte('activity_date', endStr),
+                'owner_sf_id',
+                sfIds
+              )
+            );
+            totalActivities = actRows.reduce((s, r) => s + (r.activity_count || 0), 0);
+          }
+        }
       }
 
       // Quota — use target user's own quota (not sum of subordinates)

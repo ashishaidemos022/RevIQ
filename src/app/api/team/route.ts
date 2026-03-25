@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Get AEs and PBMs in scope
     let usersQuery = db
       .from('users')
-      .select('id, full_name, email, role, region')
+      .select('id, full_name, email, role, region, salesforce_user_id')
       .in('role', ['commercial_ae', 'enterprise_ae', 'pbm'])
       .eq('is_active', true);
 
@@ -119,14 +119,22 @@ export async function GET(request: NextRequest) {
       )
     );
 
-    // Get activities QTD — paginated
-    const acts = await fetchAll<{ owner_user_id: string | null }>(() =>
-      batchedIn(
-        db.from('activities').select('owner_user_id').gte('activity_date', qStartStr).lte('activity_date', qEndStr),
-        'owner_user_id',
-        allIds
-      )
-    );
+    // Get activities QTD from activity_daily_summary via SF IDs
+    const aeSfIdToUserId = new Map<string, string>();
+    aeMembers.forEach((m: { id: string; salesforce_user_id?: string | null }) => {
+      if (m.salesforce_user_id) aeSfIdToUserId.set(m.salesforce_user_id, m.id);
+    });
+    const aeSfIds = [...aeSfIdToUserId.keys()];
+
+    const actSummaries = aeSfIds.length > 0
+      ? await fetchAll<{ owner_sf_id: string; activity_count: number }>(() =>
+          batchedIn(
+            db.from('activity_daily_summary').select('owner_sf_id, activity_count').gte('activity_date', qStartStr).lte('activity_date', qEndStr),
+            'owner_sf_id',
+            aeSfIds
+          )
+        )
+      : [];
 
     // Get commissions QTD — paginated
     const comms = await fetchAll<{ user_id: string; commission_amount: number | null }>(() =>
@@ -149,8 +157,9 @@ export async function GET(request: NextRequest) {
     });
 
     const activityCount: Record<string, number> = {};
-    acts.forEach((a) => {
-      if (a.owner_user_id) activityCount[a.owner_user_id] = (activityCount[a.owner_user_id] || 0) + 1;
+    actSummaries.forEach((a) => {
+      const userId = aeSfIdToUserId.get(a.owner_sf_id);
+      if (userId) activityCount[userId] = (activityCount[userId] || 0) + (a.activity_count || 0);
     });
 
     const commMap: Record<string, number> = {};

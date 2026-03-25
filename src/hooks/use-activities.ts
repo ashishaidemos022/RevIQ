@@ -2,24 +2,42 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { Activity } from "@/types";
 
 interface ActivitiesParams {
-  activity_type?: string;
   date_from?: string;
   date_to?: string;
-  owner_user_id?: string;
   limit?: number;
   offset?: number;
 }
 
+export interface ActivitySummaryRow {
+  id: string;
+  owner_sf_id: string;
+  ae_name: string;
+  activity_date: string;
+  activity_count: number;
+  call_count: number;
+  email_count: number;
+  linkedin_count: number;
+  meeting_count: number;
+  synced_at: string;
+  // Enriched from users table
+  user_id: string | null;
+  full_name: string;
+  region: string | null;
+}
+
+export interface ActivityTotals {
+  activity_count: number;
+  call_count: number;
+  email_count: number;
+  linkedin_count: number;
+  meeting_count: number;
+}
+
 interface ActivitiesResponse {
-  data: (Activity & {
-    accounts?: { id: string; name: string };
-    opportunities?: { id: string; name: string };
-    users?: { id: string; full_name: string };
-  })[];
-  total: number;
+  data: ActivitySummaryRow[];
+  totals: ActivityTotals;
 }
 
 export function useActivities(params: ActivitiesParams = {}) {

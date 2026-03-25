@@ -122,14 +122,28 @@ export async function GET(request: NextRequest) {
           o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
         ).length;
 
-        // Activities count
-        let actQuery = db
-          .from('activities')
-          .select('id', { count: 'exact', head: true })
-          .gte('activity_date', startStr)
-          .lte('activity_date', endStr);
-        actQuery = batchedIn(actQuery, 'owner_user_id', memberIds);
-        const { count: actCount } = await actQuery;
+        // Activities count from activity_daily_summary via SF IDs
+        const { data: memberSfUsers } = await db
+          .from('users')
+          .select('salesforce_user_id')
+          .in('id', memberIds)
+          .not('salesforce_user_id', 'is', null);
+        const memberSfIds = (memberSfUsers || []).map((u: { salesforce_user_id: string }) => u.salesforce_user_id);
+
+        let actCount = 0;
+        if (memberSfIds.length > 0) {
+          const actRows = await fetchAll<{ activity_count: number }>(() =>
+            batchedIn(
+              db.from('activity_daily_summary')
+                .select('activity_count')
+                .gte('activity_date', startStr)
+                .lte('activity_date', endStr),
+              'owner_sf_id',
+              memberSfIds
+            )
+          );
+          actCount = actRows.reduce((s, r) => s + (r.activity_count || 0), 0);
+        }
 
         // Active pilots
         const pilots = await fetchAll<{ is_closed_won: boolean; is_closed_lost: boolean }>(() =>

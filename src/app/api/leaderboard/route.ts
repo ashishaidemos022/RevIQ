@@ -274,24 +274,38 @@ export async function GET(request: NextRequest) {
 
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
     } else if (board === 'activities') {
-      let query = db
-        .from('activities')
-        .select('owner_user_id, activity_type')
-        .in('owner_user_id', aeIds);
-      if (startStr) query = query.gte('activity_date', startStr);
-      if (endStr) query = query.lte('activity_date', endStr);
-      const { data: acts } = await query;
+      // Look up SF IDs for AEs to query activity_daily_summary
+      const { data: aeSfUsers } = await db
+        .from('users')
+        .select('id, salesforce_user_id')
+        .in('id', aeIds)
+        .not('salesforce_user_id', 'is', null);
+
+      const sfIdToUserId = new Map<string, string>();
+      (aeSfUsers || []).forEach((u: { id: string; salesforce_user_id: string }) => {
+        sfIdToUserId.set(u.salesforce_user_id, u.id);
+      });
+      const sfIds = [...sfIdToUserId.keys()];
+
+      let actQuery = db
+        .from('activity_daily_summary')
+        .select('owner_sf_id, activity_count, call_count, email_count, linkedin_count, meeting_count');
+      if (sfIds.length > 0) actQuery = actQuery.in('owner_sf_id', sfIds);
+      else actQuery = actQuery.in('owner_sf_id', ['__none__']);
+      if (startStr) actQuery = actQuery.gte('activity_date', startStr);
+      if (endStr) actQuery = actQuery.lte('activity_date', endStr);
+      const { data: acts } = await actQuery;
 
       const aeData: Record<string, { total: number; call: number; email: number; meeting: number; linkedin: number }> = {};
-      (acts || []).forEach((a: { owner_user_id: string | null; activity_type: string }) => {
-        const id = a.owner_user_id || '';
-        if (!aeData[id]) aeData[id] = { total: 0, call: 0, email: 0, meeting: 0, linkedin: 0 };
-        aeData[id].total++;
-        const type = a.activity_type?.toLowerCase();
-        if (type === 'call') aeData[id].call++;
-        else if (type === 'email') aeData[id].email++;
-        else if (type === 'meeting') aeData[id].meeting++;
-        else if (type === 'linkedin') aeData[id].linkedin++;
+      (acts || []).forEach((a: { owner_sf_id: string; activity_count: number; call_count: number; email_count: number; meeting_count: number; linkedin_count: number }) => {
+        const userId = sfIdToUserId.get(a.owner_sf_id);
+        if (!userId) return;
+        if (!aeData[userId]) aeData[userId] = { total: 0, call: 0, email: 0, meeting: 0, linkedin: 0 };
+        aeData[userId].total += a.activity_count || 0;
+        aeData[userId].call += a.call_count || 0;
+        aeData[userId].email += a.email_count || 0;
+        aeData[userId].meeting += a.meeting_count || 0;
+        aeData[userId].linkedin += a.linkedin_count || 0;
       });
 
       allAEs.forEach(ae => {

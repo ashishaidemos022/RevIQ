@@ -1,8 +1,8 @@
 # TD RevenueIQ — Product Specification (`claude.md`)
 
-> **Version:** 1.1 — Quota/Commission/Looker/Pilot field clarifications  
-> **Last Updated:** 2026-03-10  
-> **Status:** Ready for Implementation  
+> **Version:** 1.2 — Role mapping, PBM/Partner features, implementation notes
+> **Last Updated:** 2026-03-24
+> **Status:** Active Development  
 > **Prepared for:** Engineering, Product, RevOps
 
 ---
@@ -46,8 +46,9 @@
 | Phase | Scope |
 |-------|-------|
 | **v1 (this spec)** | Core dashboards, AE/Manager views, 4-quarter view, leaderboards, commission calc, Looker usage tab, Okta SSO, Salesforce sync, Supabase backend |
+| **v1.5 (current)** | PBM dashboards (Home, Pipeline, Pilots, Performance), PBM Leaderboard, Partner Leaderboard, PBM credit attribution via 3 paths, DualViewPage for AE/PBM tabbed views |
 | **v2** | Notifications & alerts, export/reporting, scheduled email digests, dispute/correction workflow |
-| **v3** | Partner portal, partner attribution, deal registration |
+| **v3** | Partner portal (remaining), partner attribution weights, deal registration |
 
 ---
 
@@ -71,17 +72,29 @@ RevOps Read-Only — revops_ro (full company visibility, no writes)
 
 ### Role Definitions & Data Access
 
-| Role | Display Name | Data Scope | Can Edit Quotas | Can Edit Commission Rates |
-|------|-------------|------------|-----------------|--------------------------|
-| `ae` | Account Executive | Own opportunities, activities, commissions only | No | No |
-| `manager` | Sales Manager | All AEs in their direct + transitive reporting tree | No | No |
-| `avp` | Area VP | All managers and AEs within their group/pod subtree (broader than manager, narrower than VP) | No | No |
-| `vp` | VP / SVP | All managers, AVPs, and AEs within their full regional org subtree | No | No |
-| `cro` | CRO | Full company — all regions, all AEs | Read-only | Read-only |
-| `c_level` | C-Level | Full company — same as CRO | Yes (company-wide) | Yes |
-| `revops_ro` | RevOps (Read-Only) | Full company — read-only, no data modifications | No | No |
-| `revops_rw` | RevOps (Read/Write) | Full company — full read + write access to quotas, commission rates, and sync | Yes (company-wide) | Yes |
-| `enterprise_ro` | Enterprise App Group | Full company — read-only access to all dashboards and data, no exceptions | No | No |
+> **IMPLEMENTATION NOTE:** The codebase uses simplified role slugs that differ from the original spec. The mapping is shown below. All code must use the **Implementation Role** values from `src/lib/constants.ts`.
+
+| Spec Role | Implementation Role | Display Name | Data Scope | Can Edit Quotas | Can Edit Commission Rates |
+|-----------|-------------------|-------------|------------|-----------------|--------------------------|
+| `ae` | `commercial_ae` | Commercial AE | Own opportunities, activities, commissions only | No | No |
+| `ae` | `enterprise_ae` | Enterprise AE | Own opportunities, activities, commissions only | No | No |
+| *(new)* | `pbm` | Partner Business Manager | Own PBM-credited opportunities only (via 3 credit paths) | No | No |
+| `manager` / `avp` / `vp` | `leader` | Sales Leader | All reports in their direct + transitive reporting tree (depth-agnostic) | No | No |
+| `cro` | `cro` | CRO | Full company — all regions, all AEs, all PBMs | Read-only | Read-only |
+| `c_level` | `c_level` | C-Level | Full company — same as CRO | Yes (company-wide) | Yes |
+| `revops_ro` | `revops_ro` | RevOps (Read-Only) | Full company — read-only, no data modifications | No | No |
+| `revops_rw` | `revops_rw` | RevOps (Read/Write) | Full company — full read + write access to quotas, commission rates, and sync | Yes (company-wide) | Yes |
+| `enterprise_ro` | `enterprise_ro` | Enterprise App Group | Full company — read-only access to all dashboards and data, no exceptions | No | No |
+
+### Role Constants (`src/lib/constants.ts`)
+```typescript
+AE_ROLES       = ['commercial_ae', 'enterprise_ae']
+PBM_ROLES      = ['pbm']
+FULL_ACCESS_ROLES = ['cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro']
+MANAGER_PLUS_ROLES = ['leader', ...FULL_ACCESS_ROLES]
+```
+
+> **Key difference:** The original spec defined separate `manager`, `avp`, and `vp` roles. In implementation, these are all unified under the `leader` role — the hierarchy engine is depth-agnostic and resolves access purely from org tree position, not role name.
 
 ### Access Control Rules
 Access control is enforced **exclusively at the Next.js API layer**. Supabase has no awareness of the end user — it executes queries issued by the Next.js backend using the service role key. Every API route is responsible for scoping queries to the authenticated user's role and org position before hitting Supabase.
@@ -410,6 +423,35 @@ created_at                timestamptz DEFAULT now()
 updated_at                timestamptz DEFAULT now()
 ```
 
+#### `opportunities` — Additional PBM/Partner Columns (implemented)
+```sql
+channel_owner_sf_id    text           -- SF User ID of the Channel Manager on the opportunity
+rv_account_sf_id       text           -- Name of the RV Account linked to the opportunity
+sub_type               text           -- Deal sub-type (e.g., 'New Logo', 'Expansion', 'Renewal only', etc.)
+```
+
+#### `rv_accounts` (implemented)
+```sql
+id              uuid PRIMARY KEY
+name            text NOT NULL        -- RV Account name (matches opportunities.rv_account_sf_id)
+owner_sf_id     text                 -- SF User ID of the RV Account owner (PBM)
+created_at      timestamptz DEFAULT now()
+```
+
+#### `sf_partners` (implemented)
+```sql
+id                          uuid PRIMARY KEY
+salesforce_opportunity_id   text NOT NULL
+channel_owner_sf_id         text          -- SF User ID of the Partner Channel Owner (PBM)
+name                        text          -- Partner name
+created_at                  timestamptz DEFAULT now()
+```
+
+> **PBM Credit Resolution** (`src/lib/pbm/resolve-credited-opps.ts`): PBMs receive credit for opportunities via 3 paths:
+> 1. **Channel Owner** — `opportunities.channel_owner_sf_id` matches PBM's SF User ID
+> 2. **RV Account Owner** — `rv_accounts.owner_sf_id` matches PBM's SF User ID, then linked to opps via `rv_account_sf_id`
+> 3. **Partner Channel Owner** — `sf_partners.channel_owner_sf_id` matches PBM's SF User ID
+
 #### `activities`
 ```sql
 id                     uuid PRIMARY KEY
@@ -655,11 +697,24 @@ TD RevenueIQ
 ├── 🧪  Paid Pilots                  (pilot-specific dashboard)
 ├── ⚡  Activities                   (activity tracking dashboard)
 ├── 📈  Performance                  (4-quarter rolling view)
-├── 🏆  Leaderboard                  (4 boards: Revenue, Pipeline, Pilots, Activities)
+├── 🏆  AE Leaderboards             (Revenue, Pipeline, Pilots, Activities)
+├── 🤝  PBM Leaderboards            (PBM-specific leaderboard by credited ACV)
+├── 🏢  Partner Leaderboards        (Partner-level leaderboard by attributed ACV)
 ├── 📡  Usage                        (Looker usage data — account & opp level)
 ├── 👥  Team View                    (Managers+ only)
 └── ⚙️  Settings                     (Quotas, commission rates, sync, preferences, hierarchy, permission overrides)
 ```
+
+### DualViewPage Architecture (implemented)
+Pages with both AE and PBM data variants use the `DualViewPage` wrapper (`src/components/dashboard/dual-view-page.tsx`). This component calls `useTeamComposition()` to determine what views the user should see:
+
+- **IC AE users** → AE view only (no tabs)
+- **IC PBM users** → PBM view only (no tabs)
+- **Leaders/full-access with both AE and PBM reports** → Tabbed view ("AE View" / "PBM View")
+
+**Pages using DualViewPage:** Home, Pipeline, Pilots, Performance
+
+The `useTeamComposition` hook (`src/hooks/use-team-composition.ts`) resolves this locally for IC roles (no API call) and via `/api/team-composition` for leaders and full-access roles.
 
 ### Navigation Access by Role
 | Nav Item | AE | Manager | AVP | VP | CRO | C-Level | RevOps RO | RevOps RW | Enterprise RO |
@@ -690,18 +745,36 @@ TD RevenueIQ
 
 ## 11. Dashboards — Detailed Specs
 
+### Implementation Standards (apply to ALL dashboards)
+
+#### Countable Deal Subtypes (`src/lib/deal-subtypes.ts`)
+"Deals Closed" counts must ONLY include opportunities whose `sub_type` is one of:
+- `Renewal with expansion`, `Renewal with downgrade`, `Renewal only`, `New Logo`, `Expansion`, `Cross sell`
+- AND `acv > 0`
+
+This filter is applied in **all** endpoints that count deals: AE Home, PBM Home, AE Leaderboard, PBM Leaderboard, Partner Leaderboard, Team Compare, and user detail routes. ACV totals are NOT filtered by sub_type — only deal counts are.
+
+#### Salesforce Stage Groups (`src/lib/stage-groups.ts`)
+Pipeline stages are grouped as follows — always use the exported constants, never hardcode stage names:
+- **SS0–SS2 (Early Pipeline):** Stage 0, Stage 1-Business Discovery, Stage 1-Renewal Placeholder, Stage 2-Renewal Under Management, Stage 2-Solution Discovery
+- **Qualified Pipeline:** Stage 3-Evaluation, Stage 3-Proposal, Stage 4-Shortlist, Stage 4-Verbal, Stage 5-Vendor of Choice, Stage 6-Commit
+- **Excluded (closed/dead):** Closed Lost, Dead-Duplicate, Stage 6-Closed-Won: Finance Approved, Stage 5-Closed Won, Stage 7-Closed Won, Stage 8-Closed Won: Finance
+
+#### Quarterly Pacing (server-side, both AE and PBM)
+Expected pace through the quarter uses milestone targets: **20%** after Month 1, **50%** after Month 2, **100%** by end of quarter. Pace interpolates linearly within each month. Calculated server-side in the Home API routes.
+
 ---
 
 ### 11.1 Home / My Dashboard
 
-Default landing page for all roles. AEs see only their own performance data. Managers see their personal data plus quick team summary links.
+Default landing page for all roles. AEs see only their own performance data. PBMs see PBM-credited data. Managers see their personal data plus quick team summary links. Uses `DualViewPage` for AE/PBM tabbed views.
 
 #### KPI Cards (top row)
 | Card | Metric | Description |
 |------|--------|-------------|
 | ACV Closed QTD | `sum(acv) WHERE is_closed_won AND close_date IN current_fiscal_quarter` | |
 | ACV Closed YTD | `sum(acv) WHERE is_closed_won AND close_date IN current_fiscal_year` | |
-| Deals Closed QTD | `count(*) WHERE is_closed_won AND close_date IN current_fiscal_quarter` | |
+| Deals Closed QTD | `count(*) WHERE is_closed_won AND close_date IN current_fiscal_quarter AND sub_type IN COUNTABLE_DEAL_SUBTYPES AND acv > 0` | |
 | Commission Earned QTD | Sum of finalized `commission_amount` this fiscal quarter | |
 | Commission Projected QTD | Sum of unfinalized `commission_amount` this fiscal quarter | |
 | Quota Attainment % | `ACV Closed YTD ÷ Annual Quota × 100` | Shown as percentage with color indicator |
@@ -728,7 +801,7 @@ Columns: Account Name | Opportunity Name | Stage | ACV | Close Date | Paid Pilot
 
 ### 11.2 Pipeline Dashboard
 
-Focused view of open pipeline health and deal progression.
+Focused view of open pipeline health and deal progression. Uses `DualViewPage` for AE/PBM tabbed views. PBM view includes Credit Path, Partner, and PBM columns.
 
 #### Filters
 - Fiscal Quarter (multi-select, defaults to current)
@@ -758,7 +831,7 @@ Same schema as Home dashboard opportunities table, filtered to open opportunitie
 
 ### 11.3 Paid Pilots Dashboard
 
-Filtered view of all opportunities where `is_paid_pilot = true`.
+Filtered view of all opportunities where `is_paid_pilot = true`. Uses `DualViewPage` for AE/PBM tabbed views. PBM view includes Credit Path, Partner, and PBM columns.
 
 #### KPI Cards
 | Card | Description |
@@ -1029,6 +1102,16 @@ Period Toggle: MTD / QTD / YTD
 
 ---
 
+### Board 5: PBM Leaderboard (implemented — separate page `/pbm-leaderboard`)
+**Primary Ranking Metric:** ACV Credited (closed-won opportunities attributed to PBM via credit paths)
+
+Columns: Rank | PBM Name | ACV Credited | Deals Credited | Quota Attainment %
+
+### Board 6: Partner Leaderboard (implemented — separate page `/partner-leaderboard`)
+**Primary Ranking Metric:** ACV Attributed (closed-won opportunities linked to partner)
+
+Columns: Rank | Partner Name | ACV Attributed | Deals Attributed | Active Pilots
+
 ### Leaderboard UI Standards
 - **Top 3 rows:** Gold (#1), Silver (#2), Bronze (#3) styling with medal icon
 - **Current user's row:** Always visible and highlighted with a "You" badge — even if outside the top 10, their row is pinned at the bottom of the visible table
@@ -1218,9 +1301,17 @@ quota_scope_id    uuid REFERENCES quota_scopes(id) NULL
 
 > **Developer Note:** Create `opportunity_contributors` and `quota_scopes` tables in the v1 initial migration as stubs. Add `quota_scope_type` and `quota_scope_id` columns to the `quotas` table as nullable. All values will be NULL in v1. This avoids a schema migration when v2 IC dashboard is built.
 
-### Phase 3: Partner Portal
+### Phase 3: Partner Portal (partially implemented)
 > Schema stubs are defined in Section 6. Tables `partners` and `opportunity_partners` must be created in the v1 initial migration with all values NULL.
 
+**Already implemented (v1.5):**
+- `pbm` role with full dashboard suite (Home, Pipeline, Pilots, Performance)
+- PBM credit attribution via 3 paths: Channel Owner, RV Account Owner, Partner Channel Owner
+- PBM Leaderboard (`/pbm-leaderboard`) and Partner Leaderboard (`/partner-leaderboard`)
+- Supporting tables: `rv_accounts`, `sf_partners`, additional columns on `opportunities`
+- DualViewPage architecture for AE/PBM tabbed views on all major dashboards
+
+**Remaining for Phase 3:**
 - New role: `partner` — scoped to opportunities attributed to their organization only
 - Full attribution model: sourced / influenced / referred / fulfilled / resold
 - Up to **4 partners per opportunity** with weighted attribution splits (must sum to 100%)
@@ -1268,7 +1359,7 @@ quota_scope_id    uuid REFERENCES quota_scopes(id) NULL
 | 4 | Should "Sync Now" trigger Salesforce + Looker simultaneously or separately? | **OPEN** | Recommend: single button triggers both sequentially; Settings page allows independent triggers |
 | 5 | Exact Salesforce custom field API names for Paid Pilot | **RESOLVED** | Field is `Pilot_Type__c` (text). Opportunity is a Paid Pilot when `Pilot_Type__c = 'Paid Pilot'`. Also sync `Pilot_Start_Date__c` and `Pilot_End_Date__c`. |
 | 6 | Commission dispute / correction workflow | **Phase 2** | Deferred to v2 |
-| 7 | Partner portal scope, attribution logic, and partner tier definitions | **Phase 3** | Deferred to v3 — schema stubs defined and must be created in v1 migration |
+| 7 | Partner portal scope, attribution logic, and partner tier definitions | **Partially RESOLVED** | PBM role, credit attribution (3 paths), PBM/Partner leaderboards, and DualViewPage architecture implemented in v1.5. Remaining: partner role, weighted attribution splits, partner-facing portal. |
 | 8 | Delta sync vs. full sync for Salesforce (performance at scale) | **Phase 2** | v1 uses full sync on manual trigger; optimize with delta sync in v2 |
 | 9 | Usage score target thresholds per product line | **RESOLVED** | Interaction count targets configured per product type in Supabase (Settings → Usage Thresholds, VP+ only). Product types confirmed as Navigator, Autopilot, and others as they exist in Looker. |
 

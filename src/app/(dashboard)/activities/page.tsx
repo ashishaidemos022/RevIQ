@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAuthStore } from "@/stores/auth-store";
-import { useActivities } from "@/hooks/use-activities";
+import { useActivities, ActivitySummaryRow } from "@/hooks/use-activities";
 import {
   getCurrentFiscalPeriod,
   getQuarterStartDate,
@@ -34,11 +34,13 @@ import {
 } from "recharts";
 
 const ACTIVITY_TYPES = [
-  { value: "call", label: "Calls", color: "hsl(var(--chart-1))" },
-  { value: "email", label: "Emails", color: "hsl(var(--chart-2))" },
-  { value: "meeting", label: "Meetings", color: "hsl(var(--chart-3))" },
-  { value: "linkedin", label: "LinkedIn Activity", color: "hsl(var(--chart-4))" },
+  { value: "call", label: "Calls", color: "hsl(var(--chart-1))", countKey: "call_count" as const },
+  { value: "email", label: "Emails", color: "hsl(var(--chart-2))", countKey: "email_count" as const },
+  { value: "meeting", label: "Meetings", color: "hsl(var(--chart-3))", countKey: "meeting_count" as const },
+  { value: "linkedin", label: "LinkedIn", color: "hsl(var(--chart-4))", countKey: "linkedin_count" as const },
 ];
+
+type CountKey = "call_count" | "email_count" | "meeting_count" | "linkedin_count";
 
 export default function ActivitiesPage() {
   const user = useAuthStore((s) => s.user);
@@ -58,35 +60,18 @@ export default function ActivitiesPage() {
   } = useActivities({
     date_from: qStart.toISOString().split("T")[0],
     date_to: qEnd.toISOString().split("T")[0],
-    ...(typeFilter !== "all" && { activity_type: typeFilter }),
-    limit: 500,
+    limit: 5000,
   });
 
-  const activities = activitiesData?.data || [];
-
-  const kpis = useMemo(() => {
-    const calls = activities.filter((a) => a.activity_type === "call").length;
-    const emails = activities.filter((a) => a.activity_type === "email").length;
-    const meetings = activities.filter((a) => a.activity_type === "meeting").length;
-    const demos = activities.filter((a) => a.activity_type === "demo").length;
-    const accountsTouched = new Set(activities.map((a) => a.account_id).filter(Boolean)).size;
-
-    return {
-      total: activities.length,
-      calls,
-      emails,
-      meetings,
-      demos,
-      accountsTouched,
-    };
-  }, [activities]);
+  const rows = activitiesData?.data || [];
+  const totals = activitiesData?.totals;
 
   // Weekly trend chart data (stacked by type)
   const weeklyData = useMemo(() => {
     const weeks: Record<string, Record<string, number | string>> = {};
 
-    activities.forEach((a) => {
-      const date = new Date(a.activity_date);
+    rows.forEach((row) => {
+      const date = new Date(row.activity_date);
       // Get start of week (Monday)
       const day = date.getDay();
       const diff = date.getDate() - day + (day === 0 ? -6 : 1);
@@ -96,53 +81,59 @@ export default function ActivitiesPage() {
       const label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
       if (!weeks[weekKey]) {
-        weeks[weekKey] = { week: label, call: 0, email: 0, meeting: 0, demo: 0, other: 0 };
+        weeks[weekKey] = { week: label, call_count: 0, email_count: 0, meeting_count: 0, linkedin_count: 0 };
       }
-      const type = a.activity_type || "other";
-      weeks[weekKey][type] = (Number(weeks[weekKey][type]) || 0) + 1;
+      weeks[weekKey].call_count = (Number(weeks[weekKey].call_count) || 0) + (row.call_count || 0);
+      weeks[weekKey].email_count = (Number(weeks[weekKey].email_count) || 0) + (row.email_count || 0);
+      weeks[weekKey].meeting_count = (Number(weeks[weekKey].meeting_count) || 0) + (row.meeting_count || 0);
+      weeks[weekKey].linkedin_count = (Number(weeks[weekKey].linkedin_count) || 0) + (row.linkedin_count || 0);
     });
 
     return Object.entries(weeks)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, data]) => data);
-  }, [activities]);
+  }, [rows]);
 
   // Activity by AE (Managers+ only)
   const aeActivityData = useMemo(() => {
     if (!isManager) return [];
     const aeMap: Record<
       string,
-      { name: string; call: number; email: number; meeting: number; demo: number; total: number; lastDate: string }
+      { name: string; call: number; email: number; meeting: number; linkedin: number; total: number; lastDate: string }
     > = {};
 
-    activities.forEach((a) => {
-      const aeId = a.owner_user_id || "unknown";
-      const aeName = a.users?.full_name || "Unknown";
-      if (!aeMap[aeId]) {
-        aeMap[aeId] = { name: aeName, call: 0, email: 0, meeting: 0, demo: 0, total: 0, lastDate: "" };
+    rows.forEach((row) => {
+      const key = row.owner_sf_id;
+      if (!aeMap[key]) {
+        aeMap[key] = { name: row.full_name || row.ae_name, call: 0, email: 0, meeting: 0, linkedin: 0, total: 0, lastDate: "" };
       }
-      const type = a.activity_type;
-      if (type === "call" || type === "email" || type === "meeting" || type === "demo") {
-        aeMap[aeId][type]++;
-      }
-      aeMap[aeId].total++;
-      if (a.activity_date > aeMap[aeId].lastDate) {
-        aeMap[aeId].lastDate = a.activity_date;
+      aeMap[key].call += row.call_count || 0;
+      aeMap[key].email += row.email_count || 0;
+      aeMap[key].meeting += row.meeting_count || 0;
+      aeMap[key].linkedin += row.linkedin_count || 0;
+      aeMap[key].total += row.activity_count || 0;
+      if (row.activity_date > aeMap[key].lastDate) {
+        aeMap[key].lastDate = row.activity_date;
       }
     });
 
     return Object.values(aeMap).sort((a, b) => b.total - a.total);
-  }, [activities, isManager]);
+  }, [rows, isManager]);
 
   const aeColumns: Column<Record<string, unknown>>[] = [
     { key: "name", header: "AE Name" },
     { key: "call", header: "Calls" },
     { key: "email", header: "Emails" },
     { key: "meeting", header: "Meetings" },
-    { key: "demo", header: "Demos" },
+    { key: "linkedin", header: "LinkedIn" },
     { key: "total", header: "Total" },
     { key: "lastDate", header: "Last Activity" },
   ];
+
+  // Filter chart data visually when a type filter is selected
+  const chartTypes = typeFilter === "all"
+    ? ACTIVITY_TYPES
+    : ACTIVITY_TYPES.filter((t) => t.value === typeFilter);
 
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load activity data" onRetry={refetch} />;
@@ -170,13 +161,12 @@ export default function ActivitiesPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard label="Total Activities QTD" value={kpis.total} format="number" />
-        <KpiCard label="Calls" value={kpis.calls} format="number" />
-        <KpiCard label="Emails" value={kpis.emails} format="number" />
-        <KpiCard label="Meetings" value={kpis.meetings} format="number" />
-        <KpiCard label="Demos" value={kpis.demos} format="number" />
-        <KpiCard label="Accounts Touched" value={kpis.accountsTouched} format="number" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <KpiCard label="Total Activities QTD" value={totals?.activity_count ?? 0} format="number" />
+        <KpiCard label="Calls" value={totals?.call_count ?? 0} format="number" />
+        <KpiCard label="Emails" value={totals?.email_count ?? 0} format="number" />
+        <KpiCard label="Meetings" value={totals?.meeting_count ?? 0} format="number" />
+        <KpiCard label="LinkedIn" value={totals?.linkedin_count ?? 0} format="number" />
       </div>
 
       {/* Activity Trend Chart */}
@@ -198,10 +188,10 @@ export default function ActivitiesPage() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                {ACTIVITY_TYPES.filter((t) => t.value !== "other").map((t) => (
+                {chartTypes.map((t) => (
                   <Bar
                     key={t.value}
-                    dataKey={t.value}
+                    dataKey={t.countKey}
                     name={t.label}
                     fill={t.color}
                     stackId="activities"

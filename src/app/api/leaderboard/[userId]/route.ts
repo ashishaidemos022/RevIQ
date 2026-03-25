@@ -141,22 +141,30 @@ export async function GET(
       account_name: accountNameMap.get(o.account_id as string) || null,
     }));
 
-    // Fetch activities for activities board
+    // Fetch activities for activities board from activity_daily_summary
     let activities: Array<Record<string, unknown>> = [];
     if (board === 'activities') {
-      const { data: actData } = await db
-        .from('activities')
-        .select('id, activity_type, activity_date, subject, account_id')
-        .eq('owner_user_id', userId)
-        .gte('activity_date', periodStartStr)
-        .lte('activity_date', periodEndStr)
-        .order('activity_date', { ascending: false })
-        .limit(50);
+      const { data: userSfRow } = await db
+        .from('users')
+        .select('salesforce_user_id')
+        .eq('id', userId)
+        .single();
 
-      activities = (actData || []).map(a => ({
-        ...a,
-        account_name: accountNameMap.get(a.account_id as string) || null,
-      }));
+      if (userSfRow?.salesforce_user_id) {
+        const { data: actData } = await db
+          .from('activity_daily_summary')
+          .select('owner_sf_id, activity_date, activity_count, call_count, email_count, linkedin_count, meeting_count')
+          .eq('owner_sf_id', userSfRow.salesforce_user_id)
+          .gte('activity_date', periodStartStr)
+          .lte('activity_date', periodEndStr)
+          .order('activity_date', { ascending: false })
+          .limit(50);
+
+        activities = (actData || []).map(a => ({
+          ...a,
+          id: `${a.owner_sf_id}_${a.activity_date}`,
+        }));
+      }
     }
 
     // Compute summary KPIs

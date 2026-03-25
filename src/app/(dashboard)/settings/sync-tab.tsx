@@ -9,6 +9,13 @@ import { ErrorState } from "@/components/dashboard/error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Loader2, RefreshCw } from "lucide-react";
 
 interface SyncLogEntry {
@@ -25,6 +32,7 @@ interface SyncLogEntry {
 export function SyncTab() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [initialLoadOpen, setInitialLoadOpen] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["sync-log"],
@@ -136,6 +144,26 @@ export function SyncTab() {
               )}
               Sync Looker Usage
             </Button>
+            <Button
+              variant="outline"
+              disabled={!!syncing}
+              onClick={() => syncMutation.mutate("snowflake")}
+            >
+              {syncing === "snowflake" ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Sync Activities (Snowflake)
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!!syncing}
+              onClick={() => setInitialLoadOpen(true)}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Initial Load (6 months)
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -153,6 +181,43 @@ export function SyncTab() {
           />
         </CardContent>
       </Card>
+      {/* Initial Load Confirmation Dialog */}
+      <Dialog open={initialLoadOpen} onOpenChange={setInitialLoadOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Initial Activity Load</DialogTitle>
+            <DialogDescription>
+              This will load 6 months of historical activity data from Snowflake (~9,000+ records). This is typically only needed once. Continue?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setInitialLoadOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!!syncing}
+              onClick={() => {
+                setInitialLoadOpen(false);
+                setSyncing("snowflake-initial");
+                apiFetch("/api/sync/snowflake?mode=initial", { method: "POST" })
+                  .then(() => {
+                    setSyncing(null);
+                    queryClient.invalidateQueries({ queryKey: ["sync-log"] });
+                    queryClient.invalidateQueries({ queryKey: ["sync-last"] });
+                  })
+                  .catch(() => {
+                    setSyncing(null);
+                  });
+              }}
+            >
+              {syncing === "snowflake-initial" ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Start Initial Load
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

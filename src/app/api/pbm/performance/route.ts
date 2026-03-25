@@ -126,15 +126,25 @@ export async function GET(request: NextRequest) {
           commissionEarned = 0;
         }
 
-        // Activities
+        // Activities from activity_daily_summary via SF IDs
         if (pbmLocalIds.length > 0) {
-          const { count } = await db
-            .from('activities')
-            .select('id', { count: 'exact', head: true })
-            .in('owner_user_id', pbmLocalIds)
-            .gte('activity_date', startStr)
-            .lte('activity_date', endStr);
-          totalActivities = count || 0;
+          const { data: pbmSfUsers } = await db
+            .from('users')
+            .select('salesforce_user_id')
+            .in('id', pbmLocalIds)
+            .not('salesforce_user_id', 'is', null);
+          const pbmSfIds = (pbmSfUsers || []).map((u: { salesforce_user_id: string }) => u.salesforce_user_id);
+          if (pbmSfIds.length > 0) {
+            const { data: actRows } = await db
+              .from('activity_daily_summary')
+              .select('activity_count')
+              .in('owner_sf_id', pbmSfIds)
+              .gte('activity_date', startStr)
+              .lte('activity_date', endStr);
+            totalActivities = (actRows || []).reduce((s: number, r: { activity_count: number }) => s + (r.activity_count || 0), 0);
+          } else {
+            totalActivities = 0;
+          }
         } else {
           totalActivities = 0;
         }

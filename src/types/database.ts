@@ -13,8 +13,8 @@ export type UserRole =
 export type QuotaType = 'revenue' | 'pilots' | 'pipeline' | 'activities';
 export type ForecastCategory = 'commit' | 'best_case' | 'pipeline' | 'omitted';
 export type OpportunityType = 'new_business' | 'renewal' | 'expansion';
-export type ActivityType = 'call' | 'email' | 'meeting' | 'demo' | 'other';
-export type SyncType = 'salesforce' | 'looker' | 'scim';
+export type ActivityType = 'call' | 'email' | 'linkedin' | 'meeting';
+export type SyncType = 'salesforce' | 'looker' | 'scim' | 'snowflake';
 export type SyncStatus = 'running' | 'success' | 'partial' | 'failed' | 'warning';
 export type Theme = 'light' | 'dark';
 
@@ -164,6 +164,19 @@ export interface Activity {
   description: string | null;
   last_synced_at: string | null;
   created_at: string;
+}
+
+export interface ActivityDailySummary {
+  id: string;
+  owner_sf_id: string;
+  ae_name: string;
+  activity_date: string;
+  activity_count: number;
+  call_count: number;
+  email_count: number;
+  linkedin_count: number;
+  meeting_count: number;
+  synced_at: string;
 }
 
 export interface CommissionRate {

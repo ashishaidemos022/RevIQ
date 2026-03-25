@@ -16,6 +16,7 @@ import {
 import { getDirectReports } from '@/lib/supabase/queries/hierarchy';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
+import { AE_ROLES } from '@/lib/constants';
 
 const MANAGER_PLUS = ['leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
@@ -122,11 +123,12 @@ export async function GET(request: NextRequest) {
           o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
         ).length;
 
-        // Activities count from activity_daily_summary via SF IDs
+        // Activities count from activity_daily_summary via AE SF IDs only
         const { data: memberSfUsers } = await db
           .from('users')
           .select('salesforce_user_id')
           .in('id', memberIds)
+          .in('role', AE_ROLES)
           .not('salesforce_user_id', 'is', null);
         const memberSfIds = (memberSfUsers || []).map((u: { salesforce_user_id: string }) => u.salesforce_user_id);
 

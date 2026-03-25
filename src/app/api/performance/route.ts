@@ -5,6 +5,7 @@ import { getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
+import { AE_ROLES } from '@/lib/constants';
 
 export async function GET(request: NextRequest) {
   try {
@@ -123,14 +124,15 @@ export async function GET(request: NextRequest) {
 
         commissionEarned = comms.reduce((s, c) => s + (c.commission_amount || 0), 0);
 
-        // Activities from activity_daily_summary via SF IDs
+        // Activities from activity_daily_summary via AE SF IDs only
         if (ownerId) {
+          // Verify the owner is an AE before counting activities
           const { data: ownerSfRow } = await db
             .from('users')
-            .select('salesforce_user_id')
+            .select('salesforce_user_id, role')
             .eq('id', ownerId)
             .single();
-          if (ownerSfRow?.salesforce_user_id) {
+          if (ownerSfRow?.salesforce_user_id && AE_ROLES.includes(ownerSfRow.role as typeof AE_ROLES[number])) {
             const actRows = await fetchAll<{ activity_count: number }>(() =>
               db.from('activity_daily_summary')
                 .select('activity_count')
@@ -141,9 +143,9 @@ export async function GET(request: NextRequest) {
             totalActivities = actRows.reduce((s, r) => s + (r.activity_count || 0), 0);
           }
         } else {
-          // Scoped query — resolve all user SF IDs in scope
+          // Scoped query — resolve only AE SF IDs in scope
           const scopeUserIds = scope.allAccess ? null : scope.userIds;
-          let sfQuery = db.from('users').select('salesforce_user_id').not('salesforce_user_id', 'is', null);
+          let sfQuery = db.from('users').select('salesforce_user_id').in('role', AE_ROLES).not('salesforce_user_id', 'is', null);
           if (scopeUserIds) sfQuery = sfQuery.in('id', scopeUserIds);
           const { data: sfRows } = await sfQuery;
           const sfIds = (sfRows || []).map((u: { salesforce_user_id: string }) => u.salesforce_user_id);

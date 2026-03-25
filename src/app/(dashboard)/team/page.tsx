@@ -311,18 +311,11 @@ export default function TeamPage() {
 
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    // Clear selection if any selected items are now filtered out
-    if (selectedIds.size > 0) {
-      clearSelection();
-    }
   };
 
   const handleRoleFilterChange = (role: string | null) => {
     if (!role) return;
     setRoleFilter(role);
-    if (selectedIds.size > 0) {
-      clearSelection();
-    }
   };
 
   if (!isManager) {

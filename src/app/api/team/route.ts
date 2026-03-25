@@ -4,6 +4,7 @@ import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQu
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credited-opps';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { AE_ROLES } from '@/lib/constants';
 
 const MANAGER_PLUS = ['leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     const allMembers = aes;
     const allIds = allMembers.map(m => m.id);
-    const aeMembers = allMembers.filter(m => m.role !== 'pbm');
+    const aeMembers = allMembers.filter(m => AE_ROLES.includes(m.role as typeof AE_ROLES[number]));
     const pbmMembers = allMembers.filter(m => m.role === 'pbm');
     const aeIds = aeMembers.map(ae => ae.id);
     const pbmIds = pbmMembers.map(p => p.id);

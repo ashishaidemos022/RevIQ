@@ -33,7 +33,7 @@ const STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
 export function PbmPipeline() {
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
 
-  const [quarterFilter, setQuarterFilter] = useState("current");
+  const [quarterFilter, setQuarterFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [pilotFilter, setPilotFilter] = useState("all");
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export function PbmPipeline() {
     status: "open",
     ...(pilotFilter === "yes" && { is_paid_pilot: true }),
     ...(pilotFilter === "no" && { is_paid_pilot: false }),
-    limit: 500,
+    limit: 10000,
   });
 
   const opps = oppsData?.data || [];

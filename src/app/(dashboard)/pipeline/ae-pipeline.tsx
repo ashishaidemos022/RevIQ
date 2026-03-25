@@ -69,7 +69,7 @@ export function AePipeline() {
   const isManager = user && MANAGER_PLUS_ROLES.includes(user.role as typeof MANAGER_PLUS_ROLES[number]);
 
   // Filters
-  const [quarterFilter, setQuarterFilter] = useState("current");
+  const [quarterFilter, setQuarterFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [pilotFilter, setPilotFilter] = useState("all");

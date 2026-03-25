@@ -83,9 +83,6 @@ export async function GET(request: NextRequest) {
 
     const total = allOpps.length;
 
-    // Paginate
-    const paged = allOpps.slice(offset, offset + limit);
-
     // Enrich with credit info and PBM name
     // Build PBM name lookup
     const { data: pbmUsers } = await db
@@ -95,7 +92,7 @@ export async function GET(request: NextRequest) {
     const pbmNameMap: Record<string, string> = {};
     (pbmUsers || []).forEach(u => { pbmNameMap[u.id] = u.full_name; });
 
-    const enriched = paged.map(opp => {
+    const enriched = allOpps.map(opp => {
       const sfId = opp.salesforce_opportunity_id as string;
       const credits = creditMap.get(sfId) || [];
       // Pick the first credit for the target PBM(s)

@@ -259,7 +259,7 @@ export default function TeamPage() {
       }));
   }, [managerGroups, filteredAes, searchQuery, roleFilter]);
 
-  const canShowCompare = filteredAes.length >= 2 || filteredManagerGroups.length >= 2;
+  const canShowCompare = aes.length >= 2 || managerGroups.length >= 2;
 
   // Resolve selected entities for compare — either AEs or manager names
   const selectedAes = useMemo(

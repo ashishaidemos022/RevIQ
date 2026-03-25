@@ -10,6 +10,7 @@ export interface PbmHomeData {
   deals_closed_qtd: number;
   quota_attainment_qtd: number;
   quota_attainment_ytd: number;
+  quarter_pace_percent: number;
   fiscal_year: number;
   fiscal_quarter: number;
 }

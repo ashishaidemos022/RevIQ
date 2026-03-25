@@ -117,12 +117,35 @@ export async function GET(request: NextRequest) {
       quotaAttainmentQTD = (acvClosedQTD / quarterlyQuota) * 100;
     }
 
+    // Quarterly pacing: 20% after Month 1, 50% after Month 2, 100% by end of Month 3
+    const now = new Date();
+    const qStartDate = getQuarterStartDate(fiscalYear, fiscalQuarter);
+    const qStartMonth = qStartDate.getMonth();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const qStartYear = qStartDate.getFullYear();
+    const monthsSinceStart = (currentYear - qStartYear) * 12 + (currentMonth - qStartMonth);
+    const monthInQuarter = Math.max(0, Math.min(2, monthsSinceStart));
+    const milestones = [20, 50, 100];
+    const prevMilestone = monthInQuarter === 0 ? 0 : milestones[monthInQuarter - 1];
+    const nextMilestone = milestones[monthInQuarter];
+    const monthStart = new Date(currentYear, currentMonth, 1);
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0);
+    const totalDaysInMonth = monthEnd.getDate();
+    const dayOfMonth = Math.min(now.getDate(), totalDaysInMonth);
+    const monthProgress = dayOfMonth / totalDaysInMonth;
+    const quarterPacePercent = Math.min(
+      prevMilestone + (nextMilestone - prevMilestone) * monthProgress,
+      100
+    );
+
     return NextResponse.json({
       acv_closed_qtd: acvClosedQTD,
       acv_closed_ytd: acvClosedYTD,
       deals_closed_qtd: dealsClosedQTD,
       quota_attainment_qtd: quotaAttainmentQTD,
       quota_attainment_ytd: quotaAttainmentYTD,
+      quarter_pace_percent: quarterPacePercent,
       fiscal_year: fiscalYear,
       fiscal_quarter: fiscalQuarter,
     });

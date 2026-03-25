@@ -1,16 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { usePbmHome } from "@/hooks/use-pbm-home";
 import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
 import { apiFetch } from "@/lib/api";
-import {
-  getCurrentFiscalPeriod,
-  getQuarterStartDate,
-  getQuarterEndDate,
-} from "@/lib/fiscal";
+
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
@@ -59,22 +55,6 @@ export function PbmHome() {
   const charts = chartsResponse?.data;
 
   const isLoading = homeLoading || oppsLoading || chartsLoading;
-
-  const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
-
-  const quarterPacePercent = useMemo(() => {
-    const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
-    const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
-    const now = new Date();
-    const totalDays = Math.ceil(
-      (qEnd.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24)
-    ) + 1;
-    const elapsed = Math.max(
-      1,
-      Math.ceil((now.getTime() - qStart.getTime()) / (1000 * 60 * 60 * 24))
-    );
-    return Math.min((elapsed / totalDays) * 100, 100);
-  }, [fiscalYear, fiscalQuarter]);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("en-US", {
@@ -214,7 +194,7 @@ export function PbmHome() {
           <CardContent className="flex items-center justify-center">
             <QuotaGauge
               attainment={d?.quota_attainment_qtd || 0}
-              expectedPace={quarterPacePercent}
+              expectedPace={d?.quarter_pace_percent || 0}
             />
           </CardContent>
         </Card>

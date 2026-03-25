@@ -11,7 +11,10 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Opportunity } from "@/types";
+import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
 import { DealDrilldownDrawer, DrillDownDeal } from "./deal-drilldown-drawer";
+
+const ALL_STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
 
 export interface PipelineDeal {
   id: string;
@@ -121,11 +124,12 @@ export function PipelineByStageChart({
     }
 
     if (pipelineByStage) {
+      const stageOrder = [...ALL_STAGES, "Other"];
       const chartData = Object.entries(pipelineByStage)
         .sort(([a], [b]) => {
-          const ai = STAGE_ORDER.indexOf(a);
-          const bi = STAGE_ORDER.indexOf(b);
-          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          const ai = stageOrder.indexOf(a);
+          const bi = stageOrder.indexOf(b);
+          return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
         })
         .map(([stage, val]) => ({ stage, acv: val.acv }));
       return { data: chartData, groups: ["acv"], isLegacy: true };
@@ -139,11 +143,12 @@ export function PipelineByStageChart({
           const stage = o.stage || "Other";
           stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
         });
+      const stageOrder = [...ALL_STAGES, "Other"];
       const chartData = Object.entries(stageMap)
         .sort(([a], [b]) => {
-          const ai = STAGE_ORDER.indexOf(a);
-          const bi = STAGE_ORDER.indexOf(b);
-          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          const ai = stageOrder.indexOf(a);
+          const bi = stageOrder.indexOf(b);
+          return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
         })
         .map(([stage, acv]) => ({ stage, acv }));
       return { data: chartData, groups: ["acv"], isLegacy: true };

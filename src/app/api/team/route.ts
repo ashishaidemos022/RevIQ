@@ -214,18 +214,19 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Team summary — compute average only for members with quota
-    const totalAcvQTD = aeData.reduce((s, ae) => s + ae.acv_closed_qtd, 0);
-    const membersWithAnnualQuota = aeData.filter(ae => ae.annual_quota > 0);
-    const membersWithQuarterlyQuota = aeData.filter(ae => ae.quarterly_quota > 0);
+    // Team summary — only sum AE data (not PBMs, to avoid double-counting credited opps)
+    const aeOnlyData = aeData.filter(ae => AE_ROLES.includes(ae.role as typeof AE_ROLES[number]));
+    const totalAcvQTD = aeOnlyData.reduce((s, ae) => s + ae.acv_closed_qtd, 0);
+    const membersWithAnnualQuota = aeOnlyData.filter(ae => ae.annual_quota > 0);
+    const membersWithQuarterlyQuota = aeOnlyData.filter(ae => ae.quarterly_quota > 0);
     const avgAttainment = membersWithAnnualQuota.length > 0
       ? membersWithAnnualQuota.reduce((s, ae) => s + ae.attainment, 0) / membersWithAnnualQuota.length
       : 0;
     const avgAttainmentQTD = membersWithQuarterlyQuota.length > 0
       ? membersWithQuarterlyQuota.reduce((s, ae) => s + ae.attainment_qtd, 0) / membersWithQuarterlyQuota.length
       : 0;
-    const totalPilots = aeData.reduce((s, ae) => s + ae.active_pilots, 0);
-    const totalActivities = aeData.reduce((s, ae) => s + ae.activities_qtd, 0);
+    const totalPilots = aeOnlyData.reduce((s, ae) => s + ae.active_pilots, 0);
+    const totalActivities = aeOnlyData.reduce((s, ae) => s + ae.activities_qtd, 0);
 
     // Fetch leaders in scope (not AEs or PBMs) who manage reports
     let leadersQuery = db

@@ -13,7 +13,7 @@ import {
   getQuarterStartDate,
   getQuarterEndDate,
 } from '@/lib/fiscal';
-import { getDirectReports } from '@/lib/supabase/queries/hierarchy';
+
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 import { AE_ROLES } from '@/lib/constants';
@@ -90,10 +90,21 @@ export async function GET(request: NextRequest) {
       let teamSize: number | undefined;
 
       if (mode === 'team') {
-        // Resolve direct reports for this manager
-        const reports = await getDirectReports(entityId);
-        memberIds = reports.length > 0 ? reports : [entityId];
-        teamSize = reports.length;
+        // Resolve full subtree for this manager, filtered to AEs/PBMs
+        const { getOrgSubtree } = await import('@/lib/supabase/queries/hierarchy');
+        const subtreeIds = await getOrgSubtree(entityId);
+        if (subtreeIds.length > 0) {
+          const { data: aeMembers } = await db
+            .from('users')
+            .select('id')
+            .in('id', subtreeIds)
+            .in('role', [...AE_ROLES, 'pbm'])
+            .eq('is_active', true);
+          memberIds = (aeMembers || []).map(m => m.id);
+        } else {
+          memberIds = [entityId];
+        }
+        teamSize = memberIds.length;
       } else {
         memberIds = [entityId];
       }

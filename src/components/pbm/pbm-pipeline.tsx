@@ -61,7 +61,7 @@ export function PbmPipeline() {
     return opps.filter((o) => o.stage === stageFilter);
   }, [opps, stageFilter]);
 
-  // Filter by close date quarter
+  // Filter by close date quarter (use string comparison to avoid UTC/local timezone issues)
   const filteredOpps = useMemo(() => {
     if (quarterFilter === "all") return stageFiltered;
     let fy = fiscalYear;
@@ -73,32 +73,31 @@ export function PbmPipeline() {
     }
     const start = getQuarterStartDate(fy, fq);
     const end = getQuarterEndDate(fy, fq);
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
     return stageFiltered.filter((o) => {
       if (!o.close_date) return false;
-      const d = new Date(o.close_date);
-      return d >= start && d <= end;
+      return o.close_date >= startStr && o.close_date <= endStr;
     });
   }, [stageFiltered, quarterFilter, fiscalYear, fiscalQuarter]);
 
   // KPIs
   const kpis = useMemo(() => {
     const totalPipelineAcv = filteredOpps.reduce((s, o) => s + (o.acv || 0), 0);
-    const weightedPipelineAcv = filteredOpps.reduce(
-      (s, o) => s + (o.acv || 0) * ((o.probability || 0) / 100),
-      0
-    );
+    const qualifiedPipelineAcv = filteredOpps
+      .filter(o => QUALIFIED_STAGES.includes(o.stage || ''))
+      .reduce((s, o) => s + (o.acv || 0), 0);
     const dealCount = filteredOpps.length;
     const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
 
-    const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
-    const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
+    const qStartStr = getQuarterStartDate(fiscalYear, fiscalQuarter).toISOString().split('T')[0];
+    const qEndStr = getQuarterEndDate(fiscalYear, fiscalQuarter).toISOString().split('T')[0];
     const closingThisQuarter = opps.filter((o) => {
       if (!o.close_date) return false;
-      const d = new Date(o.close_date);
-      return d >= qStart && d <= qEnd;
+      return o.close_date >= qStartStr && o.close_date <= qEndStr;
     }).length;
 
-    return { totalPipelineAcv, weightedPipelineAcv, dealCount, avgDealSize, closingThisQuarter };
+    return { totalPipelineAcv, qualifiedPipelineAcv, dealCount, avgDealSize, closingThisQuarter };
   }, [filteredOpps, opps, fiscalYear, fiscalQuarter]);
 
   // Pipeline by stage aggregation
@@ -120,7 +119,7 @@ export function PbmPipeline() {
       .sort(([a], [b]) => {
         const ai = stageOrder.indexOf(a);
         const bi = stageOrder.indexOf(b);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
       })
       .map(([stage, data]) => ({
         stage,
@@ -236,7 +235,7 @@ export function PbmPipeline() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
-        <KpiCard label="Weighted Pipeline" value={kpis.weightedPipelineAcv} format="currency" />
+        <KpiCard label="Qualified Pipeline" value={kpis.qualifiedPipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
         <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />

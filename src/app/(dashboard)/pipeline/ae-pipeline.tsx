@@ -98,7 +98,7 @@ export function AePipeline() {
     queryFn: () => apiFetch<{ data: PipelineKpis }>(`/api/pipeline/kpis${filterParams ? `?${filterParams}` : ''}`),
   });
 
-  const kpis = kpisData?.data || { totalPipelineAcv: 0, weightedPipelineAcv: 0, dealCount: 0, avgDealSize: 0, closingThisQuarter: 0 };
+  const serverKpis = kpisData?.data || { totalPipelineAcv: 0, weightedPipelineAcv: 0, dealCount: 0, avgDealSize: 0, closingThisQuarter: 0 };
 
   // Server-side stages + full opp list (paginated, no 1000-row limit)
   const {
@@ -136,6 +136,23 @@ export function AePipeline() {
     });
   }, [allOpps, quarterFilter, fiscalYear, fiscalQuarter]);
 
+  // Recompute KPIs from filtered opps so they reflect selected filters
+  const kpis = useMemo(() => {
+    const totalPipelineAcv = filteredOpps.reduce((s, o) => s + (o.acv || 0), 0);
+    const qualifiedPipelineAcv = filteredOpps
+      .filter(o => QUALIFIED_STAGES.includes(o.stage || ''))
+      .reduce((s, o) => s + (o.acv || 0), 0);
+    const dealCount = filteredOpps.length;
+    const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
+    return {
+      totalPipelineAcv,
+      qualifiedPipelineAcv,
+      dealCount,
+      avgDealSize,
+      closingThisQuarter: serverKpis.closingThisQuarter,
+    };
+  }, [filteredOpps, serverKpis.closingThisQuarter]);
+
   // Client-side stage aggregation from filtered opps (for quarter-filtered view)
   const stageData = useMemo(() => {
     const stages: Record<
@@ -161,7 +178,7 @@ export function AePipeline() {
       .sort(([a], [b]) => {
         const ai = stageOrder.indexOf(a);
         const bi = stageOrder.indexOf(b);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
       })
       .map(([stage, data]) => ({
         stage,
@@ -277,7 +294,7 @@ export function AePipeline() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
-        <KpiCard label="Weighted Pipeline" value={kpis.weightedPipelineAcv} format="currency" />
+        <KpiCard label="Qualified Pipeline" value={kpis.qualifiedPipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
         <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />

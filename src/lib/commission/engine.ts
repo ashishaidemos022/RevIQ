@@ -189,28 +189,9 @@ export async function recalculateCommissions(
         opp.type
       );
 
-      // Get usage metrics for the opportunity's account
-      let usageMultiplier = 1.0;
-      if (opp.account_id) {
-        const { data: metrics } = await db
-          .from('usage_metrics')
-          .select('product_type, interaction_count')
-          .eq('account_id', opp.account_id)
-          .order('metric_date', { ascending: false })
-          .limit(10);
-
-        if (metrics && metrics.length > 0) {
-          // Deduplicate: take latest per product type
-          const latest: Record<string, UsageMetricInput> = {};
-          metrics.forEach((m: { product_type: string; interaction_count: number }) => {
-            if (!latest[m.product_type]) latest[m.product_type] = m;
-          });
-          usageMultiplier = calculateUsageMultiplier(
-            Object.values(latest),
-            {} // Default thresholds — configurable in settings
-          );
-        }
-      }
+      // Usage multiplier — defaults to 1.0
+      // TODO: Wire up to usage_billing_summary once commission engine is updated
+      const usageMultiplier = 1.0;
 
       const result = calculateCommission(opp.acv || 0, rate, usageMultiplier);
 

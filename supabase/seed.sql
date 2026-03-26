@@ -312,36 +312,8 @@ BEGIN
 END $$;
 
 -- ============================================================
--- Usage Metrics (15 accounts × 2 product types × 6 months)
+-- Usage Billing Summary — populated via Snowflake sync, not seed data
 -- ============================================================
-DO $$
-DECLARE
-  acct_ids uuid[] := ARRAY[
-    'b0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000003','b0000000-0000-0000-0000-000000000005',
-    'b0000000-0000-0000-0000-000000000007','b0000000-0000-0000-0000-000000000009','b0000000-0000-0000-0000-000000000011',
-    'b0000000-0000-0000-0000-000000000013','b0000000-0000-0000-0000-000000000015','b0000000-0000-0000-0000-000000000017',
-    'b0000000-0000-0000-0000-000000000019','b0000000-0000-0000-0000-000000000021','b0000000-0000-0000-0000-000000000023',
-    'b0000000-0000-0000-0000-000000000025','b0000000-0000-0000-0000-000000000027','b0000000-0000-0000-0000-000000000029'
-  ];
-  months date[] := ARRAY['2025-10-01','2025-11-01','2025-12-01','2026-01-01','2026-02-01','2026-03-01'];
-  i integer;
-  m integer;
-  base_count integer;
-BEGIN
-  FOR i IN 1..15 LOOP
-    FOR m IN 1..6 LOOP
-      base_count := 200 + (i * 80) + (m * 50);
-      -- Navigator interactions
-      INSERT INTO usage_metrics (id, account_id, metric_date, product_type, interaction_count) VALUES (
-        gen_random_uuid(), acct_ids[i], months[m], 'Navigator', base_count + ((i * m * 7) % 300)
-      );
-      -- Autopilot interactions
-      INSERT INTO usage_metrics (id, account_id, metric_date, product_type, interaction_count) VALUES (
-        gen_random_uuid(), acct_ids[i], months[m], 'Autopilot', (base_count * 0.6)::integer + ((i * m * 13) % 200)
-      );
-    END LOOP;
-  END LOOP;
-END $$;
 
 -- ============================================================
 -- Commission Rates

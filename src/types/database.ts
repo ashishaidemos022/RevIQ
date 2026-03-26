@@ -207,14 +207,31 @@ export interface Commission {
   created_at: string;
 }
 
-export interface UsageMetric {
+export interface UsageBillingSummary {
   id: string;
-  account_id: string;
-  opportunity_id: string | null;
-  metric_date: string;
-  product_type: string;
-  interaction_count: number;
-  fetched_at: string;
+  period_name: string;
+  sf_account_owner_id: string | null;
+  sf_account_owner: string | null;
+  sf_account_id: string;
+  sf_account_name: string | null;
+  td_billing_account_id: string;
+  td_billing_account_name: string | null;
+  taxonomy_name: string | null;
+  macro_sku_name_old: string | null;
+  macro_sku_name_new: string | null;
+  wallet_name: string;
+  usage_type: string | null;
+  currency: string | null;
+  contract_exchange_rate: number | null;
+  ns_exchange_rate: number | null;
+  total_consumption_amount_cur: number | null;
+  total_overage_amount_cur: number | null;
+  total_charged_amount_cur: number | null;
+  total_consumption_amount_usd: number | null;
+  total_overage_amount_usd: number | null;
+  total_charged_amount_ns_usd: number | null;
+  total_charged_amount_sf_usd: number | null;
+  synced_at: string;
 }
 
 export interface SyncLog {

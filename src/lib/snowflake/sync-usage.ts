@@ -82,7 +82,7 @@ export async function syncSnowflakeUsage(
   const batchSize = 200;
 
   // Map Snowflake rows to Supabase records
-  const records = rows.map((row) => ({
+  const allRecords = rows.map((row) => ({
     period_name: String(row.PERIOD_NAME),
     sf_account_owner_id: row.SF_ACCOUNT_OWNER_ID || null,
     sf_account_owner: row.SF_ACCOUNT_OWNER || null,
@@ -107,6 +107,17 @@ export async function syncSnowflakeUsage(
     total_charged_amount_sf_usd: row.TOTAL_CHARGED_AMOUNT_SF_USD,
     synced_at: new Date().toISOString(),
   }));
+
+  // Deduplicate by unique key — prefer USD rows over other currencies
+  const deduped = new Map<string, typeof allRecords[number]>();
+  for (const rec of allRecords) {
+    const key = `${rec.period_name}|${rec.td_billing_account_id}|${rec.wallet_name}`;
+    const existing = deduped.get(key);
+    if (!existing || (rec.currency === 'USD' && existing.currency !== 'USD')) {
+      deduped.set(key, rec);
+    }
+  }
+  const records = [...deduped.values()];
 
   // Batch upsert
   for (let i = 0; i < records.length; i += batchSize) {

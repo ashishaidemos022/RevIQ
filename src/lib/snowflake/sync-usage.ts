@@ -108,23 +108,14 @@ export async function syncSnowflakeUsage(
     synced_at: new Date().toISOString(),
   }));
 
-  // Deduplicate by unique key — prefer USD rows over other currencies
-  const deduped = new Map<string, typeof allRecords[number]>();
-  for (const rec of allRecords) {
-    const key = `${rec.period_name}|${rec.td_billing_account_id}|${rec.wallet_name}`;
-    const existing = deduped.get(key);
-    if (!existing || (rec.currency === 'USD' && existing.currency !== 'USD')) {
-      deduped.set(key, rec);
-    }
-  }
-  const records = [...deduped.values()];
+  const records = allRecords;
 
   // Batch upsert
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
     const { error } = await db
       .from('usage_billing_summary')
-      .upsert(batch, { onConflict: 'period_name,td_billing_account_id,wallet_name' });
+      .upsert(batch, { onConflict: 'period_name,td_billing_account_id,wallet_name,currency' });
 
     if (error) {
       result.errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);

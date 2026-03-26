@@ -118,6 +118,49 @@ interface AccountDetailResponse {
 
 // ── Helpers ──
 
+// TD Fiscal: Q1=Feb,Mar,Apr  Q2=May,Jun,Jul  Q3=Aug,Sep,Oct  Q4=Nov,Dec,Jan
+// FY label = calendar year + 1 for Feb-Dec, same for Jan
+const FISCAL_QUARTER_MONTHS: Record<number, string[]> = {
+  1: ["02", "03", "04"],
+  2: ["05", "06", "07"],
+  3: ["08", "09", "10"],
+  4: ["11", "12", "01"],
+};
+
+function periodToFiscalQuarter(yyyymm: string): { fy: number; fq: number } {
+  const year = parseInt(yyyymm.slice(0, 4));
+  const month = yyyymm.slice(4, 6);
+  const monthNum = parseInt(month);
+  const fy = monthNum >= 2 ? year + 1 : year;
+  const fq = monthNum >= 2 && monthNum <= 4 ? 1
+    : monthNum >= 5 && monthNum <= 7 ? 2
+    : monthNum >= 8 && monthNum <= 10 ? 3
+    : 4;
+  return { fy, fq };
+}
+
+interface QuarterOption {
+  label: string;
+  value: string; // comma-separated YYYYMM periods
+}
+
+function buildQuarterOptions(periods: string[]): QuarterOption[] {
+  const quarterMap = new Map<string, string[]>();
+  for (const p of periods) {
+    const { fy, fq } = periodToFiscalQuarter(p);
+    const key = `Q${fq} FY${fy}`;
+    if (!quarterMap.has(key)) quarterMap.set(key, []);
+    quarterMap.get(key)!.push(p);
+  }
+  // Sort quarters descending (newest first)
+  return [...quarterMap.entries()]
+    .sort(([, a], [, b]) => b[0].localeCompare(a[0]))
+    .map(([label, months]) => ({
+      label,
+      value: months.sort().join(","),
+    }));
+}
+
 const MONTH_NAMES: Record<string, string> = {
   "01": "January", "02": "February", "03": "March", "04": "April",
   "05": "May", "06": "June", "07": "July", "08": "August",
@@ -141,8 +184,6 @@ function shortPeriod(yyyymm: string): string {
   return `${SHORT[month] || month} '${year}`;
 }
 
-// Backend stores charges as negative, credits as positive — flip sign for display
-const flip = (val: number) => val * -1;
 
 const fmtCurrency = (val: number) =>
   new Intl.NumberFormat("en-US", {
@@ -230,13 +271,28 @@ export default function UsagePage() {
   const monthlyTrend = listData?.monthly_trend || [];
   const filterOptions = listData?.filter_options;
 
+  // Build quarter options from available periods
+  const quarterOptions = useMemo(() => buildQuarterOptions(periods), [periods]);
+
+  // Determine display label for the header
+  const periodDisplayLabel = useMemo(() => {
+    if (!displayPeriod) return "";
+    // Check if it's a quarter selection (comma-separated)
+    if (displayPeriod.includes(",")) {
+      const qo = quarterOptions.find(q => q.value === displayPeriod);
+      if (qo) return qo.label;
+      return "Multiple Months";
+    }
+    return formatPeriod(displayPeriod);
+  }, [displayPeriod, quarterOptions]);
+
   // ── Top Accounts chart data ──
   const topAccountsData = useMemo(() => {
     return accounts.slice(0, topN).map((a) => ({
       name: a.sf_account_name.length > 25 ? a.sf_account_name.slice(0, 25) + "…" : a.sf_account_name,
       fullName: a.sf_account_name,
-      consumption: flip(a.consumption),
-      overage: flip(a.overage),
+      consumption: Math.abs(a.consumption),
+      overage: Math.abs(a.overage),
     }));
   }, [accounts, topN]);
 
@@ -249,8 +305,8 @@ export default function UsagePage() {
     return (productBreakdown[key] || []).map((p) => ({
       name: p.name.length > 30 ? p.name.slice(0, 30) + "…" : p.name,
       fullName: p.name,
-      consumption: flip(p.consumption),
-      overage: flip(p.overage),
+      consumption: Math.abs(p.consumption),
+      overage: Math.abs(p.overage),
     }));
   }, [productBreakdown, productDimension]);
 
@@ -258,9 +314,9 @@ export default function UsagePage() {
   const trendChartData = useMemo(() => {
     return monthlyTrend.map((t) => ({
       period: shortPeriod(t.period),
-      "Total Amount": flip(t.charged),
-      "Overage": flip(t.overage),
-      "Consumption": flip(t.consumption),
+      "Total Amount": Math.abs(t.charged),
+      "Overage": Math.abs(t.overage),
+      "Consumption": Math.abs(t.consumption),
     }));
   }, [monthlyTrend]);
 
@@ -271,8 +327,8 @@ export default function UsagePage() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([period, vals]) => ({
         period: shortPeriod(period),
-        "AI Product": flip(vals.ai),
-        "Product Usage": flip(vals.product),
+        "AI Product": Math.abs(vals.ai),
+        "Product Usage": Math.abs(vals.product),
       }));
   }, [detailData]);
 
@@ -286,7 +342,7 @@ export default function UsagePage() {
         const entry: Record<string, string | number> = { period: shortPeriod(period) };
         for (const [tax, vals] of Object.entries(taxes)) {
           allTax.add(tax);
-          entry[tax] = flip(vals.charged);
+          entry[tax] = Math.abs(vals.charged);
         }
         return entry;
       });
@@ -369,17 +425,30 @@ export default function UsagePage() {
       {/* ── Header + Filters ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">
-          Usage {displayPeriod ? `— ${formatPeriod(displayPeriod)}` : ""}
+          Usage {periodDisplayLabel ? `— ${periodDisplayLabel}` : ""}
         </h1>
         <div className="flex items-center gap-2 flex-wrap">
           <Select
             value={selectedPeriod || displayPeriod || ""}
             onValueChange={(v) => v && setSelectedPeriod(v)}
           >
-            <SelectTrigger className="w-[180px] h-8 text-xs">
-              <SelectValue placeholder="Select Month" />
+            <SelectTrigger className="w-[200px] h-8 text-xs">
+              <SelectValue placeholder="Select Period" />
             </SelectTrigger>
             <SelectContent>
+              {quarterOptions.length > 0 && (
+                <>
+                  <SelectItem value="__quarterly_label" disabled className="text-xs font-semibold text-muted-foreground">
+                    — Quarters —
+                  </SelectItem>
+                  {quarterOptions.map((q) => (
+                    <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                  ))}
+                  <SelectItem value="__monthly_label" disabled className="text-xs font-semibold text-muted-foreground">
+                    — Months —
+                  </SelectItem>
+                </>
+              )}
               {periods.map((p) => (
                 <SelectItem key={p} value={p}>{formatPeriod(p)}</SelectItem>
               ))}
@@ -413,11 +482,11 @@ export default function UsagePage() {
       {/* ── KPI Cards ── */}
       {totals && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <KpiCard label="Total Charged" value={flip(totals.charged)} format="currency" />
-          <KpiCard label="Consumption" value={flip(totals.consumption)} format="currency" />
-          <KpiCard label="Overage" value={flip(totals.overage)} format="currency" />
-          <KpiCard label="AI Usage" value={flip(totals.ai_charged)} format="currency" />
-          <KpiCard label="Other Usage" value={flip(totals.product_charged)} format="currency" />
+          <KpiCard label="Total Charged" value={Math.abs(totals.charged)} format="currency" />
+          <KpiCard label="Consumption" value={Math.abs(totals.consumption)} format="currency" />
+          <KpiCard label="Overage" value={Math.abs(totals.overage)} format="currency" />
+          <KpiCard label="AI Usage" value={Math.abs(totals.ai_charged)} format="currency" />
+          <KpiCard label="Other Usage" value={Math.abs(totals.product_charged)} format="currency" />
           <KpiCard label="Accounts with Overage" value={totals.accounts_with_overage} format="number" />
         </div>
       )}
@@ -445,7 +514,7 @@ export default function UsagePage() {
             {topAccountsData.length === 0 ? (
               <EmptyState title="No data" description="No accounts for this period" icon={Radio} />
             ) : (
-              <ResponsiveContainer width="100%" height={Math.max(250, topAccountsData.length * 28)}>
+              <ResponsiveContainer width="100%" height={500}>
                 <BarChart data={topAccountsData} layout="vertical" margin={{ left: 10 }}>
                   <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={shortCurrency} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={150} />
@@ -480,7 +549,7 @@ export default function UsagePage() {
             {productChartData.length === 0 ? (
               <EmptyState title="No data" description="No product data for this period" icon={Radio} />
             ) : (
-              <ResponsiveContainer width="100%" height={Math.max(250, productChartData.length * 28)}>
+              <ResponsiveContainer width="100%" height={500}>
                 <BarChart data={productChartData} layout="vertical" margin={{ left: 10 }}>
                   <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={shortCurrency} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={180} />
@@ -510,8 +579,8 @@ export default function UsagePage() {
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={shortCurrency} />
                 <Tooltip formatter={(val: unknown) => fmtCurrency(Number(val))} />
                 <Legend />
-                <Bar dataKey="Consumption" fill={COLOR_CONSUMPTION} />
-                <Bar dataKey="Overage" fill={COLOR_OVERAGE} />
+                <Bar dataKey="Consumption" stackId="a" fill={COLOR_CONSUMPTION} />
+                <Bar dataKey="Overage" stackId="a" fill={COLOR_OVERAGE} />
                 <Line
                   type="monotone"
                   dataKey="Total Amount"

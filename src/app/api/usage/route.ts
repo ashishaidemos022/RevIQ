@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const url = request.nextUrl;
 
     const sfAccountId = url.searchParams.get('sf_account_id');
-    const period = url.searchParams.get('period');
+    const period = url.searchParams.get('period'); // single YYYYMM or comma-separated
     const macroSku = url.searchParams.get('macro_sku');
     const taxonomy = url.searchParams.get('taxonomy');
 
@@ -112,8 +112,12 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .single();
 
-    const selectedPeriod = period || latestRow?.period_name || '';
-    if (!selectedPeriod) {
+    // Support single period or comma-separated periods (for quarter selection)
+    const selectedPeriods = period ? period.split(',').map(p => p.trim()) : [];
+    const selectedPeriod = selectedPeriods.length > 0 ? selectedPeriods.join(',') : (latestRow?.period_name || '');
+    const queryPeriods = selectedPeriods.length > 0 ? selectedPeriods : (latestRow?.period_name ? [latestRow.period_name] : []);
+
+    if (queryPeriods.length === 0) {
       return NextResponse.json({ data: [], periods: [], selected_period: '', totals: null, product_breakdown: [], monthly_trend: [] });
     }
 
@@ -137,12 +141,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Fetch usage data for selected period ──
+    // ── Fetch usage data for selected period(s) ──
     const periodRows = await fetchAll<UsageRow>(() => {
       let q = db
         .from('usage_billing_summary')
         .select(USAGE_SELECT)
-        .eq('period_name', selectedPeriod);
+        .in('period_name', queryPeriods);
       if (!scope.allAccess) q = q.in('sf_account_id', scopedAccountIds);
       return q;
     });
@@ -190,7 +194,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const accounts = [...accountMap.values()].sort((a, b) => b.charged - a.charged);
+    const accounts = [...accountMap.values()].sort((a, b) => Math.abs(b.charged) - Math.abs(a.charged));
 
     // ── Totals ──
     const totals = {
@@ -215,7 +219,7 @@ export async function GET(request: NextRequest) {
         p.overage += num(r.total_overage_amount_usd);
         p.charged += num(r.total_charged_amount_ns_usd);
       }
-      return [...map.values()].sort((a, b) => b.charged - a.charged);
+      return [...map.values()].sort((a, b) => Math.abs(b.charged) - Math.abs(a.charged));
     };
 
     const productBreakdown = {

@@ -112,12 +112,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [], periods: [], selected_period: '', totals: null });
     }
 
-    // Get all available periods
-    const periodsResult = await db
-      .from('usage_billing_summary')
-      .select('period_name')
-      .order('period_name', { ascending: false });
-    const allPeriods = [...new Set((periodsResult.data || []).map((r: { period_name: string }) => r.period_name))];
+    // Get all distinct periods — period_name column is small, fetch all and deduplicate
+    const allPeriodRows = await fetchAll<{ period_name: string }>(() =>
+      db.from('usage_billing_summary').select('period_name').order('period_name', { ascending: false })
+    );
+    const allPeriods = [...new Set(allPeriodRows.map(r => r.period_name))].sort().reverse();
 
     // Get accounts in scope
     const scopedAccountIds: string[] = [];

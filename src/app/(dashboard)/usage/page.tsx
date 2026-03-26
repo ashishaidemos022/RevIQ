@@ -113,6 +113,9 @@ function shortPeriod(yyyymm: string): string {
   return `${SHORT[month] || month} '${year}`;
 }
 
+// Backend stores charges as negative, credits as positive — flip sign for display
+const flip = (val: number) => val * -1;
+
 const fmtCurrency = (val: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -120,12 +123,14 @@ const fmtCurrency = (val: number) =>
     maximumFractionDigits: 0,
   }).format(val);
 
-const shortCurrency = (val: number) =>
-  val >= 1000000
-    ? `$${(val / 1000000).toFixed(1)}M`
-    : val >= 1000
-      ? `$${(val / 1000).toFixed(0)}K`
-      : `$${Math.round(val)}`;
+const shortCurrency = (val: number) => {
+  const v = Math.abs(val);
+  return v >= 1000000
+    ? `$${(v / 1000000).toFixed(1)}M`
+    : v >= 1000
+      ? `$${(v / 1000).toFixed(0)}K`
+      : `$${Math.round(v)}`;
+};
 
 const TAXONOMY_COLORS = [
   "#5405BD", "#14C3B7", "#FFCC00", "#8023F9", "#f59e0b",
@@ -201,7 +206,7 @@ export default function UsagePage() {
         key: "overage",
         header: "Overage",
         render: (row) => {
-          const val = row.overage as number;
+          const val = flip(row.overage as number);
           return (
             <span className={val > 0 ? "text-amber-600 font-medium" : ""}>
               {fmtCurrency(val)}
@@ -213,8 +218,8 @@ export default function UsagePage() {
         key: "ai_pct",
         header: "AI Product %",
         render: (row) => {
-          const charged = row.charged as number;
-          const ai = row.ai_charged as number;
+          const charged = flip(row.charged as number);
+          const ai = flip(row.ai_charged as number);
           if (!charged) return "—";
           const pct = Math.round((ai / charged) * 100);
           return (
@@ -235,8 +240,8 @@ export default function UsagePage() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([period, vals]) => ({
         period: shortPeriod(period),
-        "AI Product": vals.ai,
-        "Product Usage": vals.product,
+        "AI Product": flip(vals.ai),
+        "Product Usage": flip(vals.product),
       }));
   }, [detailData]);
 
@@ -250,7 +255,7 @@ export default function UsagePage() {
         const entry: Record<string, string | number> = { period: shortPeriod(period) };
         for (const [tax, vals] of Object.entries(taxes)) {
           allTax.add(tax);
-          entry[tax] = vals.charged;
+          entry[tax] = flip(vals.charged);
         }
         return entry;
       });
@@ -287,11 +292,11 @@ export default function UsagePage() {
       {/* KPI Cards */}
       {totals && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <KpiCard label="Total Charged" value={totals.charged} format="currency" />
-          <KpiCard label="Consumption" value={totals.consumption} format="currency" />
-          <KpiCard label="Overage" value={totals.overage} format="currency" />
-          <KpiCard label="AI Usage" value={totals.ai_charged} format="currency" />
-          <KpiCard label="Other Usage" value={totals.product_charged} format="currency" />
+          <KpiCard label="Total Charged" value={flip(totals.charged)} format="currency" />
+          <KpiCard label="Consumption" value={flip(totals.consumption)} format="currency" />
+          <KpiCard label="Overage" value={flip(totals.overage)} format="currency" />
+          <KpiCard label="AI Usage" value={flip(totals.ai_charged)} format="currency" />
+          <KpiCard label="Other Usage" value={flip(totals.product_charged)} format="currency" />
           <KpiCard label="Accounts with Overage" value={totals.accounts_with_overage} format="number" />
         </div>
       )}

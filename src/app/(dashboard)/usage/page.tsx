@@ -4,11 +4,19 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { DataTable, Column } from "@/components/dashboard/data-table";
+import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -18,6 +26,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Radio } from "lucide-react";
 import {
+  BarChart,
+  Bar,
   LineChart,
   Line,
   XAxis,
@@ -27,61 +37,117 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-interface AccountUsage {
-  id: string;
-  name: string;
-  owner_user_id: string | null;
-  users?: { id: string; full_name: string };
-  linked_acv: number;
-  usage: Record<string, { count: number; date: string }>;
-  last_updated: string;
+// ── Types ──
+
+interface AccountRow {
+  sf_account_id: string;
+  sf_account_name: string;
+  sf_account_owner: string;
+  consumption: number;
+  overage: number;
+  charged: number;
+  ai_charged: number;
+  product_charged: number;
+  taxonomies: Record<string, number>;
 }
 
-interface AccountDetail {
-  metrics: Array<{
-    id: string;
-    account_id: string;
-    product_type: string;
-    interaction_count: number;
-    metric_date: string;
-  }>;
-  account: {
-    id: string;
-    name: string;
-    industry: string | null;
-    region: string | null;
-    users?: { id: string; full_name: string; email: string };
+interface Totals {
+  consumption: number;
+  overage: number;
+  charged: number;
+  ai_charged: number;
+  product_charged: number;
+  accounts_with_overage: number;
+  total_accounts: number;
+}
+
+interface AccountListResponse {
+  data: AccountRow[];
+  periods: string[];
+  selected_period: string;
+  totals: Totals | null;
+}
+
+interface AccountDetailResponse {
+  data: {
+    account: {
+      name: string;
+      industry?: string | null;
+      region?: string | null;
+      users?: { full_name: string; email: string };
+    };
+    monthly_by_taxonomy: Record<string, Record<string, { consumption: number; overage: number; charged: number }>>;
+    monthly_by_type: Record<string, { ai: number; product: number; total: number }>;
+    opportunities: Array<{
+      id: string;
+      name: string;
+      stage: string;
+      acv: number | null;
+      close_date: string | null;
+    }>;
   };
-  opportunities: Array<{
-    id: string;
-    name: string;
-    stage: string;
-    acv: number | null;
-    close_date: string | null;
-  }>;
 }
 
-const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+// ── Helpers ──
+
+const MONTH_NAMES: Record<string, string> = {
+  "01": "January", "02": "February", "03": "March", "04": "April",
+  "05": "May", "06": "June", "07": "July", "08": "August",
+  "09": "September", "10": "October", "11": "November", "12": "December",
+};
+
+function formatPeriod(yyyymm: string): string {
+  const year = yyyymm.slice(0, 4);
+  const month = yyyymm.slice(4, 6);
+  return `${MONTH_NAMES[month] || month} ${year}`;
+}
+
+function shortPeriod(yyyymm: string): string {
+  const year = yyyymm.slice(2, 4);
+  const month = yyyymm.slice(4, 6);
+  const SHORT: Record<string, string> = {
+    "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+    "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+    "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+  };
+  return `${SHORT[month] || month} '${year}`;
+}
+
+const fmtCurrency = (val: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(val);
+
+const shortCurrency = (val: number) =>
+  val >= 1000000
+    ? `$${(val / 1000000).toFixed(1)}M`
+    : val >= 1000
+      ? `$${(val / 1000).toFixed(0)}K`
+      : `$${Math.round(val)}`;
+
+const TAXONOMY_COLORS = [
+  "#5405BD", "#14C3B7", "#FFCC00", "#8023F9", "#f59e0b",
+  "#6366f1", "#ec4899", "#22d3ee", "#84cc16", "#f97316",
 ];
 
+// ── Component ──
+
 export default function UsagePage() {
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
 
   const {
-    data: accountsData,
+    data: listData,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["usage-accounts"],
+    queryKey: ["usage-accounts", selectedPeriod],
     queryFn: () =>
-      apiFetch<{ data: AccountUsage[]; product_types: string[]; total: number }>(
-        "/api/usage?limit=200"
+      apiFetch<AccountListResponse>(
+        `/api/usage${selectedPeriod ? `?period=${selectedPeriod}` : ""}`
       ),
   });
 
@@ -91,84 +157,104 @@ export default function UsagePage() {
   } = useQuery({
     queryKey: ["usage-detail", selectedAccount],
     queryFn: () =>
-      apiFetch<{ data: AccountDetail }>(
-        `/api/usage?account_id=${selectedAccount}`
+      apiFetch<AccountDetailResponse>(
+        `/api/usage?sf_account_id=${selectedAccount}`
       ),
     enabled: !!selectedAccount,
   });
 
-  const accounts = accountsData?.data || [];
-  const productTypes = accountsData?.product_types || [];
+  const accounts = listData?.data || [];
+  const periods = listData?.periods || [];
+  const totals = listData?.totals;
+  const displayPeriod = listData?.selected_period || selectedPeriod;
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(val);
+  // Set initial period from API response
+  if (!selectedPeriod && displayPeriod) {
+    // Don't use setState during render — handled by queryKey
+  }
 
-  const columns: Column<Record<string, unknown>>[] = useMemo(() => {
-    const cols: Column<Record<string, unknown>>[] = [
-      { key: "name", header: "Account Name" },
+  // ── Account List Table Columns ──
+  const columns: Column<Record<string, unknown>>[] = useMemo(
+    () => [
       {
-        key: "owner",
+        key: "sf_account_name",
+        header: "Account",
+        render: (row) => (
+          <span className="font-medium">{row.sf_account_name as string}</span>
+        ),
+      },
+      {
+        key: "sf_account_owner",
         header: "AE Owner",
-        render: (row) =>
-          (row.users as { full_name: string } | undefined)?.full_name || "—",
       },
       {
-        key: "linked_acv",
-        header: "Linked ACV",
-        render: (row) => formatCurrency(row.linked_acv as number),
+        key: "charged",
+        header: "Total Charged",
+        render: (row) => fmtCurrency(row.charged as number),
       },
-    ];
-
-    productTypes.forEach((pt) => {
-      cols.push({
-        key: `usage_${pt}`,
-        header: `${pt} Interactions`,
+      {
+        key: "consumption",
+        header: "Consumption",
+        render: (row) => fmtCurrency(row.consumption as number),
+      },
+      {
+        key: "overage",
+        header: "Overage",
         render: (row) => {
-          const usage = row.usage as Record<string, { count: number }>;
-          return usage[pt]?.count?.toLocaleString() || "—";
+          const val = row.overage as number;
+          return (
+            <span className={val > 0 ? "text-amber-600 font-medium" : ""}>
+              {fmtCurrency(val)}
+            </span>
+          );
         },
-      });
-    });
-
-    cols.push({
-      key: "last_updated",
-      header: "Last Updated",
-      render: (row) => {
-        const date = row.last_updated as string;
-        return date || "—";
       },
-    });
+      {
+        key: "ai_pct",
+        header: "AI Product %",
+        render: (row) => {
+          const charged = row.charged as number;
+          const ai = row.ai_charged as number;
+          if (!charged) return "—";
+          const pct = Math.round((ai / charged) * 100);
+          return (
+            <Badge variant="outline" className="text-xs">
+              {pct}%
+            </Badge>
+          );
+        },
+      },
+    ],
+    []
+  );
 
-    return cols;
-  }, [productTypes]);
-
-  // Build usage-over-time chart data for the detail view
-  const usageChartData = useMemo(() => {
-    if (!detailData?.data?.metrics) return [];
-    const metrics = detailData.data.metrics;
-
-    // Group by metric_date, product_type
-    const dateMap: Record<string, Record<string, number>> = {};
-    metrics.forEach((m) => {
-      if (!dateMap[m.metric_date]) dateMap[m.metric_date] = {};
-      dateMap[m.metric_date][m.product_type] = m.interaction_count;
-    });
-
-    return Object.entries(dateMap)
+  // ── Detail: Monthly Trend (AI vs Product Usage) ──
+  const trendChartData = useMemo(() => {
+    if (!detailData?.data?.monthly_by_type) return [];
+    return Object.entries(detailData.data.monthly_by_type)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, products]) => ({
-        date: new Date(date).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        ...products,
+      .map(([period, vals]) => ({
+        period: shortPeriod(period),
+        "AI Product": vals.ai,
+        "Product Usage": vals.product,
       }));
   }, [detailData]);
 
-  const detailProductTypes = useMemo(() => {
-    if (!detailData?.data?.metrics) return [];
-    return [...new Set(detailData.data.metrics.map((m) => m.product_type))].sort();
+  // ── Detail: Monthly Trend by Taxonomy ──
+  const taxonomyChartData = useMemo(() => {
+    if (!detailData?.data?.monthly_by_taxonomy) return { data: [] as Record<string, string | number>[], taxonomies: [] as string[] };
+    const allTax = new Set<string>();
+    const data = Object.entries(detailData.data.monthly_by_taxonomy)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([period, taxes]) => {
+        const entry: Record<string, string | number> = { period: shortPeriod(period) };
+        for (const [tax, vals] of Object.entries(taxes)) {
+          allTax.add(tax);
+          entry[tax] = vals.charged;
+        }
+        return entry;
+      });
+    return { data, taxonomies: [...allTax].sort() };
   }, [detailData]);
 
   if (isLoading) return <DashboardSkeleton />;
@@ -176,17 +262,51 @@ export default function UsagePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Usage</h1>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-2xl font-bold tracking-tight">
+          Usage {displayPeriod ? `— ${formatPeriod(displayPeriod)}` : ""}
+        </h1>
+        <Select
+          value={selectedPeriod || displayPeriod || ""}
+          onValueChange={(v) => v && setSelectedPeriod(v)}
+        >
+          <SelectTrigger className="w-[200px] h-8 text-xs">
+            <SelectValue placeholder="Select Month" />
+          </SelectTrigger>
+          <SelectContent>
+            {periods.map((p) => (
+              <SelectItem key={p} value={p}>
+                {formatPeriod(p)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
+      {/* KPI Cards */}
+      {totals && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <KpiCard label="Total Charged" value={totals.charged} format="currency" />
+          <KpiCard label="Consumption" value={totals.consumption} format="currency" />
+          <KpiCard label="Overage" value={totals.overage} format="currency" />
+          <KpiCard label="AI Product" value={totals.ai_charged} format="currency" />
+          <KpiCard label="Accounts with Overage" value={totals.accounts_with_overage} format="number" />
+        </div>
+      )}
+
+      {/* Account Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Account Usage</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            Account Usage ({accounts.length} accounts)
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {accounts.length === 0 ? (
             <EmptyState
               title="No usage data"
-              description="No product usage data available"
+              description="No usage data available for the selected period"
               icon={Radio}
             />
           ) : (
@@ -194,13 +314,15 @@ export default function UsagePage() {
               data={accounts as unknown as Record<string, unknown>[]}
               columns={columns}
               pageSize={25}
-              onRowClick={(row) => setSelectedAccount(row.id as string)}
+              onRowClick={(row) =>
+                setSelectedAccount(row.sf_account_id as string)
+              }
             />
           )}
         </CardContent>
       </Card>
 
-      {/* Account Detail Panel */}
+      {/* Account Detail Sheet */}
       <Sheet
         open={!!selectedAccount}
         onOpenChange={(v) => !v && setSelectedAccount(null)}
@@ -208,12 +330,12 @@ export default function UsagePage() {
         <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {detailData?.data?.account?.name || "Account Usage Details"}
+              {detailData?.data?.account?.name || "Account Usage"}
             </SheetTitle>
           </SheetHeader>
 
           {detailLoading ? (
-            <div className="space-y-4 mt-6">
+            <div className="mt-6">
               <DashboardSkeleton />
             </div>
           ) : detailData?.data ? (
@@ -246,7 +368,9 @@ export default function UsagePage() {
               {detailData.data.opportunities.length > 0 && (
                 <>
                   <div>
-                    <h4 className="text-sm font-semibold mb-2">Open Opportunities</h4>
+                    <h4 className="text-sm font-semibold mb-2">
+                      Open Opportunities
+                    </h4>
                     <div className="space-y-2">
                       {detailData.data.opportunities.map((opp) => (
                         <div
@@ -256,7 +380,9 @@ export default function UsagePage() {
                           <span className="font-medium">{opp.name}</span>
                           <div className="flex items-center gap-3">
                             <Badge variant="secondary">{opp.stage}</Badge>
-                            <span>{opp.acv ? formatCurrency(opp.acv) : "—"}</span>
+                            <span>
+                              {opp.acv ? fmtCurrency(opp.acv) : "—"}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -266,85 +392,81 @@ export default function UsagePage() {
                 </>
               )}
 
-              {/* Usage Over Time Chart */}
+              {/* Monthly Trend: AI vs Product Usage */}
               <div>
-                <h4 className="text-sm font-semibold mb-3">Usage Over Time</h4>
-                {usageChartData.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No usage data available</p>
+                <h4 className="text-sm font-semibold mb-3">
+                  Monthly Charged — AI vs Product Usage
+                </h4>
+                {trendChartData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No trend data available
+                  </p>
                 ) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={usageChartData}>
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={trendChartData}>
+                      <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={shortCurrency}
+                      />
+                      <Tooltip
+                        formatter={(val: unknown) => fmtCurrency(Number(val))}
+                      />
                       <Legend />
-                      {detailProductTypes.map((pt, idx) => (
-                        <Line
-                          key={pt}
-                          type="monotone"
-                          dataKey={pt}
-                          stroke={CHART_COLORS[idx % CHART_COLORS.length]}
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                        />
-                      ))}
-                    </LineChart>
+                      <Bar
+                        dataKey="Product Usage"
+                        stackId="a"
+                        fill="#5405BD"
+                      />
+                      <Bar
+                        dataKey="AI Product"
+                        stackId="a"
+                        fill="#14C3B7"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
                   </ResponsiveContainer>
                 )}
               </div>
 
               <Separator />
 
-              {/* Commission Multiplier */}
+              {/* Monthly Trend by Taxonomy */}
               <div>
-                <h4 className="text-sm font-semibold mb-2">Commission Multiplier</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {detailProductTypes.map((pt) => {
-                    const latestMetric = detailData.data.metrics
-                      .filter((m) => m.product_type === pt)
-                      .sort((a, b) => b.metric_date.localeCompare(a.metric_date))[0];
-                    const interactions = latestMetric?.interaction_count || 0;
-                    // Default target of 1000 — would be configurable in Settings
-                    const target = 1000;
-                    const multiplier = Math.min(interactions / target, 1.0);
-                    return (
-                      <div key={pt} className="p-3 rounded-md bg-muted/30 text-sm">
-                        <p className="text-muted-foreground">{pt}</p>
-                        <p className="font-medium">
-                          {interactions.toLocaleString()} / {target.toLocaleString()} interactions
-                        </p>
-                        <p className="font-bold text-lg">{multiplier.toFixed(2)}x</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Raw Interactions Table */}
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Raw Interactions</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2">Date</th>
-                        <th className="text-left py-2">Product</th>
-                        <th className="text-right py-2">Interactions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailData.data.metrics.slice(0, 50).map((m) => (
-                        <tr key={m.id} className="border-b last:border-0">
-                          <td className="py-2">{m.metric_date}</td>
-                          <td className="py-2">{m.product_type}</td>
-                          <td className="py-2 text-right">{m.interaction_count.toLocaleString()}</td>
-                        </tr>
+                <h4 className="text-sm font-semibold mb-3">
+                  Monthly Charged by Product
+                </h4>
+                {taxonomyChartData.data.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No product data available
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={taxonomyChartData.data}>
+                      <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={shortCurrency}
+                      />
+                      <Tooltip
+                        formatter={(val: unknown) => fmtCurrency(Number(val))}
+                      />
+                      <Legend />
+                      {taxonomyChartData.taxonomies.map((tax, idx) => (
+                        <Line
+                          key={tax}
+                          type="monotone"
+                          dataKey={tax}
+                          stroke={
+                            TAXONOMY_COLORS[idx % TAXONOMY_COLORS.length]
+                          }
+                          strokeWidth={2}
+                          dot={{ r: 2 }}
+                        />
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </div>
           ) : null}

@@ -139,18 +139,6 @@ export function SyncTab() {
             <Button
               variant="outline"
               disabled={!!syncing}
-              onClick={() => syncMutation.mutate("snowflake-usage?mode=initial")}
-            >
-              {syncing === "snowflake-usage?mode=initial" ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Sync Usage (Initial Load)
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!!syncing}
               onClick={() => syncMutation.mutate("snowflake-usage")}
             >
               {syncing === "snowflake-usage" ? (
@@ -158,7 +146,7 @@ export function SyncTab() {
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              Sync Usage (Monthly)
+              Sync Usage (Snowflake)
             </Button>
           </div>
         </CardContent>

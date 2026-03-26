@@ -286,11 +286,12 @@ export default function UsagePage() {
 
       {/* KPI Cards */}
       {totals && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <KpiCard label="Total Charged" value={totals.charged} format="currency" />
           <KpiCard label="Consumption" value={totals.consumption} format="currency" />
           <KpiCard label="Overage" value={totals.overage} format="currency" />
-          <KpiCard label="AI Product" value={totals.ai_charged} format="currency" />
+          <KpiCard label="AI Usage" value={totals.ai_charged} format="currency" />
+          <KpiCard label="Other Usage" value={totals.product_charged} format="currency" />
           <KpiCard label="Accounts with Overage" value={totals.accounts_with_overage} format="number" />
         </div>
       )}

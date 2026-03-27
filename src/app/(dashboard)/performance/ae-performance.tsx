@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback } from "react";
 import { useFilterParamNumber } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { getRollingQuarters } from "@/lib/fiscal";
+import { getRollingQuarters, getCurrentFiscalPeriod, getQuarterStartDate } from "@/lib/fiscal";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { DealDrilldownDrawer, DrillDownDeal } from "@/components/charts/deal-drilldown-drawer";
@@ -132,11 +132,22 @@ export function AePerformance() {
   const QUARTER_COLORS = ["#d1d5db", "#a3a3a3", "#737373", "#525252", "#7c3aed"];
   const weeklyPacingData = useMemo(() => {
     if (quarterResults.length === 0) return [];
+    // Determine current week of current fiscal quarter
+    const { fiscalYear: curFY, fiscalQuarter: curFQ } = getCurrentFiscalPeriod();
+    const curQStart = getQuarterStartDate(curFY, curFQ);
+    const dayInQ = Math.floor((Date.now() - curQStart.getTime()) / (1000 * 60 * 60 * 24));
+    const currentWeekIdx = Math.min(Math.floor(dayInQ / 7), 12);
+
     const weeks: Array<Record<string, unknown>> = [];
     for (let w = 0; w < 13; w++) {
       const point: Record<string, unknown> = { week: `W${w + 1}` };
       quarterResults.forEach((q) => {
-        point[q.label] = q.weeklyAcv?.[w] ?? 0;
+        const isCurrentQ = q.fiscalYear === curFY && q.fiscalQuarter === curFQ;
+        if (isCurrentQ && w > currentWeekIdx) {
+          point[q.label] = null; // stop the line at current week
+        } else {
+          point[q.label] = q.weeklyAcv?.[w] ?? 0;
+        }
       });
       weeks.push(point);
     }

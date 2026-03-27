@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
       // Pipeline leaderboard: opportunities created (sf_created_date) within the period
       let query = db
         .from('opportunities')
-        .select('owner_user_id, acv, reporting_acv, opportunity_source, created_by_sf_id')
+        .select('owner_user_id, acv, reporting_acv, ai_acv, created_by_sf_id')
         .gt('acv', 0)
         .in('owner_user_id', aeIds);
       if (startStr) query = query.gte('sf_created_date', startStr);
@@ -191,33 +191,25 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const aeData: Record<string, { total: number; ae_created: number; sales_sourced: number; marketing_sourced: number; partner_sourced: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; reporting_acv: number | null; opportunity_source: string | null; created_by_sf_id: string | null }) => {
+      const aeData: Record<string, { total: number; ae_created: number; cxa_acv_created: number; deals: number }> = {};
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; reporting_acv: number | null; ai_acv: number | null; created_by_sf_id: string | null }) => {
         const id = o.owner_user_id || '';
         const acv = o.reporting_acv || o.acv || 0;
-        if (!aeData[id]) aeData[id] = { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
+        if (!aeData[id]) aeData[id] = { total: 0, ae_created: 0, cxa_acv_created: 0, deals: 0 };
         aeData[id].total += acv;
         aeData[id].deals++;
-        // AE Created Deals: creator role contains 'ae'
+        aeData[id].cxa_acv_created += o.ai_acv || 0;
+        // AE Created ACV: creator role contains 'ae'
         if (o.created_by_sf_id) {
           const creatorRole = (creatorRoleMap[o.created_by_sf_id] || '').toLowerCase();
           if (creatorRole.includes('ae')) {
             aeData[id].ae_created += acv;
           }
         }
-        // Categorize by opportunity_source
-        const src = (o.opportunity_source || '').trim();
-        if (src === 'Sales') {
-          aeData[id].sales_sourced += acv;
-        } else if (src === 'Marketing') {
-          aeData[id].marketing_sourced += acv;
-        } else if (src === 'Partner') {
-          aeData[id].partner_sourced += acv;
-        }
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
+        const data = aeData[ae.id] || { total: 0, ae_created: 0, cxa_acv_created: 0, deals: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
@@ -227,9 +219,7 @@ export async function GET(request: NextRequest) {
           primary_metric: data.total,
           secondary_metrics: {
             ae_created: data.ae_created,
-            sales_sourced: data.sales_sourced,
-            marketing_sourced: data.marketing_sourced,
-            partner_sourced: data.partner_sourced,
+            cxa_acv_created: data.cxa_acv_created,
             open_deals: data.deals,
             avg_deal_size: data.deals > 0 ? data.total / data.deals : 0,
           },

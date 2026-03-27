@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
+import { getSalesforceInstanceUrl } from '@/lib/salesforce/client';
 
 export async function GET(
   request: NextRequest,
@@ -37,9 +38,31 @@ export async function GET(
       }
     }
 
+    // Build Salesforce URL
+    let salesforce_url: string | null = null;
+    try {
+      const instanceUrl = await getSalesforceInstanceUrl();
+      salesforce_url = `${instanceUrl}/${opp.salesforce_opportunity_id}`;
+    } catch {
+      // SF connection unavailable — skip URL
+    }
+
+    // Build parent pilot URL if exists
+    let parent_pilot_url: string | null = null;
+    if (opp.parent_pilot_opportunity_sf_id && salesforce_url) {
+      try {
+        const instanceUrl = await getSalesforceInstanceUrl();
+        parent_pilot_url = `${instanceUrl}/${opp.parent_pilot_opportunity_sf_id}`;
+      } catch {
+        // skip
+      }
+    }
+
     return NextResponse.json({
       data: {
         ...opp,
+        salesforce_url,
+        parent_pilot_url,
         ...(creditInfo ? {
           credit_path: creditInfo.credit_path,
           partner_name: creditInfo.partner_name,

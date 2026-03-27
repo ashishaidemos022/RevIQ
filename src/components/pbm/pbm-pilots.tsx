@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { usePbmPilots } from "@/hooks/use-pbm-pilots";
+import {
+  getCurrentFiscalPeriod,
+  getQuarterStartDate,
+  getQuarterEndDate,
+  getRollingQuarters,
+} from "@/lib/fiscal";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
@@ -11,8 +18,37 @@ import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
 import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FlaskConical } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { FlaskConical, Filter } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+const BOOKED_STAGES = [
+  "Stage 8-Closed Won: Finance",
+  "Stage 7-Closed Won",
+  "Stage 6-Closed-Won: Finance Approved",
+  "Stage 5-Closed Won",
+];
+
+const OPEN_PILOT_STAGES = [
+  "Stage 0",
+  "Stage 1-Business Discovery",
+  "Stage 1-Renewal Placeholder",
+  "Stage 2-Renewal Under Management",
+  "Stage 2-Solution Discovery",
+  "Stage 3-Evaluation",
+  "Stage 3-Proposal",
+  "Stage 4-Shortlist",
+  "Stage 4-Verbal",
+  "Stage 5-Vendor of Choice",
+  "Stage 6-Commit",
+];
 
 type PilotStatus = "Active" | "Converted" | "Expired" | "Lost";
 
@@ -23,53 +59,151 @@ const statusBadgeVariant: Record<PilotStatus, "default" | "secondary" | "destruc
   Lost: "destructive",
 };
 
-function getDaysRemaining(endDate: string | null): number | null {
-  if (!endDate) return null;
-  const end = new Date(endDate);
-  const now = new Date();
-  return Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+const QUARTER_OPTIONS = [
+  { value: "all", label: "All Quarters" },
+  { value: "current", label: "Current Quarter" },
+];
+
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+  "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+  "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+};
+
+interface PbmPilotOpp {
+  id: string;
+  salesforce_opportunity_id: string;
+  name: string;
+  stage: string;
+  acv: number | null;
+  close_date: string | null;
+  sf_created_date: string | null;
+  is_closed_won: boolean;
+  is_closed_lost: boolean;
+  paid_pilot_end_date: string | null;
+  age: number | null;
+  pilot_status: string;
+  credit_path: string | null;
+  partner_name: string | null;
+  credited_pbm_name: string | null;
+  accounts?: { id: string; name: string };
+  users?: { id: string; full_name: string; email: string };
+  [key: string]: unknown;
 }
 
-function getDuration(startDate: string | null, endDate: string | null): number | null {
-  if (!startDate || !endDate) return null;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-}
+const fmtMonth = (v: string) => {
+  const [y, m] = v.split("-");
+  return `${MONTH_LABELS[m] || m} '${y.slice(2)}`;
+};
 
 export function PbmPilots() {
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
+  const [drillChart, setDrillChart] = useState<string | null>(null);
+  const [drillMonth, setDrillMonth] = useState<string | null>(null);
+  const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", "all");
+  const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+  const quarters = getRollingQuarters(8);
 
   const {
-    data: pilotsData,
+    data: response,
     isLoading,
     error,
     refetch,
   } = usePbmPilots();
 
-  const pilots = pilotsData?.data || [];
-  const kpis = pilotsData?.kpis;
+  const allPilots = (response?.data || []) as unknown as PbmPilotOpp[];
+  const serverKpis = response?.kpis;
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(val);
+  // Filter by quarter
+  const pilots = useMemo(() => {
+    if (quarterFilter === "all") return allPilots;
+    let fy = fiscalYear;
+    let fq = fiscalQuarter;
+    if (quarterFilter !== "current") {
+      const parts = quarterFilter.split("-");
+      fy = parseInt(parts[0]);
+      fq = parseInt(parts[1]);
+    }
+    const start = getQuarterStartDate(fy, fq).toISOString().split("T")[0];
+    const end = getQuarterEndDate(fy, fq).toISOString().split("T")[0];
+    return allPilots.filter((o) => {
+      if (!o.close_date) return false;
+      return o.close_date >= start && o.close_date <= end;
+    });
+  }, [allPilots, quarterFilter, fiscalYear, fiscalQuarter]);
 
-  // Pilots at risk (Active with end date within 30 days)
-  const atRiskPilots = useMemo(() => {
-    return pilots
-      .filter((o) => o.pilot_status === "Active" && o.paid_pilot_end_date)
-      .map((o) => ({
-        ...o,
-        daysRemaining: getDaysRemaining(o.paid_pilot_end_date),
-      }))
-      .filter((o) => o.daysRemaining !== null && o.daysRemaining <= 30)
-      .sort((a, b) => (a.daysRemaining ?? 999) - (b.daysRemaining ?? 999));
+  // Recompute KPIs for filtered set
+  const kpis = useMemo(() => {
+    if (quarterFilter === "all" && serverKpis) return serverKpis;
+
+    const booked = pilots.filter((p) => BOOKED_STAGES.includes(p.stage));
+    const won = pilots.filter((p) => p.is_closed_won);
+    const lost = pilots.filter((p) => p.is_closed_lost);
+    const winRate = (won.length + lost.length) > 0 ? (won.length / (won.length + lost.length)) * 100 : 0;
+
+    const ages = pilots.map((p) => p.age).filter((a): a is number => a !== null && a >= 0);
+    const avgDealDuration = ages.length > 0 ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length) : 0;
+
+    return {
+      booked_pilots: booked.length,
+      win_rate: winRate,
+      conversion_rate: serverKpis?.conversion_rate || 0,
+      avg_deal_duration: avgDealDuration,
+    };
+  }, [pilots, quarterFilter, serverKpis]);
+
+  // Chart data
+  const bookedChartData = useMemo(() => {
+    const map: Record<string, PbmPilotOpp[]> = {};
+    pilots.filter((p) => BOOKED_STAGES.includes(p.stage)).forEach((p) => {
+      const month = p.close_date?.substring(0, 7) || "Unknown";
+      if (!map[month]) map[month] = [];
+      map[month].push(p);
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([month, opps]) => ({ month, count: opps.length, opps }));
   }, [pilots]);
 
-  const atRiskColumns: Column<Record<string, unknown>>[] = [
+  const openChartData = useMemo(() => {
+    const map: Record<string, PbmPilotOpp[]> = {};
+    pilots.filter((p) => OPEN_PILOT_STAGES.includes(p.stage)).forEach((p) => {
+      const month = p.close_date?.substring(0, 7) || "Unknown";
+      if (!map[month]) map[month] = [];
+      map[month].push(p);
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([month, opps]) => ({ month, count: opps.length, opps }));
+  }, [pilots]);
+
+  const addedChartData = useMemo(() => {
+    const map: Record<string, PbmPilotOpp[]> = {};
+    pilots.forEach((p) => {
+      const month = p.sf_created_date?.substring(0, 7) || "Unknown";
+      if (!map[month]) map[month] = [];
+      map[month].push(p);
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([month, opps]) => ({ month, count: opps.length, opps }));
+  }, [pilots]);
+
+  const drillDeals = useMemo(() => {
+    if (!drillChart || !drillMonth) return [];
+    const chart = drillChart === "booked" ? bookedChartData : drillChart === "open" ? openChartData : addedChartData;
+    return chart.find((c) => c.month === drillMonth)?.opps || [];
+  }, [drillChart, drillMonth, bookedChartData, openChartData, addedChartData]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleBarClick = (chartName: string) => (data: any) => {
+    if (data?.activePayload?.[0]?.payload) {
+      const month = data.activePayload[0].payload.month;
+      if (drillChart === chartName && drillMonth === month) {
+        setDrillChart(null);
+        setDrillMonth(null);
+      } else {
+        setDrillChart(chartName);
+        setDrillMonth(month);
+      }
+    }
+  };
+
+  const drillColumns: Column<Record<string, unknown>>[] = [
     {
       key: "account",
       header: "Account",
@@ -80,29 +214,17 @@ export function PbmPilots() {
       header: "AE",
       render: (row) => (row.users as { full_name: string } | undefined)?.full_name || "—",
     },
+    { key: "name", header: "Opportunity" },
     {
-      key: "acv",
-      header: "ACV",
-      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
+      key: "stage",
+      header: "Stage",
+      render: (row) => <Badge variant="secondary">{row.stage as string}</Badge>,
     },
-    { key: "paid_pilot_start_date", header: "Start Date" },
-    { key: "paid_pilot_end_date", header: "End Date" },
+    { key: "close_date", header: "Close Date" },
     {
-      key: "daysRemaining",
-      header: "Days Left",
-      render: (row) => {
-        const days = row.daysRemaining as number;
-        return (
-          <span
-            className={cn(
-              "font-medium",
-              days != null && days <= 7 ? "text-red-600" : "text-amber-600"
-            )}
-          >
-            {days != null ? `${days}d` : "—"}
-          </span>
-        );
-      },
+      key: "age",
+      header: "Duration (Days)",
+      render: (row) => (row.age != null ? `${row.age}d` : "—"),
     },
     {
       key: "credit_path",
@@ -113,16 +235,6 @@ export function PbmPilots() {
           partnerName={row.partner_name as string | null}
         />
       ),
-    },
-    {
-      key: "partner_name",
-      header: "Partner",
-      render: (row) => (row.partner_name as string) || "—",
-    },
-    {
-      key: "credited_pbm_name",
-      header: "PBM",
-      render: (row) => (row.credited_pbm_name as string) || "—",
     },
   ];
 
@@ -137,30 +249,17 @@ export function PbmPilots() {
       header: "AE",
       render: (row) => (row.users as { full_name: string } | undefined)?.full_name || "—",
     },
-    {
-      key: "acv",
-      header: "ACV",
-      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
-    },
-    { key: "paid_pilot_start_date", header: "Pilot Start" },
-    { key: "paid_pilot_end_date", header: "Pilot End" },
+    { key: "name", header: "Opportunity" },
     {
       key: "stage",
       header: "Stage",
       render: (row) => <Badge variant="secondary">{row.stage as string}</Badge>,
     },
+    { key: "close_date", header: "Close Date" },
     {
-      key: "duration",
-      header: "Duration",
-      render: (row) => {
-        const d = getDuration(
-          row.paid_pilot_start_date as string | null,
-          row.is_closed_won
-            ? (row.close_date as string | null)
-            : (row.paid_pilot_end_date as string | null)
-        );
-        return d != null ? `${d}d` : "—";
-      },
+      key: "age",
+      header: "Duration (Days)",
+      render: (row) => (row.age != null ? `${row.age}d` : "—"),
     },
     {
       key: "pilot_status",
@@ -197,30 +296,106 @@ export function PbmPilots() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">PBM Paid Pilots</h1>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <KpiCard label="Active Pilots" value={kpis?.active || 0} format="number" />
-        <KpiCard label="Total Pilot ACV" value={kpis?.total_acv || 0} format="currency" />
-        <KpiCard label="Conversion Rate" value={kpis?.conversion_rate || 0} format="percent" />
-        <KpiCard label="Avg Pilot Duration" value={`${kpis?.avg_duration || 0}d`} />
-        <KpiCard label="Expiring Within 30 Days" value={kpis?.expiring_30d || 0} format="number" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-2xl font-bold tracking-tight">PBM Paid Pilots</h1>
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <MultiSelect
+            options={[...QUARTER_OPTIONS, ...quarters.map((q) => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))]}
+            value={[quarterFilter]}
+            onChange={(v) => setQuarterFilter(v[v.length - 1] || "all")}
+            placeholder="Quarter"
+            className="w-[160px]"
+          />
+        </div>
       </div>
 
-      {/* Pilots at Risk */}
-      {atRiskPilots.length > 0 && (
-        <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Booked Pilots" value={kpis.booked_pilots} format="number" />
+        <KpiCard label="Paid Pilot Win Rate" value={kpis.win_rate} format="percent" />
+        <KpiCard label="Paid Pilot Conversion Rate" value={kpis.conversion_rate} format="percent" />
+        <KpiCard label="Avg Pilot Deal Duration" value={`${kpis.avg_deal_duration}d`} />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              Pilots at Risk — Expiring Within 30 Days
+            <CardTitle className="text-sm font-medium">Booked Pilots</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {bookedChartData.length === 0 ? (
+              <EmptyState title="No data" description="No booked pilots found" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={bookedChartData} onClick={handleBarClick("booked")}>
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={fmtMonth} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip labelFormatter={(v: any) => fmtMonth(String(v))} />
+                  <Bar dataKey="count" fill="#5405BD" cursor="pointer" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Open Paid Pilot Deals</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {openChartData.length === 0 ? (
+              <EmptyState title="No data" description="No open pilot deals" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={openChartData} onClick={handleBarClick("open")}>
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={fmtMonth} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip labelFormatter={(v: any) => fmtMonth(String(v))} />
+                  <Bar dataKey="count" fill="#14C3B7" cursor="pointer" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Paid Pilots Added to Pipeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {addedChartData.length === 0 ? (
+              <EmptyState title="No data" description="No pilots found" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={addedChartData} onClick={handleBarClick("added")}>
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={fmtMonth} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip labelFormatter={(v: any) => fmtMonth(String(v))} />
+                  <Bar dataKey="count" fill="#FFCC00" cursor="pointer" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Drill-down table */}
+      {drillDeals.length > 0 && drillChart && drillMonth && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              {drillChart === "booked" ? "Booked Pilots" : drillChart === "open" ? "Open Pilot Deals" : "Pilots Added"} — {fmtMonth(drillMonth)}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <DataTable
-              data={atRiskPilots as unknown as Record<string, unknown>[]}
-              columns={atRiskColumns}
+              data={drillDeals as unknown as Record<string, unknown>[]}
+              columns={drillColumns}
               pageSize={10}
               onRowClick={(row) => setSelectedOpp(row.id as string)}
             />

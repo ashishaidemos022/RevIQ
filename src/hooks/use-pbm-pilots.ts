@@ -6,15 +6,14 @@ import { apiFetch } from "@/lib/api";
 import { PbmOpportunity } from "./use-pbm-opportunities";
 
 export interface PbmPilotsKpis {
-  active: number;
-  total_acv: number;
+  booked_pilots: number;
+  win_rate: number;
   conversion_rate: number;
-  avg_duration: number;
-  expiring_30d: number;
+  avg_deal_duration: number;
 }
 
 interface PbmPilotsResponse {
-  data: (PbmOpportunity & { pilot_status: string })[];
+  data: (PbmOpportunity & { pilot_status: string; age: number | null })[];
   kpis: PbmPilotsKpis;
 }
 

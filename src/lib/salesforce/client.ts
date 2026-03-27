@@ -2,6 +2,18 @@ import jsforce, { Connection } from 'jsforce';
 
 let connection: Connection | null = null;
 let tokenExpiresAt: number = 0;
+let cachedInstanceUrl: string | null = null;
+
+/**
+ * Returns the Salesforce instance URL (e.g., https://talkdesk.my.salesforce.com).
+ * Requires at least one prior call to getSalesforceConnection().
+ * If no connection has been made yet, connects first.
+ */
+export async function getSalesforceInstanceUrl(): Promise<string> {
+  if (cachedInstanceUrl) return cachedInstanceUrl;
+  const conn = await getSalesforceConnection();
+  return conn.instanceUrl;
+}
 
 function getConfig() {
   const loginUrl = process.env.SALESFORCE_LOGIN_URL;
@@ -56,6 +68,7 @@ export async function getSalesforceConnection(): Promise<Connection> {
   // Token typically lasts 2 hours
   tokenExpiresAt = now + 2 * 60 * 60 * 1000;
   connection = conn;
+  cachedInstanceUrl = token.instance_url;
 
   return conn;
 }

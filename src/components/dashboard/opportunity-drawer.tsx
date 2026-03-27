@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
+import { ExternalLink } from "lucide-react";
 
 interface OpportunityDrawerProps {
   opportunityId: string | null;
@@ -35,14 +36,10 @@ export function OpportunityDrawer({
 
   const opp = data as Record<string, unknown> | undefined;
 
-  const formatCurrency = (val: unknown) =>
-    typeof val === "number"
-      ? new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-          maximumFractionDigits: 0,
-        }).format(val)
-      : "—";
+  // URLs provided by the API (built server-side from the SF connection)
+  const sfUrl = (opp?.salesforce_url as string) || null;
+  const parentPilotSfId = opp?.parent_pilot_opportunity_sf_id as string | null;
+  const parentPilotUrl = (opp?.parent_pilot_url as string) || null;
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -98,27 +95,19 @@ export function OpportunityDrawer({
                 </p>
               </div>
               <div>
-                <p className="text-muted-foreground">ACV</p>
-                <p className="font-medium">{formatCurrency(opp.acv)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Amount</p>
-                <p className="font-medium">{formatCurrency(opp.amount)}</p>
-              </div>
-              <div>
                 <p className="text-muted-foreground">Close Date</p>
                 <p className="font-medium">{(opp.close_date as string) || "—"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Probability</p>
-                <p className="font-medium">
-                  {opp.probability != null ? `${opp.probability}%` : "—"}
-                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Forecast Category</p>
                 <p className="font-medium capitalize">
                   {(opp.forecast_category as string)?.replace("_", " ") || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">MGMT Forecast</p>
+                <p className="font-medium">
+                  {(opp.mgmt_forecast_category as string) || "—"}
                 </p>
               </div>
               <div>
@@ -128,6 +117,44 @@ export function OpportunityDrawer({
                 </p>
               </div>
             </div>
+
+            {/* Salesforce Link */}
+            {sfUrl && (
+              <>
+                <Separator />
+                <div className="text-sm">
+                  <a
+                    href={sfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    View in Salesforce
+                  </a>
+                </div>
+              </>
+            )}
+
+            {/* Parent Pilot Opportunity Link */}
+            {parentPilotSfId && (
+              <div className="text-sm">
+                <p className="text-muted-foreground mb-1">Parent Pilot Opportunity</p>
+                {parentPilotUrl ? (
+                  <a
+                    href={parentPilotUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {parentPilotSfId}
+                  </a>
+                ) : (
+                  <p className="font-medium">{parentPilotSfId}</p>
+                )}
+              </div>
+            )}
 
             {/* Partner / Credit Info */}
             {opp.partner_name || opp.credit_path ? (
@@ -146,30 +173,6 @@ export function OpportunityDrawer({
                       <p className="text-muted-foreground">Partner</p>
                       <p className="font-medium">
                         {(opp.partner_name as string) || "—"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {/* Paid Pilot Details */}
-            {opp.is_paid_pilot ? (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <h4 className="text-sm font-semibold">Paid Pilot Details</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Start Date</p>
-                      <p className="font-medium">
-                        {(opp.paid_pilot_start_date as string) || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">End Date</p>
-                      <p className="font-medium">
-                        {(opp.paid_pilot_end_date as string) || "—"}
                       </p>
                     </div>
                   </div>

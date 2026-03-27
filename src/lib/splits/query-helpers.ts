@@ -19,16 +19,26 @@ export function splitAcv(value: number | string | null, splitPct: number | strin
 }
 
 /**
+ * Safely extracts the single opportunity object from a PostgREST FK join result.
+ * PostgREST may return the embedded resource as a single object OR as an array
+ * depending on how it infers the FK cardinality. This helper normalizes both cases.
+ */
+export function getOpp<T>(row: { opportunities: T | T[] }): T {
+  return Array.isArray(row.opportunities) ? row.opportunities[0] : row.opportunities;
+}
+
+/**
  * Flattens a PostgREST split+opportunity join result into a flat record.
  * Input shape: { split_owner_user_id, split_percentage, opportunities: { ...fields } }
  * Output shape: { split_owner_user_id, split_pct, ...fields }
  */
 export function flattenSplitRow<T extends Record<string, unknown>>(
-  row: { split_owner_user_id: string; split_percentage: number | string; opportunities: T }
+  row: { split_owner_user_id: string; split_percentage: number | string; opportunities: T | T[] }
 ): T & { split_owner_user_id: string; split_pct: number } {
   const pct = typeof row.split_percentage === 'string' ? parseFloat(row.split_percentage) : (row.split_percentage || 0);
+  const opp = Array.isArray(row.opportunities) ? row.opportunities[0] : row.opportunities;
   return {
-    ...row.opportunities,
+    ...opp,
     split_owner_user_id: row.split_owner_user_id,
     split_pct: pct,
   };
@@ -38,7 +48,7 @@ export function flattenSplitRow<T extends Record<string, unknown>>(
  * Flattens an array of split+opportunity join results.
  */
 export function flattenSplitRows<T extends Record<string, unknown>>(
-  rows: Array<{ split_owner_user_id: string; split_percentage: number | string; opportunities: T }>
+  rows: Array<{ split_owner_user_id: string; split_percentage: number | string; opportunities: T | T[] }>
 ): Array<T & { split_owner_user_id: string; split_pct: number }> {
   return rows.map(flattenSplitRow);
 }

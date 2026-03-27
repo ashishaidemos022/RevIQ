@@ -5,7 +5,7 @@ import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFisc
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
-import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
+import { REVENUE_SPLIT_TYPE, splitAcv, getOpp } from '@/lib/splits/query-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,13 +39,13 @@ export async function GET(request: NextRequest) {
       return scopedQuery(q, 'split_owner_user_id', scope);
     });
 
-    const acvClosedQTD = qtdSplits.reduce((s, r) => s + splitAcv(r.opportunities.acv, r.split_percentage), 0);
-    const cxaAcvClosedQTD = qtdSplits.reduce((s, r) => s + splitAcv(r.opportunities.ai_acv, r.split_percentage), 0);
+    const acvClosedQTD = qtdSplits.reduce((s, r) => { const o = getOpp(r); return s + splitAcv(o.acv, r.split_percentage); }, 0);
+    const cxaAcvClosedQTD = qtdSplits.reduce((s, r) => { const o = getOpp(r); return s + splitAcv(o.ai_acv, r.split_percentage); }, 0);
     const countableQtdSplits = qtdSplits.filter(
-      r => r.opportunities.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(r.opportunities.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (r.opportunities.acv || 0) > 0
+      r => { const o = getOpp(r); return o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0; }
     );
     const dealsClosedQTD = countableQtdSplits.length;
-    const dealsWithCxaQTD = countableQtdSplits.filter(r => (r.opportunities.ai_acv || 0) > 0).length;
+    const dealsWithCxaQTD = countableQtdSplits.filter(r => { const o = getOpp(r); return (o.ai_acv || 0) > 0; }).length;
     const pctClosedDealsWithCxa = dealsClosedQTD > 0 ? (dealsWithCxaQTD / dealsClosedQTD) * 100 : 0;
 
     // Closed-won YTD via opportunity_splits (paginated)
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       return scopedQuery(q, 'split_owner_user_id', scope);
     });
 
-    const acvClosedYTD = ytdSplits.reduce((s, r) => s + splitAcv(r.opportunities.acv, r.split_percentage), 0);
+    const acvClosedYTD = ytdSplits.reduce((s, r) => { const o = getOpp(r); return s + splitAcv(o.acv, r.split_percentage); }, 0);
 
     // Quota — use target user's own quota (not sum of subordinates)
     const targetUser = viewAsUser ?? user;

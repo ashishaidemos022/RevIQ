@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { fetchAll } from '@/lib/supabase/fetch-all';
-import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
+import { REVENUE_SPLIT_TYPE, splitAcv, getOpp } from '@/lib/splits/query-helpers';
 
 interface SplitOppRow {
   split_owner_user_id: string;
@@ -58,22 +58,25 @@ export async function GET(request: NextRequest) {
     });
 
     // Flatten split rows into opportunity-like records with split-adjusted ACV
-    const opps = splitRows.map((row) => ({
-      id: row.opportunities.id,
-      name: row.opportunities.name,
-      stage: row.opportunities.stage,
-      acv: splitAcv(row.opportunities.acv, row.split_percentage),
-      reporting_acv: splitAcv(row.opportunities.reporting_acv, row.split_percentage),
-      probability: row.opportunities.probability,
-      close_date: row.opportunities.close_date,
-      is_paid_pilot: row.opportunities.is_paid_pilot,
-      last_stage_changed_at: row.opportunities.last_stage_changed_at,
-      mgmt_forecast_category: row.opportunities.mgmt_forecast_category,
-      cxa_committed_arr: splitAcv(row.opportunities.cxa_committed_arr, row.split_percentage),
-      days_in_current_stage: row.opportunities.days_in_current_stage,
-      accounts: row.opportunities.accounts,
-      users: row.opportunities.users,
-    }));
+    const opps = splitRows.map((row) => {
+      const opp = getOpp(row);
+      return {
+        id: opp.id,
+        name: opp.name,
+        stage: opp.stage,
+        acv: splitAcv(opp.acv, row.split_percentage),
+        reporting_acv: splitAcv(opp.reporting_acv, row.split_percentage),
+        probability: opp.probability,
+        close_date: opp.close_date,
+        is_paid_pilot: opp.is_paid_pilot,
+        last_stage_changed_at: opp.last_stage_changed_at,
+        mgmt_forecast_category: opp.mgmt_forecast_category,
+        cxa_committed_arr: splitAcv(opp.cxa_committed_arr, row.split_percentage),
+        days_in_current_stage: opp.days_in_current_stage,
+        accounts: opp.accounts,
+        users: opp.users,
+      };
+    });
 
     // Aggregate by stage
     const stageMap: Record<string, {

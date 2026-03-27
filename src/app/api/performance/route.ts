@@ -6,7 +6,7 @@ import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 import { AE_ROLES } from '@/lib/constants';
-import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
+import { REVENUE_SPLIT_TYPE, splitAcv, getOpp } from '@/lib/splits/query-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,34 +81,35 @@ export async function GET(request: NextRequest) {
         )
       );
 
-      const acvClosed = closedSplits.reduce((s, row) => s + splitAcv(row.opportunities.acv, row.split_percentage), 0);
+      const acvClosed = closedSplits.reduce((s, row) => { const o = getOpp(row); return s + splitAcv(o.acv, row.split_percentage); }, 0);
 
       // Weekly cumulative ACV for pacing chart (13 weeks per quarter)
       const weeklyAcv: number[] = new Array(13).fill(0);
       for (const row of closedSplits) {
-        if (!row.opportunities.close_date) continue;
-        const dayInQ = Math.floor((new Date(row.opportunities.close_date).getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        const o = getOpp(row);
+        if (!o.close_date) continue;
+        const dayInQ = Math.floor((new Date(o.close_date).getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         const weekIdx = Math.min(Math.floor(dayInQ / 7), 12);
-        weeklyAcv[weekIdx] += splitAcv(row.opportunities.acv, row.split_percentage);
+        weeklyAcv[weekIdx] += splitAcv(o.acv, row.split_percentage);
       }
       // Convert to cumulative
       for (let i = 1; i < 13; i++) {
         weeklyAcv[i] += weeklyAcv[i - 1];
       }
-      const cxaClosed = closedSplits.reduce((s, row) => s + splitAcv(row.opportunities.ai_acv, row.split_percentage), 0);
+      const cxaClosed = closedSplits.reduce((s, row) => { const o = getOpp(row); return s + splitAcv(o.ai_acv, row.split_percentage); }, 0);
       // Deals Closed: only count deals with a valid sub_type AND acv > 0
       const countableSplits = closedSplits.filter(
-        row => row.opportunities.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(row.opportunities.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (row.opportunities.acv || 0) > 0
+        row => { const o = getOpp(row); return o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0; }
       );
       const dealsClosed = countableSplits.length;
-      const dealsClosedWithCxa = countableSplits.filter(row => (row.opportunities.ai_acv || 0) > 0).length;
+      const dealsClosedWithCxa = countableSplits.filter(row => { const o = getOpp(row); return (o.ai_acv || 0) > 0; }).length;
 
       // Deal-level data for drill-down
       const acvDeals = closedSplits
-        .map(row => ({ id: row.opportunities.id, name: row.opportunities.name || 'Unnamed', owner: row.opportunities.users?.full_name || 'Unknown', acv: splitAcv(row.opportunities.acv, row.split_percentage) }))
+        .map(row => { const o = getOpp(row); return { id: o.id, name: o.name || 'Unnamed', owner: o.users?.full_name || 'Unknown', acv: splitAcv(o.acv, row.split_percentage) }; })
         .sort((a, b) => b.acv - a.acv);
       const dealsClosedDeals = countableSplits
-        .map(row => ({ id: row.opportunities.id, name: row.opportunities.name || 'Unnamed', owner: row.opportunities.users?.full_name || 'Unknown', acv: splitAcv(row.opportunities.acv, row.split_percentage) }))
+        .map(row => { const o = getOpp(row); return { id: o.id, name: o.name || 'Unnamed', owner: o.users?.full_name || 'Unknown', acv: splitAcv(o.acv, row.split_percentage) }; })
         .sort((a, b) => b.acv - a.acv);
 
       // These metrics are N/A before FY2027
@@ -235,7 +236,7 @@ export async function GET(request: NextRequest) {
               'split_owner_user_id'
             )
           );
-          ytdAcvClosed += ytdSplits.reduce((s, row) => s + splitAcv(row.opportunities.acv, row.split_percentage), 0);
+          ytdAcvClosed += ytdSplits.reduce((s, row) => { const o = getOpp(row); return s + splitAcv(o.acv, row.split_percentage); }, 0);
         }
       }
 

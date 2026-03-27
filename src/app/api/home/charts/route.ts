@@ -4,7 +4,7 @@ import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQu
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { getStageGroup } from '@/lib/stage-groups';
-import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
+import { REVENUE_SPLIT_TYPE, splitAcv, getOpp } from '@/lib/splits/query-helpers';
 
 /**
  * Returns aggregated chart data for the Home dashboard:
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const ccaasAcvByMonth: Record<string, number> = {};
     const acvDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>> = {};
     for (const row of closedOpps) {
-      const o = row.opportunities;
+      const o = getOpp(row);
       if (!o.close_date) continue;
       const month = o.close_date.substring(0, 7); // YYYY-MM
       const acv = splitAcv(o.acv, row.split_percentage);
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     // Deal-level data keyed by "month|group" for drill-down
     const pipelineDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number; stage: string }>> = {};
     for (const row of openOpps) {
-      const o = row.opportunities;
+      const o = getOpp(row);
       if (!o.close_date) continue;
       const group = getStageGroup(o.stage || '');
       if (!group) continue; // excluded stage

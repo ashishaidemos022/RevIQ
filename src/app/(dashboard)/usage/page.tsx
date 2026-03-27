@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFilterParam, useFilterParamNumber } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { DataTable, Column } from "@/components/dashboard/data-table";
@@ -157,7 +158,7 @@ function buildQuarterOptions(periods: string[]): QuarterOption[] {
     .sort(([, a], [, b]) => b[0].localeCompare(a[0]))
     .map(([label, months]) => ({
       label,
-      value: months.sort().join(","),
+      value: `q:${months.sort().join(",")}`,
     }));
 }
 
@@ -222,17 +223,21 @@ const TOP_N_OPTIONS = [10, 25, 50];
 // ── Component ──
 
 export default function UsagePage() {
-  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
-  const [macroSkuFilter, setMacroSkuFilter] = useState<string>("all");
-  const [taxonomyFilter, setTaxonomyFilter] = useState<string>("all");
-  const [topN, setTopN] = useState<number>(25);
-  const [productDimension, setProductDimension] = useState<ProductDimension>("macro_sku");
+  const [selectedPeriod, setSelectedPeriod] = useFilterParam("period", "");
+  const [macroSkuFilter, setMacroSkuFilter] = useFilterParam("macro_sku", "all");
+  const [taxonomyFilter, setTaxonomyFilter] = useFilterParam("taxonomy", "all");
+  const [topN, setTopN] = useFilterParamNumber("topN", 25);
+  const [productDimension, setProductDimension] = useFilterParam("dimension", "macro_sku") as [ProductDimension, (v: string) => void];
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
 
   // Build query params
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
-    if (selectedPeriod) params.set("period", selectedPeriod);
+    if (selectedPeriod) {
+      // Strip "q:" prefix used for quarter values to avoid Select collisions
+      const periodParam = selectedPeriod.startsWith("q:") ? selectedPeriod.slice(2) : selectedPeriod;
+      params.set("period", periodParam);
+    }
     if (macroSkuFilter !== "all") params.set("macro_sku", macroSkuFilter);
     if (taxonomyFilter !== "all") params.set("taxonomy", taxonomyFilter);
     return params.toString();
@@ -276,15 +281,15 @@ export default function UsagePage() {
 
   // Determine display label for the header
   const periodDisplayLabel = useMemo(() => {
-    if (!displayPeriod) return "";
-    // Check if it's a quarter selection (comma-separated)
-    if (displayPeriod.includes(",")) {
-      const qo = quarterOptions.find(q => q.value === displayPeriod);
+    const period = selectedPeriod || displayPeriod;
+    if (!period) return "";
+    if (period.startsWith("q:")) {
+      const qo = quarterOptions.find(q => q.value === period);
       if (qo) return qo.label;
-      return "Multiple Months";
+      return "Quarter";
     }
-    return formatPeriod(displayPeriod);
-  }, [displayPeriod, quarterOptions]);
+    return formatPeriod(period);
+  }, [selectedPeriod, displayPeriod, quarterOptions]);
 
   // ── Top Accounts chart data ──
   const topAccountsData = useMemo(() => {

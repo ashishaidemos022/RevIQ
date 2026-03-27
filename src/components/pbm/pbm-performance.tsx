@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
+import { useFilterParamNumber } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
 import { apiFetch } from "@/lib/api";
@@ -72,7 +73,7 @@ function formatValue(value: number, format: string): string {
 }
 
 export function PbmPerformance() {
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = useFilterParamNumber("offset", 0);
   const [drillDown, setDrillDown] = useState<{
     title: string;
     deals: DrillDownDeal[];

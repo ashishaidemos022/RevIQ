@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
@@ -295,9 +296,9 @@ function PilotsBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowCl
 }
 
 export default function PartnerLeaderboardPage() {
-  const [board, setBoard] = useState("revenue");
-  const [period, setPeriod] = useState("qtd");
-  const [region, setRegion] = useState("combined");
+  const [board, setBoard] = useFilterParam("board", "revenue");
+  const [period, setPeriod] = useFilterParam("period", "qtd");
+  const [region, setRegion] = useFilterParam("region", "combined");
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
 
   const {

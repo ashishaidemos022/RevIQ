@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -97,10 +98,10 @@ export default function TeamPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState<SelectionMode>("none");
-  const [viewMode, setViewMode] = useState<"roster" | "compare">("roster");
-  const [rosterView, setRosterView] = useState<RosterView>("flat");
+  const [viewMode, setViewMode] = useFilterParam("view", "roster") as ["roster" | "compare", (v: string) => void];
+  const [rosterView, setRosterView] = useFilterParam("rosterView", "flat") as [RosterView, (v: string) => void];
   const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useFilterParam("role", "all");
 
   // Reset selection when ViewAs changes
   const viewAsId = viewAsUser?.user_id ?? null;

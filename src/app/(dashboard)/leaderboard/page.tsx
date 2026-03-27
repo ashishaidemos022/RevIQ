@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -281,10 +282,10 @@ function ActivitiesBoard({ entries, onRowClick }: { entries: LeaderboardEntry[];
 
 export default function LeaderboardPage() {
   const user = useAuthStore((s) => s.user);
-  const [board, setBoard] = useState("revenue");
-  const [period, setPeriod] = useState("qtd");
-  const [aeType, setAeType] = useState("combined");
-  const [region, setRegion] = useState("combined");
+  const [board, setBoard] = useFilterParam("board", "revenue");
+  const [period, setPeriod] = useFilterParam("period", "qtd");
+  const [aeType, setAeType] = useFilterParam("aeType", "combined");
+  const [region, setRegion] = useFilterParam("region", "combined");
   const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 

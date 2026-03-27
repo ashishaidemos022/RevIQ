@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
+import { useFilterParamNumber } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { getRollingQuarters } from "@/lib/fiscal";
@@ -71,7 +72,7 @@ function formatValue(value: number, format: string): string {
 }
 
 export function AePerformance() {
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = useFilterParamNumber("offset", 0);
   const [drillDown, setDrillDown] = useState<{
     title: string;
     deals: DrillDownDeal[];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
 import { PbmOpportunity } from "@/hooks/use-pbm-opportunities";
 import {
@@ -33,9 +34,9 @@ const STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
 export function PbmPipeline() {
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
 
-  const [quarterFilter, setQuarterFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [pilotFilter, setPilotFilter] = useState("all");
+  const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", "current");
+  const [stageFilter, setStageFilter] = useFilterParam("stage", "all");
+  const [pilotFilter, setPilotFilter] = useFilterParam("pilot", "all");
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
 

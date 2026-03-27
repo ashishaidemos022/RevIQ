@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { useAuthStore } from "@/stores/auth-store";
 import { useActivities, ActivitySummaryRow } from "@/hooks/use-activities";
 import {
@@ -50,7 +51,7 @@ export default function ActivitiesPage() {
   const qStart = getQuarterStartDate(fiscalYear, fiscalQuarter);
   const qEnd = getQuarterEndDate(fiscalYear, fiscalQuarter);
 
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
 
   const {
     data: activitiesData,

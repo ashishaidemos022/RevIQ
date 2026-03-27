@@ -125,6 +125,36 @@ export function getRollingQuarters(count: number = 4): Array<{
 }
 
 /**
+ * Returns the current quarter plus the next N quarters (forward-looking).
+ */
+export function getForwardQuarters(count: number = 4): Array<{
+  fiscalYear: number;
+  fiscalQuarter: number;
+  label: string;
+}> {
+  const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+  const quarters: Array<{ fiscalYear: number; fiscalQuarter: number; label: string }> = [];
+
+  let fy = fiscalYear;
+  let fq = fiscalQuarter;
+
+  for (let i = 0; i < count; i++) {
+    quarters.push({
+      fiscalYear: fy,
+      fiscalQuarter: fq,
+      label: `Q${fq} FY${fy}`,
+    });
+    fq++;
+    if (fq === 5) {
+      fq = 1;
+      fy++;
+    }
+  }
+
+  return quarters;
+}
+
+/**
  * Formats a date string to fiscal quarter label.
  */
 export function dateToQuarterLabel(dateStr: string): string {

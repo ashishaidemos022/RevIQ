@@ -7,7 +7,7 @@ import {
   getCurrentFiscalPeriod,
   getQuarterStartDate,
   getQuarterEndDate,
-  getRollingQuarters,
+  getForwardQuarters,
 } from "@/lib/fiscal";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
@@ -19,6 +19,12 @@ import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FlaskConical, Filter } from "lucide-react";
 import {
   BarChart,
@@ -59,10 +65,7 @@ const statusBadgeVariant: Record<PilotStatus, "default" | "secondary" | "destruc
   Lost: "destructive",
 };
 
-const QUARTER_OPTIONS = [
-  { value: "all", label: "All Quarters" },
-  { value: "current", label: "Current Quarter" },
-];
+// Quarter filter options are built dynamically from getForwardQuarters(4)
 
 const MONTH_LABELS: Record<string, string> = {
   "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
@@ -100,9 +103,10 @@ export function PbmPilots() {
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
   const [drillChart, setDrillChart] = useState<string | null>(null);
   const [drillMonth, setDrillMonth] = useState<string | null>(null);
-  const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", "all");
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
-  const quarters = getRollingQuarters(8);
+  const quarters = getForwardQuarters(4);
+  const defaultQuarter = `${fiscalYear}-${fiscalQuarter}`;
+  const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", defaultQuarter);
 
   const {
     data: response,
@@ -116,14 +120,9 @@ export function PbmPilots() {
 
   // Filter by quarter
   const pilots = useMemo(() => {
-    if (quarterFilter === "all") return allPilots;
-    let fy = fiscalYear;
-    let fq = fiscalQuarter;
-    if (quarterFilter !== "current") {
-      const parts = quarterFilter.split("-");
-      fy = parseInt(parts[0]);
-      fq = parseInt(parts[1]);
-    }
+    const parts = quarterFilter.split("-");
+    const fy = parseInt(parts[0]) || fiscalYear;
+    const fq = parseInt(parts[1]) || fiscalQuarter;
     const start = getQuarterStartDate(fy, fq).toISOString().split("T")[0];
     const end = getQuarterEndDate(fy, fq).toISOString().split("T")[0];
     return allPilots.filter((o) => {
@@ -134,8 +133,6 @@ export function PbmPilots() {
 
   // Recompute KPIs for filtered set
   const kpis = useMemo(() => {
-    if (quarterFilter === "all" && serverKpis) return serverKpis;
-
     const booked = pilots.filter((p) => BOOKED_STAGES.includes(p.stage));
     const won = pilots.filter((p) => p.is_closed_won);
     const lost = pilots.filter((p) => p.is_closed_lost);
@@ -301,9 +298,9 @@ export function PbmPilots() {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <MultiSelect
-            options={[...QUARTER_OPTIONS, ...quarters.map((q) => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))]}
+            options={quarters.map((q) => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))}
             value={[quarterFilter]}
-            onChange={(v) => setQuarterFilter(v[v.length - 1] || "all")}
+            onChange={(v) => setQuarterFilter(v[v.length - 1] || defaultQuarter)}
             placeholder="Quarter"
             className="w-[160px]"
           />
@@ -384,24 +381,30 @@ export function PbmPilots() {
         </Card>
       </div>
 
-      {/* Drill-down table */}
-      {drillDeals.length > 0 && drillChart && drillMonth && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              {drillChart === "booked" ? "Booked Pilots" : drillChart === "open" ? "Open Pilot Deals" : "Pilots Added"} — {fmtMonth(drillMonth)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              data={drillDeals as unknown as Record<string, unknown>[]}
-              columns={drillColumns}
-              pageSize={10}
-              onRowClick={(row) => setSelectedOpp(row.id as string)}
-            />
-          </CardContent>
-        </Card>
-      )}
+      {/* Drill-down modal for chart clicks */}
+      <Dialog
+        open={!!(drillChart && drillMonth && drillDeals.length > 0)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDrillChart(null);
+            setDrillMonth(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {drillChart === "booked" ? "Booked Pilots" : drillChart === "open" ? "Open Pilot Deals" : "Pilots Added"} — {drillMonth ? fmtMonth(drillMonth) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <DataTable
+            data={drillDeals as unknown as Record<string, unknown>[]}
+            columns={drillColumns}
+            pageSize={10}
+            onRowClick={(row) => setSelectedOpp(row.id as string)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* All Pilots Table */}
       <Card>

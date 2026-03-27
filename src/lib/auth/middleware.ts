@@ -91,6 +91,22 @@ export async function resolveDataScope(
     // New reference-user-based overrides: union the org subtrees of all reference users
     const refIds: string[] = override.reference_user_ids || [];
     if (refIds.length > 0) {
+      // Look up the roles of all reference users to check if any has full access
+      const { data: refUsers } = await db
+        .from('users')
+        .select('id, role')
+        .in('id', refIds);
+
+      // If any reference user has a full-access role (e.g. revops_ro, cro, c_level),
+      // the override grants full company-wide access — because that reference user
+      // sees all data, so the override recipient should too.
+      const anyFullAccess = (refUsers || []).some(
+        u => FULL_ACCESS_ROLES.includes(u.role as UserRole)
+      );
+      if (anyFullAccess) {
+        return { allAccess: true, userIds: [] };
+      }
+
       const allUserIds = new Set<string>([targetUser.user_id]);
       for (const refId of refIds) {
         allUserIds.add(refId);

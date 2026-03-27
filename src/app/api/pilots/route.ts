@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { REVENUE_SPLIT_TYPE, splitAcv, flattenSplitRows } from '@/lib/splits/query-helpers';
 
 const BOOKED_STAGES = [
   'Stage 8-Closed Won: Finance',
@@ -10,7 +11,15 @@ const BOOKED_STAGES = [
   'Stage 5-Closed Won',
 ];
 
-const SELECT_FIELDS = '*, accounts(id, name, industry, region), users!opportunities_owner_user_id_fkey(id, full_name, email)';
+const SPLIT_SELECT = [
+  'split_owner_user_id',
+  'split_percentage',
+  'opportunities!inner(id, name, salesforce_opportunity_id, stage, acv, close_date, sf_created_date,',
+  'is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date, paid_pilot_end_date,',
+  'parent_pilot_opportunity_sf_id,',
+  'accounts(id, name, industry, region),',
+  'users!opportunities_owner_user_id_fkey(id, full_name, email))',
+].join(' ');
 
 interface OppRow {
   id: string;
@@ -28,6 +37,8 @@ interface OppRow {
   parent_pilot_opportunity_sf_id: string | null;
   accounts: { id: string; name: string } | null;
   users: { id: string; full_name: string; email: string } | null;
+  split_owner_user_id: string;
+  split_pct: number;
   [key: string]: unknown;
 }
 
@@ -38,21 +49,28 @@ export async function GET(request: NextRequest) {
     const scope = await resolveDataScope(user, viewAsUser);
     const db = getSupabaseClient();
 
-    // Fetch all paid pilot opportunities
-    const pilots = await fetchAll<OppRow>(() => {
+    // Fetch all paid pilot opportunities via opportunity_splits
+    const rawSplits = await fetchAll<{
+      split_owner_user_id: string;
+      split_percentage: number | string;
+      opportunities: Record<string, unknown>;
+    }>(() => {
       let q = db
-        .from('opportunities')
-        .select(SELECT_FIELDS)
-        .eq('is_paid_pilot', true);
-      q = scopedQuery(q, 'owner_user_id', scope);
-      return q.order('close_date', { ascending: false });
+        .from('opportunity_splits')
+        .select(SPLIT_SELECT)
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_paid_pilot', true);
+      q = scopedQuery(q, 'split_owner_user_id', scope);
+      return q.order('opportunities(close_date)', { ascending: false });
     });
+
+    const pilots = flattenSplitRows(rawSplits) as OppRow[];
 
     // Booked pilots = won stages
     const bookedPilots = pilots.filter(p => BOOKED_STAGES.includes(p.stage));
     const bookedSfIds = bookedPilots.map(p => p.salesforce_opportunity_id);
 
-    // Paid Pilot Win Rate = won pilots / (won + lost)
+    // Paid Pilot Win Rate = won pilots / (won + lost) — count-based, unweighted
     const wonPilots = pilots.filter(p => p.is_closed_won);
     const lostPilots = pilots.filter(p => p.is_closed_lost);
     const winRate = (wonPilots.length + lostPilots.length) > 0
@@ -92,7 +110,7 @@ export async function GET(request: NextRequest) {
       ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length)
       : 0;
 
-    // Enrich with computed age
+    // Enrich with computed age and split-adjusted ACV
     const enriched = pilots.map(p => {
       let age: number | null = null;
       if (p.sf_created_date) {
@@ -100,7 +118,11 @@ export async function GET(request: NextRequest) {
         const end = p.close_date ? new Date(p.close_date).getTime() : now;
         age = Math.floor((end - created) / (1000 * 60 * 60 * 24));
       }
-      return { ...p, age };
+      return {
+        ...p,
+        age,
+        split_acv: splitAcv(p.acv, p.split_pct),
+      };
     });
 
     return NextResponse.json({

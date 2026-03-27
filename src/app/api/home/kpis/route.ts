@@ -5,6 +5,7 @@ import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFisc
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,38 +23,47 @@ export async function GET(request: NextRequest) {
     const fyStartStr = fyStart.toISOString().split('T')[0];
     const fyEndStr = fyEnd.toISOString().split('T')[0];
 
-    // Closed-won QTD (paginated)
-    const qtdOpps = await fetchAll<{ acv: number | null; ai_acv: number | null; sub_type: string | null }>(() => {
+    // Closed-won QTD via opportunity_splits (paginated)
+    const qtdSplits = await fetchAll<{
+      split_owner_user_id: string;
+      split_percentage: number;
+      opportunities: { acv: number | null; ai_acv: number | null; sub_type: string | null };
+    }>(() => {
       let q = db
-        .from('opportunities')
-        .select('acv, ai_acv, sub_type')
-        .eq('is_closed_won', true)
-        .gte('close_date', qStartStr)
-        .lte('close_date', qEndStr);
-      return scopedQuery(q, 'owner_user_id', scope);
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(acv, ai_acv, sub_type)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', true)
+        .gte('opportunities.close_date', qStartStr)
+        .lte('opportunities.close_date', qEndStr);
+      return scopedQuery(q, 'split_owner_user_id', scope);
     });
 
-    const acvClosedQTD = qtdOpps.reduce((s, o) => s + (o.acv || 0), 0);
-    const cxaAcvClosedQTD = qtdOpps.reduce((s, o) => s + (o.ai_acv || 0), 0);
-    const countableQtdOpps = qtdOpps.filter(
-      o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
+    const acvClosedQTD = qtdSplits.reduce((s, r) => s + splitAcv(r.opportunities.acv, r.split_percentage), 0);
+    const cxaAcvClosedQTD = qtdSplits.reduce((s, r) => s + splitAcv(r.opportunities.ai_acv, r.split_percentage), 0);
+    const countableQtdSplits = qtdSplits.filter(
+      r => r.opportunities.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(r.opportunities.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (r.opportunities.acv || 0) > 0
     );
-    const dealsClosedQTD = countableQtdOpps.length;
-    const dealsWithCxaQTD = countableQtdOpps.filter(o => (o.ai_acv || 0) > 0).length;
+    const dealsClosedQTD = countableQtdSplits.length;
+    const dealsWithCxaQTD = countableQtdSplits.filter(r => (r.opportunities.ai_acv || 0) > 0).length;
     const pctClosedDealsWithCxa = dealsClosedQTD > 0 ? (dealsWithCxaQTD / dealsClosedQTD) * 100 : 0;
 
-    // Closed-won YTD (paginated)
-    const ytdOpps = await fetchAll<{ acv: number | null }>(() => {
+    // Closed-won YTD via opportunity_splits (paginated)
+    const ytdSplits = await fetchAll<{
+      split_percentage: number;
+      opportunities: { acv: number | null };
+    }>(() => {
       let q = db
-        .from('opportunities')
-        .select('acv')
-        .eq('is_closed_won', true)
-        .gte('close_date', fyStartStr)
-        .lte('close_date', fyEndStr);
-      return scopedQuery(q, 'owner_user_id', scope);
+        .from('opportunity_splits')
+        .select('split_percentage, opportunities!inner(acv)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', true)
+        .gte('opportunities.close_date', fyStartStr)
+        .lte('opportunities.close_date', fyEndStr);
+      return scopedQuery(q, 'split_owner_user_id', scope);
     });
 
-    const acvClosedYTD = ytdOpps.reduce((s, o) => s + (o.acv || 0), 0);
+    const acvClosedYTD = ytdSplits.reduce((s, r) => s + splitAcv(r.opportunities.acv, r.split_percentage), 0);
 
     // Quota — use target user's own quota (not sum of subordinates)
     const targetUser = viewAsUser ?? user;
@@ -78,25 +88,21 @@ export async function GET(request: NextRequest) {
 
     // Quarterly pacing: 20% after Month 1, 50% after Month 2, 100% by end of Month 3
     const now = new Date();
-    const qStartMonth = qStart.getMonth(); // 0-indexed month of quarter start
+    const qStartMonth = qStart.getMonth();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // Determine which month of the quarter we're in (0, 1, or 2)
-    // Handle year wrap for Q4 (Nov, Dec = calendarYear, Jan = calendarYear+1)
     let monthInQuarter: number;
     const qStartYear = qStart.getFullYear();
     const monthsSinceStart = (currentYear - qStartYear) * 12 + (currentMonth - qStartMonth);
     monthInQuarter = Math.max(0, Math.min(2, monthsSinceStart));
 
-    // Milestone targets: end of month 0 → 20%, end of month 1 → 50%, end of month 2 → 100%
     const milestones = [20, 50, 100];
     const prevMilestone = monthInQuarter === 0 ? 0 : milestones[monthInQuarter - 1];
     const nextMilestone = milestones[monthInQuarter];
 
-    // Calculate progress within the current month
     const monthStart = new Date(currentYear, currentMonth, 1);
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0); // last day of month
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0);
     const totalDaysInMonth = monthEnd.getDate();
     const dayOfMonth = Math.min(now.getDate(), totalDaysInMonth);
     const monthProgress = dayOfMonth / totalDaysInMonth;

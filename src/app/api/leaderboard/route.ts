@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod, getQuarterLabel } from '@/lib/fiscal';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -126,29 +127,33 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     if (board === 'revenue') {
+      // Revenue leaderboard via opportunity_splits
       let query = db
-        .from('opportunities')
-        .select('owner_user_id, acv, sub_type')
-        .eq('is_closed_won', true)
-        .in('owner_user_id', aeIds);
-      if (startStr) query = query.gte('close_date', startStr);
-      if (endStr) query = query.lte('close_date', endStr);
-      const { data: opps } = await query;
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(acv, sub_type)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', true)
+        .in('split_owner_user_id', aeIds);
+      if (startStr) query = query.gte('opportunities.close_date', startStr);
+      if (endStr) query = query.lte('opportunities.close_date', endStr);
+      const { data: splits } = await query;
 
-      // Aggregate per AE
+      // Aggregate per AE (split-adjusted ACV)
       const aeData: Record<string, { acv: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; sub_type: string | null }) => {
-        const id = o.owner_user_id || '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (splits || []).forEach((s: any) => {
+        const opp = Array.isArray(s.opportunities) ? s.opportunities[0] : s.opportunities;
+        if (!opp) return;
+        const id = s.split_owner_user_id;
         if (!aeData[id]) aeData[id] = { acv: 0, deals: 0 };
-        aeData[id].acv += o.acv || 0;
-        if (o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0) {
+        aeData[id].acv += splitAcv(opp.acv, s.split_percentage);
+        if (opp.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(opp.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (opp.acv || 0) > 0) {
           aeData[id].deals++;
         }
       });
 
       allAEs.forEach(ae => {
         const data = aeData[ae.id] || { acv: 0, deals: 0 };
-        // For now, ACV with multiplier = same as ACV closed (multiplier logic TBD)
         const acvWithMultiplier = data.acv;
         entries.push({
           rank: 0,
@@ -167,18 +172,19 @@ export async function GET(request: NextRequest) {
 
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
     } else if (board === 'pipeline') {
-      // Pipeline leaderboard: opportunities created (sf_created_date) within the period
+      // Pipeline leaderboard: opportunities created (sf_created_date) within the period via splits
       let query = db
-        .from('opportunities')
-        .select('owner_user_id, acv, reporting_acv, ai_acv, created_by_sf_id')
-        .gt('acv', 0)
-        .in('owner_user_id', aeIds);
-      if (startStr) query = query.gte('sf_created_date', startStr);
-      if (endStr) query = query.lte('sf_created_date', endStr);
-      const { data: opps } = await query;
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(acv, reporting_acv, ai_acv, created_by_sf_id)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .gt('opportunities.acv', 0)
+        .in('split_owner_user_id', aeIds);
+      if (startStr) query = query.gte('opportunities.sf_created_date', startStr);
+      if (endStr) query = query.lte('opportunities.sf_created_date', endStr);
+      const { data: splits } = await query;
 
       // Resolve creator roles via created_by_sf_id → users.salesforce_user_id
-      const creatorSfIds = [...new Set((opps || []).map(o => o.created_by_sf_id).filter(Boolean))] as string[];
+      const creatorSfIds = [...new Set((splits || []).map(s => (s.opportunities as any).created_by_sf_id).filter(Boolean))] as string[];
       const creatorRoleMap: Record<string, string> = {};
       if (creatorSfIds.length > 0) {
         for (let i = 0; i < creatorSfIds.length; i += 500) {
@@ -192,16 +198,19 @@ export async function GET(request: NextRequest) {
       }
 
       const aeData: Record<string, { total: number; ae_created: number; cxa_acv_created: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; reporting_acv: number | null; ai_acv: number | null; created_by_sf_id: string | null }) => {
-        const id = o.owner_user_id || '';
-        const acv = o.reporting_acv || o.acv || 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (splits || []).forEach((s: any) => {
+        const opp = Array.isArray(s.opportunities) ? s.opportunities[0] : s.opportunities;
+        if (!opp) return;
+        const id = s.split_owner_user_id;
+        const acv = splitAcv(opp.reporting_acv || opp.acv, s.split_percentage);
         if (!aeData[id]) aeData[id] = { total: 0, ae_created: 0, cxa_acv_created: 0, deals: 0 };
         aeData[id].total += acv;
         aeData[id].deals++;
-        aeData[id].cxa_acv_created += o.ai_acv || 0;
+        aeData[id].cxa_acv_created += splitAcv(opp.ai_acv, s.split_percentage);
         // AE Created ACV: creator role contains 'ae'
-        if (o.created_by_sf_id) {
-          const creatorRole = (creatorRoleMap[o.created_by_sf_id] || '').toLowerCase();
+        if (opp.created_by_sf_id) {
+          const creatorRole = (creatorRoleMap[opp.created_by_sf_id] || '').toLowerCase();
           if (creatorRole.includes('ae')) {
             aeData[id].ae_created += acv;
           }
@@ -229,32 +238,35 @@ export async function GET(request: NextRequest) {
 
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
     } else if (board === 'pilots') {
-      let query = db
-        .from('opportunities')
-        .select('owner_user_id, is_closed_won, is_closed_lost, paid_pilot_start_date, close_date, sf_created_date, created_at')
-        .eq('is_paid_pilot', true)
-        .in('owner_user_id', aeIds);
-      const { data: opps } = await query;
+      // Pilots leaderboard via opportunity_splits
+      const { data: splits } = await db
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(is_closed_won, is_closed_lost, paid_pilot_start_date, close_date, sf_created_date, created_at)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_paid_pilot', true)
+        .in('split_owner_user_id', aeIds);
 
       const aeData: Record<string, { booked: number; open: number; totalDuration: number; bookedCount: number; numCreated: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; is_closed_won: boolean; is_closed_lost: boolean; paid_pilot_start_date: string | null; close_date: string | null; sf_created_date: string | null; created_at: string }) => {
-        const id = o.owner_user_id || '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (splits || []).forEach((s: any) => {
+        const opp = Array.isArray(s.opportunities) ? s.opportunities[0] : s.opportunities;
+        if (!opp) return;
+        const id = s.split_owner_user_id;
         if (!aeData[id]) aeData[id] = { booked: 0, open: 0, totalDuration: 0, bookedCount: 0, numCreated: 0 };
 
-        if (o.is_closed_won) {
+        if (opp.is_closed_won) {
           aeData[id].booked++;
           aeData[id].bookedCount++;
-          if (o.sf_created_date) {
-            const created = new Date(o.sf_created_date).getTime();
-            const end = o.close_date ? new Date(o.close_date).getTime() : Date.now();
+          if (opp.sf_created_date) {
+            const created = new Date(opp.sf_created_date).getTime();
+            const end = opp.close_date ? new Date(opp.close_date).getTime() : Date.now();
             aeData[id].totalDuration += Math.floor((end - created) / (1000 * 60 * 60 * 24));
           }
-        } else if (!o.is_closed_lost) {
+        } else if (!opp.is_closed_lost) {
           aeData[id].open++;
         }
 
-        // Count pilots created within the selected period
-        const createdDate = (o.sf_created_date || o.created_at || '').split('T')[0];
+        const createdDate = (opp.sf_created_date || opp.created_at || '').split('T')[0];
         if (createdDate) {
           const inRange = (!startStr || createdDate >= startStr) && (!endStr || createdDate <= endStr);
           if (inRange) {

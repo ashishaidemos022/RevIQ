@@ -5,6 +5,7 @@ import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFisc
 import { resolvePbmCreditedOpps, getPbmSfIdMap } from '@/lib/pbm/resolve-credited-opps';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { AE_ROLES } from '@/lib/constants';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 const MANAGER_PLUS = ['leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
@@ -50,12 +51,24 @@ export async function GET(request: NextRequest) {
     const aeIds = aeMembers.map(ae => ae.id);
     const pbmIds = pbmMembers.map(p => p.id);
 
-    // Get opportunities for AEs (owner-based) — paginated to avoid 1000-row cap
-    const allOpps = aeIds.length > 0
-      ? await fetchAll<{ owner_user_id: string | null; acv: number | null; is_closed_won: boolean; is_closed_lost: boolean; is_paid_pilot: boolean; close_date: string | null }>(() =>
+    // Get opportunity splits for AEs — paginated to avoid 1000-row cap
+    const allSplits = aeIds.length > 0
+      ? await fetchAll<{
+          split_owner_user_id: string;
+          split_percentage: number | string;
+          opportunities: {
+            acv: number | null;
+            is_closed_won: boolean;
+            is_closed_lost: boolean;
+            is_paid_pilot: boolean;
+            close_date: string | null;
+          };
+        }>(() =>
           batchedIn(
-            db.from('opportunities').select('owner_user_id, acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date'),
-            'owner_user_id',
+            db.from('opportunity_splits')
+              .select('split_owner_user_id, split_percentage, opportunities!inner(acv, is_closed_won, is_closed_lost, is_paid_pilot, close_date)')
+              .eq('split_type', REVENUE_SPLIT_TYPE),
+            'split_owner_user_id',
             aeIds
           )
         )
@@ -180,18 +193,18 @@ export async function GET(request: NextRequest) {
         acvClosedYTD = pbmAcv.ytd;
         activePilots = 0; // TODO: resolve PBM pilot count via credit paths if needed
       } else {
-        // AE: use owner-based opps
-        const aeOpps = allOpps.filter((o: { owner_user_id: string | null }) => o.owner_user_id === member.id);
-        const closedWonQTD = aeOpps.filter((o: { is_closed_won: boolean; close_date: string | null }) =>
-          o.is_closed_won && o.close_date && o.close_date >= qStartStr && o.close_date <= qEndStr
+        // AE: use split-based opps
+        const aeSplits = allSplits.filter(s => s.split_owner_user_id === member.id);
+        const closedWonQTD = aeSplits.filter(s =>
+          s.opportunities.is_closed_won && s.opportunities.close_date && s.opportunities.close_date >= qStartStr && s.opportunities.close_date <= qEndStr
         );
-        const closedWonYTD = aeOpps.filter((o: { is_closed_won: boolean; close_date: string | null }) =>
-          o.is_closed_won && o.close_date && o.close_date >= fyStartStr && o.close_date <= fyEndStr
+        const closedWonYTD = aeSplits.filter(s =>
+          s.opportunities.is_closed_won && s.opportunities.close_date && s.opportunities.close_date >= fyStartStr && s.opportunities.close_date <= fyEndStr
         );
-        acvClosedQTD = closedWonQTD.reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
-        acvClosedYTD = closedWonYTD.reduce((s: number, o: { acv: number | null }) => s + (o.acv || 0), 0);
-        activePilots = aeOpps.filter((o: { is_paid_pilot: boolean; is_closed_won: boolean; is_closed_lost: boolean }) =>
-          o.is_paid_pilot && !o.is_closed_won && !o.is_closed_lost
+        acvClosedQTD = closedWonQTD.reduce((sum, s) => sum + splitAcv(s.opportunities.acv, s.split_percentage), 0);
+        acvClosedYTD = closedWonYTD.reduce((sum, s) => sum + splitAcv(s.opportunities.acv, s.split_percentage), 0);
+        activePilots = aeSplits.filter(s =>
+          s.opportunities.is_paid_pilot && !s.opportunities.is_closed_won && !s.opportunities.is_closed_lost
         ).length;
       }
 
@@ -214,17 +227,22 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Team summary — query total ACV directly from opportunities (matches Home KPIs logic)
-    const summaryOpps = await fetchAll<{ acv: number | null }>(() => {
-      let q = db
-        .from('opportunities')
-        .select('acv')
-        .eq('is_closed_won', true)
-        .gte('close_date', qStartStr)
-        .lte('close_date', qEndStr);
-      return scopedQuery(q, 'owner_user_id', scope);
+    // Team summary — query total ACV directly from opportunity_splits (matches Home KPIs logic)
+    const summarySplits = await fetchAll<{
+      split_owner_user_id: string;
+      split_percentage: number | string;
+      opportunities: { acv: number | null };
+    }>(() => {
+      const q = db
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(acv)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', true)
+        .gte('opportunities.close_date', qStartStr)
+        .lte('opportunities.close_date', qEndStr);
+      return scopedQuery(q, 'split_owner_user_id', scope);
     });
-    const totalAcvQTD = summaryOpps.reduce((s, o) => s + (o.acv || 0), 0);
+    const totalAcvQTD = summarySplits.reduce((s, row) => s + splitAcv(row.opportunities.acv, row.split_percentage), 0);
 
     // Attainment averages from AE-only data (exclude PBMs to avoid double-counting)
     const aeOnlyData = aeData.filter(ae => AE_ROLES.includes(ae.role as typeof AE_ROLES[number]));

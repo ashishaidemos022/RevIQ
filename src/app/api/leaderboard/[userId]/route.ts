@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 export async function GET(
   request: NextRequest,
@@ -72,7 +73,7 @@ export async function GET(
       periodEndStr = qEnd.toISOString().split('T')[0];
     }
 
-    // Fetch opportunities owned by this user
+    // Fetch opportunity splits for this user (Revenue splits only)
     const pageSize = 1000;
     let offset = 0;
     let hasMore = true;
@@ -80,22 +81,37 @@ export async function GET(
 
     while (hasMore) {
       const { data: page } = await db
-        .from('opportunities')
+        .from('opportunity_splits')
         .select(`
-          id, name, acv, close_date, stage, is_closed_won, is_closed_lost,
-          is_paid_pilot, pilot_status, paid_pilot_start_date,
-          record_type_name, opportunity_source, sf_created_date,
-          account_id, sub_type
+          split_owner_user_id, split_percentage,
+          opportunities!inner(
+            id, name, acv, close_date, stage, is_closed_won, is_closed_lost,
+            is_paid_pilot, pilot_status, paid_pilot_start_date,
+            record_type_name, opportunity_source, sf_created_date,
+            account_id, sub_type
+          )
         `)
-        .eq('owner_user_id', userId)
-        .gte('close_date', '2025-02-01')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('split_owner_user_id', userId)
         .order('id')
         .range(offset, offset + pageSize - 1);
 
       if (!page || page.length === 0) {
         hasMore = false;
       } else {
-        allOpps.push(...page);
+        // Flatten split rows: merge opportunity fields with split_pct
+        const flattened = page.map((s: Record<string, unknown>) => {
+          const opp = s.opportunities as Record<string, unknown>;
+          const pct = typeof s.split_percentage === 'string'
+            ? parseFloat(s.split_percentage)
+            : ((s.split_percentage as number) || 0);
+          return {
+            ...opp,
+            split_owner_user_id: s.split_owner_user_id,
+            split_pct: pct,
+          };
+        });
+        allOpps.push(...flattened);
         offset += page.length;
         if (page.length < pageSize) hasMore = false;
       }
@@ -136,7 +152,7 @@ export async function GET(
       deals = [];
     }
 
-    // Add account names
+    // Add account names and preserve split_pct
     const dealsWithNames = deals.map(o => ({
       ...o,
       account_name: accountNameMap.get(o.account_id as string) || null,
@@ -168,7 +184,7 @@ export async function GET(
       }
     }
 
-    // Compute summary KPIs
+    // Compute summary KPIs using split-adjusted ACV
     const qStartStr = qStart.toISOString().split('T')[0];
     const qEndStr = qEnd.toISOString().split('T')[0];
     const fyStartStr = fyStart.toISOString().split('T')[0];
@@ -184,11 +200,11 @@ export async function GET(
     );
     const openDeals = allOpps.filter(o => !o.is_closed_won && !o.is_closed_lost);
 
-    const acvClosedQTD = closedWonQTD.reduce((s, o) => s + ((o.acv as number) || 0), 0);
-    const acvClosedYTD = closedWonYTD.reduce((s, o) => s + ((o.acv as number) || 0), 0);
-    const pipelineACV = openDeals.reduce((s, o) => s + ((o.acv as number) || 0), 0);
+    const acvClosedQTD = closedWonQTD.reduce((s, o) => s + splitAcv(o.acv as number, o.split_pct as number), 0);
+    const acvClosedYTD = closedWonYTD.reduce((s, o) => s + splitAcv(o.acv as number, o.split_pct as number), 0);
+    const pipelineACV = openDeals.reduce((s, o) => s + splitAcv(o.acv as number, o.split_pct as number), 0);
 
-    // Pilot-specific KPIs
+    // Pilot-specific KPIs (count of split rows, unweighted)
     const BOOKED_PILOT_STAGES = [
       'Stage 8-Closed Won: Finance', 'Stage 7-Closed Won',
       'Stage 6-Closed-Won: Finance Approved', 'Stage 5-Closed Won',

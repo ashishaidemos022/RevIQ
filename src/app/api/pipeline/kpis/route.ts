@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQuery } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,42 +26,43 @@ export async function GET(request: NextRequest) {
     const acvMin = url.searchParams.get('acv_min');
     const acvMax = url.searchParams.get('acv_max');
 
-    // Helper to build the base open-opps query with filters applied
+    // Helper to build the base open-opps query with filters applied via opportunity_splits
     const buildOpenQuery = () => {
       let q = db
-        .from('opportunities')
-        .select('acv, probability, close_date, mgmt_forecast_category')
-        .eq('is_closed_won', false)
-        .eq('is_closed_lost', false);
-      q = scopedQuery(q, 'owner_user_id', scope);
-      if (typeFilter) q = q.in('type', typeFilter.split(','));
-      if (stageFilter) q = q.in('stage', stageFilter.split(','));
-      if (isPaidPilot === 'true') q = q.eq('is_paid_pilot', true);
-      if (isPaidPilot === 'false') q = q.eq('is_paid_pilot', false);
-      if (acvMin) q = q.gte('acv', Number(acvMin));
-      if (acvMax) q = q.lte('acv', Number(acvMax));
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(acv, probability, close_date, mgmt_forecast_category)')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', false)
+        .eq('opportunities.is_closed_lost', false);
+      q = scopedQuery(q, 'split_owner_user_id', scope);
+      if (typeFilter) q = q.in('opportunities.type', typeFilter.split(','));
+      if (stageFilter) q = q.in('opportunities.stage', stageFilter.split(','));
+      if (isPaidPilot === 'true') q = q.eq('opportunities.is_paid_pilot', true);
+      if (isPaidPilot === 'false') q = q.eq('opportunities.is_paid_pilot', false);
+      if (acvMin) q = q.gte('opportunities.acv', Number(acvMin));
+      if (acvMax) q = q.lte('opportunities.acv', Number(acvMax));
       return q;
     };
 
     // Fetch ALL open opps (paginated to avoid 1000-row default cap)
-    const opps = await fetchAll<{ acv: number | null; probability: number | null; close_date: string | null; mgmt_forecast_category: string | null }>(buildOpenQuery);
+    const splits = await fetchAll<{ split_owner_user_id: string; split_percentage: number; opportunities: { acv: number | null; probability: number | null; close_date: string | null; mgmt_forecast_category: string | null } }>(buildOpenQuery);
 
-    const totalPipelineAcv = opps.reduce((s, o) => s + (o.acv || 0), 0);
-    const weightedPipelineAcv = opps.reduce((s, o) => s + (o.acv || 0) * ((o.probability || 0) / 100), 0);
-    const dealCount = opps.length;
+    const totalPipelineAcv = splits.reduce((s, o) => s + splitAcv(o.opportunities.acv, o.split_percentage), 0);
+    const weightedPipelineAcv = splits.reduce((s, o) => s + splitAcv(o.opportunities.acv, o.split_percentage) * ((o.opportunities.probability || 0) / 100), 0);
+    const dealCount = splits.length;
     const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
-    const closingThisQuarter = opps.filter((o) => {
-      if (!o.close_date) return false;
-      return o.close_date >= qStartStr && o.close_date <= qEndStr;
+    const closingThisQuarter = splits.filter((o) => {
+      if (!o.opportunities.close_date) return false;
+      return o.opportunities.close_date >= qStartStr && o.opportunities.close_date <= qEndStr;
     }).length;
 
     // Forecast category KPIs
-    const forecastedPipelineAcv = opps
-      .filter(o => o.mgmt_forecast_category === 'Forecast')
-      .reduce((s, o) => s + (o.acv || 0), 0);
-    const upsidePipelineAcv = opps
-      .filter(o => o.mgmt_forecast_category === 'Upside')
-      .reduce((s, o) => s + (o.acv || 0), 0);
+    const forecastedPipelineAcv = splits
+      .filter(o => o.opportunities.mgmt_forecast_category === 'Forecast')
+      .reduce((s, o) => s + splitAcv(o.opportunities.acv, o.split_percentage), 0);
+    const upsidePipelineAcv = splits
+      .filter(o => o.opportunities.mgmt_forecast_category === 'Upside')
+      .reduce((s, o) => s + splitAcv(o.opportunities.acv, o.split_percentage), 0);
 
     return NextResponse.json({
       data: {

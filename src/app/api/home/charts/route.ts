@@ -4,6 +4,7 @@ import { requireAuth, resolveDataScope, resolveViewAs, handleAuthError, scopedQu
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate } from '@/lib/fiscal';
 import { getStageGroup } from '@/lib/stage-groups';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 /**
  * Returns aggregated chart data for the Home dashboard:
@@ -19,19 +20,24 @@ export async function GET(request: NextRequest) {
 
     // ACV by month: closed-won opps with ACV, ai_acv, close_date, deal name, owner
     const closedOpps = await fetchAll<{
-      id: string;
-      name: string | null;
-      acv: number | null;
-      ai_acv: number | null;
-      close_date: string | null;
-      users: { full_name: string } | null;
+      split_owner_user_id: string;
+      split_percentage: number | string;
+      opportunities: {
+        id: string;
+        name: string | null;
+        acv: number | null;
+        ai_acv: number | null;
+        close_date: string | null;
+        users: { full_name: string } | null;
+      };
     }>(() => {
       let q = db
-        .from('opportunities')
-        .select('id, name, acv, ai_acv, close_date, users!opportunities_owner_user_id_fkey(full_name)')
-        .eq('is_closed_won', true)
-        .not('close_date', 'is', null);
-      return scopedQuery(q, 'owner_user_id', scope);
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(id, name, acv, ai_acv, close_date, users!opportunities_owner_user_id_fkey(full_name))')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', true)
+        .not('opportunities.close_date', 'is', null);
+      return scopedQuery(q, 'split_owner_user_id', scope);
     });
 
     // Group by month + collect deal-level data
@@ -39,11 +45,12 @@ export async function GET(request: NextRequest) {
     const cxaAcvByMonth: Record<string, number> = {};
     const ccaasAcvByMonth: Record<string, number> = {};
     const acvDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number }>> = {};
-    for (const o of closedOpps) {
+    for (const row of closedOpps) {
+      const o = row.opportunities;
       if (!o.close_date) continue;
       const month = o.close_date.substring(0, 7); // YYYY-MM
-      const acv = o.acv || 0;
-      const cxaAcv = o.ai_acv || 0;
+      const acv = splitAcv(o.acv, row.split_percentage);
+      const cxaAcv = splitAcv(o.ai_acv, row.split_percentage);
       const ccaasAcv = acv - cxaAcv;
       acvByMonth[month] = (acvByMonth[month] || 0) + acv;
       cxaAcvByMonth[month] = (cxaAcvByMonth[month] || 0) + cxaAcv;
@@ -54,7 +61,7 @@ export async function GET(request: NextRequest) {
         id: o.id,
         name: o.name || 'Unnamed',
         owner: o.users?.full_name || 'Unknown',
-        acv: o.acv || 0,
+        acv,
       });
     }
 
@@ -75,22 +82,26 @@ export async function GET(request: NextRequest) {
     const endStr = rangeEnd.toISOString().split('T')[0];
 
     const openOpps = await fetchAll<{
-      id: string;
-      name: string | null;
-      stage: string | null;
-      acv: number | null;
-      close_date: string | null;
-      owner_user_id: string | null;
-      users: { full_name: string } | null;
+      split_owner_user_id: string;
+      split_percentage: number | string;
+      opportunities: {
+        id: string;
+        name: string | null;
+        stage: string | null;
+        acv: number | null;
+        close_date: string | null;
+        users: { full_name: string } | null;
+      };
     }>(() => {
       let q = db
-        .from('opportunities')
-        .select('id, name, stage, acv, close_date, owner_user_id, users!opportunities_owner_user_id_fkey(full_name)')
-        .eq('is_closed_won', false)
-        .eq('is_closed_lost', false)
-        .gte('close_date', startStr)
-        .lte('close_date', endStr);
-      return scopedQuery(q, 'owner_user_id', scope);
+        .from('opportunity_splits')
+        .select('split_owner_user_id, split_percentage, opportunities!inner(id, name, stage, acv, close_date, users!opportunities_owner_user_id_fkey(full_name))')
+        .eq('split_type', REVENUE_SPLIT_TYPE)
+        .eq('opportunities.is_closed_won', false)
+        .eq('opportunities.is_closed_lost', false)
+        .gte('opportunities.close_date', startStr)
+        .lte('opportunities.close_date', endStr);
+      return scopedQuery(q, 'split_owner_user_id', scope);
     });
 
     // Group by close month + stage group (excluding closed/dead stages)
@@ -99,16 +110,18 @@ export async function GET(request: NextRequest) {
     const pipelineByStage: Record<string, { count: number; acv: number }> = {};
     // Deal-level data keyed by "month|group" for drill-down
     const pipelineDeals: Record<string, Array<{ id: string; name: string; owner: string; acv: number; stage: string }>> = {};
-    for (const o of openOpps) {
+    for (const row of openOpps) {
+      const o = row.opportunities;
       if (!o.close_date) continue;
       const group = getStageGroup(o.stage || '');
       if (!group) continue; // excluded stage
 
+      const acv = splitAcv(o.acv, row.split_percentage);
       const month = o.close_date.substring(0, 7);
       if (!pipelineByMonthAndGroup[month]) pipelineByMonthAndGroup[month] = {};
       if (!pipelineByMonthAndGroup[month][group]) pipelineByMonthAndGroup[month][group] = { count: 0, acv: 0 };
       pipelineByMonthAndGroup[month][group].count++;
-      pipelineByMonthAndGroup[month][group].acv += o.acv || 0;
+      pipelineByMonthAndGroup[month][group].acv += acv;
 
       // Deal-level data for drill-down
       const dealKey = `${month}|${group}`;
@@ -117,7 +130,7 @@ export async function GET(request: NextRequest) {
         id: o.id,
         name: o.name || 'Unnamed',
         owner: o.users?.full_name || 'Unknown',
-        acv: o.acv || 0,
+        acv,
         stage: o.stage || 'Unknown',
       });
 
@@ -125,7 +138,7 @@ export async function GET(request: NextRequest) {
       const stage = o.stage || 'Other';
       if (!pipelineByStage[stage]) pipelineByStage[stage] = { count: 0, acv: 0 };
       pipelineByStage[stage].count++;
-      pipelineByStage[stage].acv += o.acv || 0;
+      pipelineByStage[stage].acv += acv;
     }
 
     // Sort deals by ACV descending

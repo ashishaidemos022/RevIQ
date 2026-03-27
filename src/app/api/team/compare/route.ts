@@ -17,6 +17,7 @@ import {
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 import { AE_ROLES } from '@/lib/constants';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 const MANAGER_PLUS = ['leader', 'cro', 'c_level', 'revops_ro', 'revops_rw', 'enterprise_ro'];
 
@@ -116,22 +117,27 @@ export async function GET(request: NextRequest) {
         const startStr = getQuarterStartDate(q.fiscalYear, q.fiscalQuarter).toISOString().split('T')[0];
         const endStr = getQuarterEndDate(q.fiscalYear, q.fiscalQuarter).toISOString().split('T')[0];
 
-        // Closed-won ACV
-        const closedOpps = await fetchAll<{ acv: number | null; sub_type: string | null }>(() =>
+        // Closed-won ACV via opportunity_splits
+        const closedSplits = await fetchAll<{
+          split_owner_user_id: string;
+          split_percentage: number | string;
+          opportunities: { acv: number | null; sub_type: string | null };
+        }>(() =>
           batchedIn(
-            db.from('opportunities')
-              .select('acv, sub_type')
-              .eq('is_closed_won', true)
-              .gte('close_date', startStr)
-              .lte('close_date', endStr),
-            'owner_user_id',
+            db.from('opportunity_splits')
+              .select('split_owner_user_id, split_percentage, opportunities!inner(acv, sub_type)')
+              .eq('split_type', REVENUE_SPLIT_TYPE)
+              .eq('opportunities.is_closed_won', true)
+              .gte('opportunities.close_date', startStr)
+              .lte('opportunities.close_date', endStr),
+            'split_owner_user_id',
             memberIds
           )
         );
 
-        const acvClosed = closedOpps.reduce((s, o) => s + (o.acv || 0), 0);
-        const dealsClosed = closedOpps.filter(
-          o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
+        const acvClosed = closedSplits.reduce((s, row) => s + splitAcv(row.opportunities.acv, row.split_percentage), 0);
+        const dealsClosed = closedSplits.filter(
+          row => row.opportunities.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(row.opportunities.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (row.opportunities.acv || 0) > 0
         ).length;
 
         // Activities count from activity_daily_summary via AE SF IDs only
@@ -158,18 +164,22 @@ export async function GET(request: NextRequest) {
           actCount = actRows.reduce((s, r) => s + (r.activity_count || 0), 0);
         }
 
-        // Active pilots
-        const pilots = await fetchAll<{ is_closed_won: boolean; is_closed_lost: boolean }>(() =>
+        // Active pilots via opportunity_splits
+        const pilotSplits = await fetchAll<{
+          split_owner_user_id: string;
+          opportunities: { is_closed_won: boolean; is_closed_lost: boolean };
+        }>(() =>
           batchedIn(
-            db.from('opportunities')
-              .select('is_closed_won, is_closed_lost')
-              .eq('is_paid_pilot', true)
-              .lte('paid_pilot_start_date', endStr),
-            'owner_user_id',
+            db.from('opportunity_splits')
+              .select('split_owner_user_id, opportunities!inner(is_closed_won, is_closed_lost)')
+              .eq('split_type', REVENUE_SPLIT_TYPE)
+              .eq('opportunities.is_paid_pilot', true)
+              .lte('opportunities.paid_pilot_start_date', endStr),
+            'split_owner_user_id',
             memberIds
           )
         );
-        const activePilots = pilots.filter(p => !p.is_closed_won && !p.is_closed_lost).length;
+        const activePilots = pilotSplits.filter(p => !p.opportunities.is_closed_won && !p.opportunities.is_closed_lost).length;
 
         // Commission earned
         const comms = await fetchAll<{ commission_amount: number | null }>(() =>

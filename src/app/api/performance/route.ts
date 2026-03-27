@@ -6,6 +6,7 @@ import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveQuotaUserId } from '@/lib/quota-resolver';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 import { AE_ROLES } from '@/lib/constants';
+import { REVENUE_SPLIT_TYPE, splitAcv } from '@/lib/splits/query-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
       dealsClosedDeals: { id: string; name: string; owner: string; acv: number }[];
     }> = {};
 
-    // Helper to apply owner/scope filter
+    // Helper to apply owner/scope filter on split_owner_user_id
     const applyScope = <T>(query: T, column: string): T => {
       if (ownerId) return (query as any).eq(column, ownerId) as T;
       return scopedQuery(query, column, scope);
@@ -55,54 +56,59 @@ export async function GET(request: NextRequest) {
       const endStr = end.toISOString().split('T')[0];
       const label = `Q${q} FY${fy}`;
 
-      // Closed-won opportunities in quarter — paginated to avoid 1000-row cap
-      const closedOpps = await fetchAll<{
-        id: string;
-        name: string | null;
-        acv: number | null;
-        ai_acv: number | null;
-        sub_type: string | null;
-        close_date: string | null;
-        users: { full_name: string } | null;
+      // Closed-won opportunities in quarter via splits — paginated to avoid 1000-row cap
+      const closedSplits = await fetchAll<{
+        split_owner_user_id: string;
+        split_percentage: number;
+        opportunities: {
+          id: string;
+          name: string | null;
+          acv: number | null;
+          ai_acv: number | null;
+          sub_type: string | null;
+          close_date: string | null;
+          users: { full_name: string } | null;
+        };
       }>(() =>
         applyScope(
-          db.from('opportunities')
-            .select('id, name, acv, ai_acv, sub_type, close_date, users!opportunities_owner_user_id_fkey(full_name)')
-            .eq('is_closed_won', true)
-            .gte('close_date', startStr)
-            .lte('close_date', endStr),
-          'owner_user_id'
+          db.from('opportunity_splits')
+            .select('split_owner_user_id, split_percentage, opportunities!inner(id, name, acv, ai_acv, sub_type, close_date, users:users!opportunities_owner_user_id_fkey(full_name))')
+            .eq('split_type', REVENUE_SPLIT_TYPE)
+            .eq('opportunities.is_closed_won', true)
+            .gte('opportunities.close_date', startStr)
+            .lte('opportunities.close_date', endStr),
+          'split_owner_user_id'
         )
       );
 
-      const acvClosed = closedOpps.reduce((s, o) => s + (o.acv || 0), 0);
+      const acvClosed = closedSplits.reduce((s, row) => s + splitAcv(row.opportunities.acv, row.split_percentage), 0);
 
       // Weekly cumulative ACV for pacing chart (13 weeks per quarter)
       const weeklyAcv: number[] = new Array(13).fill(0);
-      for (const o of closedOpps) {
-        if (!o.close_date) continue;
-        const dayInQ = Math.floor((new Date(o.close_date).getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      for (const row of closedSplits) {
+        if (!row.opportunities.close_date) continue;
+        const dayInQ = Math.floor((new Date(row.opportunities.close_date).getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         const weekIdx = Math.min(Math.floor(dayInQ / 7), 12);
-        weeklyAcv[weekIdx] += o.acv || 0;
+        weeklyAcv[weekIdx] += splitAcv(row.opportunities.acv, row.split_percentage);
       }
       // Convert to cumulative
       for (let i = 1; i < 13; i++) {
         weeklyAcv[i] += weeklyAcv[i - 1];
       }
-      const cxaClosed = closedOpps.reduce((s, o) => s + (o.ai_acv || 0), 0);
+      const cxaClosed = closedSplits.reduce((s, row) => s + splitAcv(row.opportunities.ai_acv, row.split_percentage), 0);
       // Deals Closed: only count deals with a valid sub_type AND acv > 0
-      const countableOpps = closedOpps.filter(
-        o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
+      const countableSplits = closedSplits.filter(
+        row => row.opportunities.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(row.opportunities.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (row.opportunities.acv || 0) > 0
       );
-      const dealsClosed = countableOpps.length;
-      const dealsClosedWithCxa = countableOpps.filter(o => (o.ai_acv || 0) > 0).length;
+      const dealsClosed = countableSplits.length;
+      const dealsClosedWithCxa = countableSplits.filter(row => (row.opportunities.ai_acv || 0) > 0).length;
 
       // Deal-level data for drill-down
-      const acvDeals = closedOpps
-        .map(o => ({ id: o.id, name: o.name || 'Unnamed', owner: o.users?.full_name || 'Unknown', acv: o.acv || 0 }))
+      const acvDeals = closedSplits
+        .map(row => ({ id: row.opportunities.id, name: row.opportunities.name || 'Unnamed', owner: row.opportunities.users?.full_name || 'Unknown', acv: splitAcv(row.opportunities.acv, row.split_percentage) }))
         .sort((a, b) => b.acv - a.acv);
-      const dealsClosedDeals = countableOpps
-        .map(o => ({ id: o.id, name: o.name || 'Unnamed', owner: o.users?.full_name || 'Unknown', acv: o.acv || 0 }))
+      const dealsClosedDeals = countableSplits
+        .map(row => ({ id: row.opportunities.id, name: row.opportunities.name || 'Unnamed', owner: row.opportunities.users?.full_name || 'Unknown', acv: splitAcv(row.opportunities.acv, row.split_percentage) }))
         .sort((a, b) => b.acv - a.acv);
 
       // These metrics are N/A before FY2027
@@ -118,22 +124,27 @@ export async function GET(request: NextRequest) {
       ];
 
       if (fy >= 2027) {
-        // Booked pilots in quarter — paid pilots with a booked stage and close date in quarter
-        const pilots = await fetchAll<{ stage: string }>(() =>
+        // Booked pilots in quarter — paid pilots with a booked stage and close date in quarter, via splits
+        const pilotSplits = await fetchAll<{
+          split_owner_user_id: string;
+          split_percentage: number;
+          opportunities: { stage: string };
+        }>(() =>
           applyScope(
-            db.from('opportunities')
-              .select('stage')
-              .eq('is_paid_pilot', true)
-              .in('stage', BOOKED_PILOT_STAGES)
-              .gte('close_date', startStr)
-              .lte('close_date', endStr),
-            'owner_user_id'
+            db.from('opportunity_splits')
+              .select('split_owner_user_id, split_percentage, opportunities!inner(stage)')
+              .eq('split_type', REVENUE_SPLIT_TYPE)
+              .eq('opportunities.is_paid_pilot', true)
+              .in('opportunities.stage', BOOKED_PILOT_STAGES)
+              .gte('opportunities.close_date', startStr)
+              .lte('opportunities.close_date', endStr),
+            'split_owner_user_id'
           )
         );
 
-        bookedPilots = pilots.length;
+        bookedPilots = pilotSplits.length;
 
-        // Commission earned — paginated
+        // Commission earned — paginated (stays on commissions table, scoped by user_id)
         const comms = await fetchAll<{ commission_amount: number | null }>(() =>
           applyScope(
             db.from('commissions')
@@ -204,23 +215,27 @@ export async function GET(request: NextRequest) {
         totalQuota = (quotaRows || []).reduce((s, q) => s + (parseFloat(q.quota_amount) || 0), 0);
       }
 
-      // Get YTD ACV for attainment (all quarters in same FY up to current quarter)
+      // Get YTD ACV for attainment (all quarters in same FY up to current quarter) via splits
       let ytdAcvClosed = 0;
       if (fy >= 2027) {
         for (let qi = 1; qi <= q; qi++) {
           const qiStart = getQuarterStartDate(fy, qi);
           const qiEnd = getQuarterEndDate(fy, qi);
-          const ytdOpps = await fetchAll<{ acv: number | null }>(() =>
+          const ytdSplits = await fetchAll<{
+            split_percentage: number;
+            opportunities: { acv: number | null };
+          }>(() =>
             applyScope(
-              db.from('opportunities')
-                .select('acv')
-                .eq('is_closed_won', true)
-                .gte('close_date', qiStart.toISOString().split('T')[0])
-                .lte('close_date', qiEnd.toISOString().split('T')[0]),
-              'owner_user_id'
+              db.from('opportunity_splits')
+                .select('split_percentage, opportunities!inner(acv)')
+                .eq('split_type', REVENUE_SPLIT_TYPE)
+                .eq('opportunities.is_closed_won', true)
+                .gte('opportunities.close_date', qiStart.toISOString().split('T')[0])
+                .lte('opportunities.close_date', qiEnd.toISOString().split('T')[0]),
+              'split_owner_user_id'
             )
           );
-          ytdAcvClosed += ytdOpps.reduce((s, o) => s + (o.acv || 0), 0);
+          ytdAcvClosed += ytdSplits.reduce((s, row) => s + splitAcv(row.opportunities.acv, row.split_percentage), 0);
         }
       }
 

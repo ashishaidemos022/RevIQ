@@ -1,12 +1,44 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
+
+const STORAGE_PREFIX = "riq_filters:";
 
 /**
- * useState-like hook that persists filter values in URL search params.
- * When navigating away and back, the filter value is restored from the URL.
- * When the value equals the default, the param is removed from the URL to keep it clean.
+ * Read all saved filter params for a given pathname from sessionStorage.
+ */
+function getSavedParams(pathname: string): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  try {
+    const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${pathname}`);
+    return raw ? new URLSearchParams(raw) : new URLSearchParams();
+  } catch {
+    return new URLSearchParams();
+  }
+}
+
+/**
+ * Save filter params for a given pathname to sessionStorage.
+ */
+function saveParams(pathname: string, params: URLSearchParams) {
+  if (typeof window === "undefined") return;
+  try {
+    const qs = params.toString();
+    if (qs) {
+      sessionStorage.setItem(`${STORAGE_PREFIX}${pathname}`, qs);
+    } else {
+      sessionStorage.removeItem(`${STORAGE_PREFIX}${pathname}`);
+    }
+  } catch {
+    // sessionStorage unavailable
+  }
+}
+
+/**
+ * useState-like hook that persists filter values in URL search params
+ * AND sessionStorage. When navigating away via sidebar and back,
+ * saved filters are restored from sessionStorage into the URL.
  */
 export function useFilterParam(
   key: string,
@@ -15,8 +47,26 @@ export function useFilterParam(
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const restoredRef = useRef(false);
 
-  const value = searchParams.get(key) ?? defaultValue;
+  // On first mount, if the URL has no params but sessionStorage does, restore them.
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+
+    // Only restore if the URL has no filter params at all (fresh navigation from sidebar)
+    if (searchParams.toString()) return;
+
+    const saved = getSavedParams(pathname);
+    if (saved.toString()) {
+      router.replace(`${pathname}?${saved.toString()}`, { scroll: false });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Read value: URL param > sessionStorage > default
+  const urlValue = searchParams.get(key);
+  const savedValue = typeof window !== "undefined" ? getSavedParams(pathname).get(key) : null;
+  const value = urlValue ?? savedValue ?? defaultValue;
 
   const setValue = useCallback(
     (newValue: string) => {
@@ -26,6 +76,15 @@ export function useFilterParam(
       } else {
         params.set(key, newValue);
       }
+      // Persist to sessionStorage
+      const stored = getSavedParams(pathname);
+      if (newValue === defaultValue) {
+        stored.delete(key);
+      } else {
+        stored.set(key, newValue);
+      }
+      saveParams(pathname, stored);
+
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },

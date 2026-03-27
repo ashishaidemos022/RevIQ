@@ -21,7 +21,8 @@ import { DealDrilldownDrawer, DrillDownDeal } from "@/components/charts/deal-dri
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { ChevronDown, ChevronRight, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight, Filter, RotateCcw } from "lucide-react";
 import { Opportunity } from "@/types";
 import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
 import {
@@ -393,6 +394,21 @@ export function AePipeline() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">Pipeline</h1>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => {
+              setQuarterFilter("current");
+              setStageFilter([]);
+              setTypeFilter([]);
+              setPilotFilter([]);
+              setDealSizeFilter([]);
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <Filter className="h-4 w-4 text-muted-foreground" />
           <MultiSelect
             options={QUARTER_OPTIONS_ITEMS}

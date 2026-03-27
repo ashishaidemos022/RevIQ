@@ -11,7 +11,7 @@ import { ErrorState } from "@/components/dashboard/error-state";
 import { DealDrilldownDrawer, DrillDownDeal } from "@/components/charts/deal-drilldown-drawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BarChart,
@@ -148,6 +148,15 @@ export function PbmPerformance() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Performance</h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setOffset(0)}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setOffset(offset + 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>

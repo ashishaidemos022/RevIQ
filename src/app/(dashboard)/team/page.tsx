@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, List, Search, Network } from "lucide-react";
+import { Users, List, Search, Network, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CompareSelectionBar } from "@/components/team/compare-selection-bar";
 import { ComparePanel } from "@/components/team/compare-panel";
@@ -379,6 +379,19 @@ export default function TeamPage() {
                 </CardTitle>
 
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setRoleFilter("all");
+                      setRosterView("flat");
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                    Clear
+                  </Button>
                   {/* Search */}
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

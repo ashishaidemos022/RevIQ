@@ -23,7 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Filter, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Filter, Zap, RotateCcw } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -163,6 +164,15 @@ export default function ActivitiesPage() {
           Activities ({qStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {qEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})
         </h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setTypeFilter("all")}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={typeFilter} onValueChange={(v) => v && setTypeFilter(v)}>
             <SelectTrigger className="w-[150px] h-8 text-xs">

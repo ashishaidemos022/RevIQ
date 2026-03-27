@@ -25,7 +25,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Radio } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Radio, RotateCcw } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -433,6 +434,21 @@ export default function UsagePage() {
           Usage {periodDisplayLabel ? `— ${periodDisplayLabel}` : ""}
         </h1>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => {
+              setSelectedPeriod("");
+              setMacroSkuFilter("all");
+              setTaxonomyFilter("all");
+              setTopN(25);
+              setProductDimension("macro_sku");
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <Select
             value={selectedPeriod || displayPeriod || ""}
             onValueChange={(v) => v && setSelectedPeriod(v)}

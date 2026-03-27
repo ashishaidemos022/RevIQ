@@ -25,7 +25,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FlaskConical, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { FlaskConical, Filter, RotateCcw } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -296,6 +297,15 @@ export function PbmPilots() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">PBM Paid Pilots</h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setQuarterFilter(defaultQuarter)}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <Filter className="h-4 w-4 text-muted-foreground" />
           <MultiSelect
             options={quarters.map((q) => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))}

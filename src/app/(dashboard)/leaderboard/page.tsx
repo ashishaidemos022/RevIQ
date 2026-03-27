@@ -25,7 +25,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Trophy, Medal, ChevronDown } from "lucide-react";
+import { Trophy, Medal, ChevronDown, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeaderboardEntry } from "@/types";
 import { UserDetailDrawer } from "@/components/dashboard/user-detail-drawer";
@@ -374,6 +374,21 @@ export default function LeaderboardPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              setBoard("revenue");
+              setPeriod("qtd");
+              setAeType("combined");
+              setRegion("combined");
+              setSelectedManagerIds([]);
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
             {AE_TYPES.map((t) => (
               <Button

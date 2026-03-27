@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Building2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Building2, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PartnerDetailDrawer } from "@/components/dashboard/partner-detail-drawer";
 
@@ -342,6 +342,19 @@ export default function PartnerLeaderboardPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              setBoard("revenue");
+              setPeriod("qtd");
+              setRegion("combined");
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
           <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
             {REGIONS.map((r) => (
               <Button

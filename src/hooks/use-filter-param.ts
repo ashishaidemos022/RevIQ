@@ -35,10 +35,52 @@ function saveParams(pathname: string, params: URLSearchParams) {
   }
 }
 
+// Batching: accumulate param updates within the same tick, flush once via microtask.
+const pendingBatch: Map<string, { value: string; defaultValue: string }> = new Map();
+let batchFlushScheduled = false;
+let batchRouter: ReturnType<typeof useRouter> | null = null;
+let batchPathname: string = "";
+
+function scheduleBatchFlush() {
+  if (batchFlushScheduled) return;
+  batchFlushScheduled = true;
+  queueMicrotask(() => {
+    const router = batchRouter;
+    const pathname = batchPathname;
+    if (!router) { batchFlushScheduled = false; pendingBatch.clear(); return; }
+
+    // Read fresh from the current URL so we don't lose params set by other hooks
+    const params = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : ""
+    );
+    const stored = getSavedParams(pathname);
+
+    for (const [key, { value, defaultValue }] of pendingBatch) {
+      if (value === defaultValue) {
+        params.delete(key);
+        stored.delete(key);
+      } else {
+        params.set(key, value);
+        stored.set(key, value);
+      }
+    }
+
+    saveParams(pathname, stored);
+    pendingBatch.clear();
+    batchFlushScheduled = false;
+
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  });
+}
+
 /**
  * useState-like hook that persists filter values in URL search params
  * AND sessionStorage. When navigating away via sidebar and back,
  * saved filters are restored from sessionStorage into the URL.
+ *
+ * Multiple concurrent setValue calls within the same tick are batched
+ * into a single router.replace() to avoid clobbering each other.
  */
 export function useFilterParam(
   key: string,
@@ -63,32 +105,22 @@ export function useFilterParam(
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Read value: URL param > sessionStorage > default
+  // Read value: URL param > pending batch > sessionStorage > default
   const urlValue = searchParams.get(key);
+  const pendingValue = pendingBatch.has(key) ? pendingBatch.get(key)!.value : null;
   const savedValue = typeof window !== "undefined" ? getSavedParams(pathname).get(key) : null;
-  const value = urlValue ?? savedValue ?? defaultValue;
+  const value = urlValue ?? pendingValue ?? savedValue ?? defaultValue;
 
   const setValue = useCallback(
     (newValue: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (newValue === defaultValue) {
-        params.delete(key);
-      } else {
-        params.set(key, newValue);
-      }
-      // Persist to sessionStorage
-      const stored = getSavedParams(pathname);
-      if (newValue === defaultValue) {
-        stored.delete(key);
-      } else {
-        stored.set(key, newValue);
-      }
-      saveParams(pathname, stored);
+      // Capture router/pathname for the batched flush
+      batchRouter = router;
+      batchPathname = pathname;
 
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      pendingBatch.set(key, { value: newValue, defaultValue });
+      scheduleBatchFlush();
     },
-    [searchParams, router, pathname, key, defaultValue]
+    [router, pathname, key, defaultValue]
   );
 
   return [value, setValue];

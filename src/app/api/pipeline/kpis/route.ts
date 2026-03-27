@@ -22,24 +22,28 @@ export async function GET(request: NextRequest) {
     const typeFilter = url.searchParams.get('type');
     const stageFilter = url.searchParams.get('stage');
     const isPaidPilot = url.searchParams.get('is_paid_pilot');
+    const acvMin = url.searchParams.get('acv_min');
+    const acvMax = url.searchParams.get('acv_max');
 
     // Helper to build the base open-opps query with filters applied
     const buildOpenQuery = () => {
       let q = db
         .from('opportunities')
-        .select('acv, probability, close_date')
+        .select('acv, probability, close_date, mgmt_forecast_category')
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false);
       q = scopedQuery(q, 'owner_user_id', scope);
-      if (typeFilter) q = q.eq('type', typeFilter);
+      if (typeFilter) q = q.in('type', typeFilter.split(','));
       if (stageFilter) q = q.in('stage', stageFilter.split(','));
       if (isPaidPilot === 'true') q = q.eq('is_paid_pilot', true);
       if (isPaidPilot === 'false') q = q.eq('is_paid_pilot', false);
+      if (acvMin) q = q.gte('acv', Number(acvMin));
+      if (acvMax) q = q.lte('acv', Number(acvMax));
       return q;
     };
 
     // Fetch ALL open opps (paginated to avoid 1000-row default cap)
-    const opps = await fetchAll<{ acv: number | null; probability: number | null; close_date: string | null }>(buildOpenQuery);
+    const opps = await fetchAll<{ acv: number | null; probability: number | null; close_date: string | null; mgmt_forecast_category: string | null }>(buildOpenQuery);
 
     const totalPipelineAcv = opps.reduce((s, o) => s + (o.acv || 0), 0);
     const weightedPipelineAcv = opps.reduce((s, o) => s + (o.acv || 0) * ((o.probability || 0) / 100), 0);
@@ -50,6 +54,14 @@ export async function GET(request: NextRequest) {
       return o.close_date >= qStartStr && o.close_date <= qEndStr;
     }).length;
 
+    // Forecast category KPIs
+    const forecastedPipelineAcv = opps
+      .filter(o => o.mgmt_forecast_category === 'Forecast')
+      .reduce((s, o) => s + (o.acv || 0), 0);
+    const upsidePipelineAcv = opps
+      .filter(o => o.mgmt_forecast_category === 'Upside')
+      .reduce((s, o) => s + (o.acv || 0), 0);
+
     return NextResponse.json({
       data: {
         totalPipelineAcv,
@@ -57,6 +69,8 @@ export async function GET(request: NextRequest) {
         dealCount,
         avgDealSize,
         closingThisQuarter,
+        forecastedPipelineAcv,
+        upsidePipelineAcv,
       },
     });
   } catch (error) {

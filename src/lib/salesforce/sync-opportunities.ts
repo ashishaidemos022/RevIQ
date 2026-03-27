@@ -33,6 +33,7 @@ interface SalesforceOpportunity {
   RV_Account__c: string | null;
   RV_Partner_Type__c: string | null;
   Channel_Manager__c: string | null;
+  Days_in_Current_Stage__c: number | null;
   IsClosed: boolean;
   IsWon: boolean;
 }
@@ -46,6 +47,7 @@ const SOQL_FIELDS = [
   'Estimated_ACV_PAYGO__c', 'CXA_Committed_ARR__c', 'Sales_Led_Renewal__c',
   'AE_Forecast_Category__c', 'VP_Commit__c', 'Next_Step__c', 'Manager_Notes__c',
   'RV_Account__c', 'RV_Partner_Type__c', 'Channel_Manager__c',
+  'Days_in_Current_Stage__c',
   'IsClosed', 'IsWon',
 ].join(', ');
 
@@ -163,6 +165,7 @@ export async function syncSalesforceOpportunities(): Promise<OpportunitySyncResu
     rv_account_sf_id: opp.RV_Account__c,
     rv_account_type: opp.RV_Partner_Type__c,
     channel_owner_sf_id: opp.Channel_Manager__c,
+    days_in_current_stage: opp.Days_in_Current_Stage__c,
     sf_created_date: opp.CreatedDate,
     last_synced_at: now,
   }));

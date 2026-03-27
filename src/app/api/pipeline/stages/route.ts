@@ -12,6 +12,9 @@ interface OppRow {
   close_date: string | null;
   is_paid_pilot: boolean;
   last_stage_changed_at: string | null;
+  mgmt_forecast_category: string | null;
+  cxa_committed_arr: number | null;
+  days_in_current_stage: number | null;
   accounts: { id: string; name: string } | null;
   users: { id: string; full_name: string; email: string } | null;
 }
@@ -27,19 +30,23 @@ export async function GET(request: NextRequest) {
     const typeFilter = url.searchParams.get('type');
     const stageFilter = url.searchParams.get('stage');
     const isPaidPilot = url.searchParams.get('is_paid_pilot');
+    const acvMin = url.searchParams.get('acv_min');
+    const acvMax = url.searchParams.get('acv_max');
 
     // Fetch ALL open opps with stage info (paginated)
     const opps = await fetchAll<OppRow>(() => {
       let q = db
         .from('opportunities')
-        .select('id, name, stage, acv, probability, close_date, is_paid_pilot, last_stage_changed_at, accounts(id, name), users!opportunities_owner_user_id_fkey(id, full_name, email)')
+        .select('id, name, stage, acv, probability, close_date, is_paid_pilot, last_stage_changed_at, mgmt_forecast_category, cxa_committed_arr, days_in_current_stage, accounts(id, name), users!opportunities_owner_user_id_fkey(id, full_name, email)')
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false);
       q = scopedQuery(q, 'owner_user_id', scope);
-      if (typeFilter) q = q.eq('type', typeFilter);
+      if (typeFilter) q = q.in('type', typeFilter.split(','));
       if (stageFilter) q = q.in('stage', stageFilter.split(','));
       if (isPaidPilot === 'true') q = q.eq('is_paid_pilot', true);
       if (isPaidPilot === 'false') q = q.eq('is_paid_pilot', false);
+      if (acvMin) q = q.gte('acv', Number(acvMin));
+      if (acvMax) q = q.lte('acv', Number(acvMax));
       return q.order('close_date', { ascending: false });
     });
 
@@ -47,23 +54,22 @@ export async function GET(request: NextRequest) {
     const stageMap: Record<string, {
       deals: number;
       totalAcv: number;
-      weightedAcv: number;
+      totalCxaAcv: number;
       totalDaysInStage: number;
       daysCount: number;
     }> = {};
 
-    const now = Date.now();
     for (const o of opps) {
       const stage = o.stage || 'Other';
       if (!stageMap[stage]) {
-        stageMap[stage] = { deals: 0, totalAcv: 0, weightedAcv: 0, totalDaysInStage: 0, daysCount: 0 };
+        stageMap[stage] = { deals: 0, totalAcv: 0, totalCxaAcv: 0, totalDaysInStage: 0, daysCount: 0 };
       }
       const s = stageMap[stage];
       s.deals++;
       s.totalAcv += o.acv || 0;
-      s.weightedAcv += (o.acv || 0) * ((o.probability || 0) / 100);
-      if (o.last_stage_changed_at) {
-        s.totalDaysInStage += Math.floor((now - new Date(o.last_stage_changed_at).getTime()) / (1000 * 60 * 60 * 24));
+      s.totalCxaAcv += o.cxa_committed_arr || 0;
+      if (o.days_in_current_stage != null) {
+        s.totalDaysInStage += o.days_in_current_stage;
         s.daysCount++;
       }
     }
@@ -72,7 +78,7 @@ export async function GET(request: NextRequest) {
       stage,
       deals: data.deals,
       totalAcv: data.totalAcv,
-      weightedAcv: data.weightedAcv,
+      totalCxaAcv: data.totalCxaAcv,
       avgDaysInStage: data.daysCount > 0 ? Math.round(data.totalDaysInStage / data.daysCount) : 0,
     }));
 

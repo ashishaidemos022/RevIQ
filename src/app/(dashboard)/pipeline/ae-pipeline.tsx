@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useFilterParam } from "@/hooks/use-filter-param";
+import { useFilterParam, useFilterParamArray } from "@/hooks/use-filter-param";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth-store";
-import { useOpportunities } from "@/hooks/use-opportunities";
 import { apiFetch } from "@/lib/api";
 import {
   getCurrentFiscalPeriod,
@@ -19,25 +18,58 @@ import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
-import { PipelineByStageChart } from "@/components/charts/pipeline-by-stage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
 import { Opportunity } from "@/types";
 import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 const STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
 const DEAL_TYPES = [
   { value: "new_business", label: "New Business" },
   { value: "renewal", label: "Renewal" },
   { value: "expansion", label: "Expansion" },
+  { value: "amendment", label: "Amendment" },
+];
+
+const DEAL_SIZE_RANGES = [
+  { value: "0-25000", label: "$0 to $25K", min: 0, max: 25000 },
+  { value: "25000-50000", label: "$25K to $50K", min: 25000, max: 50000 },
+  { value: "50000-100000", label: "$50K to $100K", min: 50000, max: 100000 },
+  { value: "100000-250000", label: "$100K to $250K", min: 100000, max: 250000 },
+  { value: "250000-500000", label: "$250K to $500K", min: 250000, max: 500000 },
+  { value: "500000-1000000", label: "$500K to $1M", min: 500000, max: 1000000 },
+  { value: "1000000-plus", label: "$1M Plus", min: 1000000, max: Infinity },
+];
+
+const QUARTER_OPTIONS_ITEMS = [
+  { value: "all", label: "All Quarters" },
+  { value: "current", label: "Current Quarter" },
+];
+
+const PILOT_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "yes", label: "Paid Pilot" },
+  { value: "no", label: "Non-Pilot" },
+];
+
+const PIE_COLORS = [
+  "#5405BD", "#14C3B7", "#7c3aed", "#FFCC00", "#f97316",
+  "#ec4899", "#06b6d4", "#84cc16", "#8b5cf6", "#f43f5e",
+  "#10b981", "#6366f1",
 ];
 
 interface PipelineKpis {
@@ -46,22 +78,42 @@ interface PipelineKpis {
   dealCount: number;
   avgDealSize: number;
   closingThisQuarter: number;
-}
-
-interface StageRow {
-  stage: string;
-  deals: number;
-  totalAcv: number;
-  weightedAcv: number;
-  avgDaysInStage: number;
+  forecastedPipelineAcv: number;
+  upsidePipelineAcv: number;
 }
 
 interface StagesResponse {
   data: {
-    stages: StageRow[];
+    stages: {
+      stage: string;
+      deals: number;
+      totalAcv: number;
+      totalCxaAcv: number;
+      avgDaysInStage: number;
+    }[];
     opportunities: Opportunity[];
   };
 }
+
+const fmtCurrency = (val: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(val);
+
+const shortCurrency = (val: number) =>
+  val >= 1000000
+    ? `$${(val / 1000000).toFixed(1)}M`
+    : val >= 1000
+      ? `$${(val / 1000).toFixed(0)}K`
+      : `$${val.toFixed(0)}`;
+
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+  "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+  "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+};
 
 export function AePipeline() {
   const user = useAuthStore((s) => s.user);
@@ -69,11 +121,12 @@ export function AePipeline() {
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
   const isManager = user && MANAGER_PLUS_ROLES.includes(user.role as typeof MANAGER_PLUS_ROLES[number]);
 
-  // Filters
+  // Filters — multi-select stored as arrays, single-select as strings
   const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", "current");
-  const [stageFilter, setStageFilter] = useFilterParam("stage", "all");
-  const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
-  const [pilotFilter, setPilotFilter] = useFilterParam("pilot", "all");
+  const [stageFilter, setStageFilter] = useFilterParamArray("stage");
+  const [typeFilter, setTypeFilter] = useFilterParamArray("type");
+  const [pilotFilter, setPilotFilter] = useFilterParamArray("pilot");
+  const [dealSizeFilter, setDealSizeFilter] = useFilterParamArray("dealSize");
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
 
@@ -83,14 +136,24 @@ export function AePipeline() {
   const filterParams = useMemo(() => {
     const params = new URLSearchParams();
     if (viewAsUser) params.set('viewAs', viewAsUser.user_id);
-    if (typeFilter !== "all") params.set('type', typeFilter);
-    if (stageFilter !== "all") params.set('stage', stageFilter);
-    if (pilotFilter === "yes") params.set('is_paid_pilot', 'true');
-    if (pilotFilter === "no") params.set('is_paid_pilot', 'false');
+    if (typeFilter.length > 0) params.set('type', typeFilter.join(','));
+    if (stageFilter.length > 0) params.set('stage', stageFilter.join(','));
+    if (pilotFilter.includes("yes") && !pilotFilter.includes("no")) params.set('is_paid_pilot', 'true');
+    if (pilotFilter.includes("no") && !pilotFilter.includes("yes")) params.set('is_paid_pilot', 'false');
+    // Deal size: compute min/max across selected ranges
+    if (dealSizeFilter.length > 0) {
+      const ranges = dealSizeFilter.map(v => DEAL_SIZE_RANGES.find(r => r.value === v)).filter(Boolean) as typeof DEAL_SIZE_RANGES;
+      if (ranges.length > 0) {
+        const min = Math.min(...ranges.map(r => r.min));
+        const max = Math.max(...ranges.map(r => r.max));
+        if (min > 0) params.set('acv_min', String(min));
+        if (max < Infinity) params.set('acv_max', String(max));
+      }
+    }
     return params.toString();
-  }, [viewAsUser, typeFilter, stageFilter, pilotFilter]);
+  }, [viewAsUser, typeFilter, stageFilter, pilotFilter, dealSizeFilter]);
 
-  // Server-side KPIs (aggregates ALL opps, no 1000-row limit)
+  // Server-side KPIs
   const {
     data: kpisData,
     isLoading: kpisLoading,
@@ -99,9 +162,9 @@ export function AePipeline() {
     queryFn: () => apiFetch<{ data: PipelineKpis }>(`/api/pipeline/kpis${filterParams ? `?${filterParams}` : ''}`),
   });
 
-  const serverKpis = kpisData?.data || { totalPipelineAcv: 0, weightedPipelineAcv: 0, dealCount: 0, avgDealSize: 0, closingThisQuarter: 0 };
+  const serverKpis = kpisData?.data || { totalPipelineAcv: 0, weightedPipelineAcv: 0, dealCount: 0, avgDealSize: 0, closingThisQuarter: 0, forecastedPipelineAcv: 0, upsidePipelineAcv: 0 };
 
-  // Server-side stages + full opp list (paginated, no 1000-row limit)
+  // Server-side stages + full opp list
   const {
     data: stagesData,
     isLoading: stagesLoading,
@@ -113,13 +176,21 @@ export function AePipeline() {
   });
 
   const isLoading = kpisLoading || stagesLoading;
-
-  // All opps from the stages endpoint (complete set)
   const allOpps = stagesData?.data?.opportunities || [];
 
-  // Filter by close date quarter for table/chart display
+  // Client-side deal size filter (ranges may be non-contiguous)
+  const dealSizeFiltered = useMemo(() => {
+    if (dealSizeFilter.length === 0) return allOpps;
+    const ranges = dealSizeFilter.map(v => DEAL_SIZE_RANGES.find(r => r.value === v)).filter(Boolean) as typeof DEAL_SIZE_RANGES;
+    return allOpps.filter(o => {
+      const acv = o.acv || 0;
+      return ranges.some(r => acv >= r.min && acv < (r.max === Infinity ? Infinity : r.max));
+    });
+  }, [allOpps, dealSizeFilter]);
+
+  // Filter by close date quarter
   const filteredOpps = useMemo(() => {
-    if (quarterFilter === "all") return allOpps;
+    if (quarterFilter === "all") return dealSizeFiltered;
     let fy = fiscalYear;
     let fq = fiscalQuarter;
     if (quarterFilter !== "current") {
@@ -131,45 +202,91 @@ export function AePipeline() {
     const end = getQuarterEndDate(fy, fq);
     const startStr = start.toISOString().split('T')[0];
     const endStr = end.toISOString().split('T')[0];
-    return allOpps.filter((o) => {
+    return dealSizeFiltered.filter((o) => {
       if (!o.close_date) return false;
       return o.close_date >= startStr && o.close_date <= endStr;
     });
-  }, [allOpps, quarterFilter, fiscalYear, fiscalQuarter]);
+  }, [dealSizeFiltered, quarterFilter, fiscalYear, fiscalQuarter]);
 
-  // Recompute KPIs from filtered opps so they reflect selected filters
+  // Recompute KPIs from filtered opps
   const kpis = useMemo(() => {
     const totalPipelineAcv = filteredOpps.reduce((s, o) => s + (o.acv || 0), 0);
     const qualifiedPipelineAcv = filteredOpps
       .filter(o => QUALIFIED_STAGES.includes(o.stage || ''))
+      .reduce((s, o) => s + (o.acv || 0), 0);
+    const forecastedPipelineAcv = filteredOpps
+      .filter(o => o.mgmt_forecast_category === 'Forecast')
+      .reduce((s, o) => s + (o.acv || 0), 0);
+    const upsidePipelineAcv = filteredOpps
+      .filter(o => o.mgmt_forecast_category === 'Upside')
       .reduce((s, o) => s + (o.acv || 0), 0);
     const dealCount = filteredOpps.length;
     const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
     return {
       totalPipelineAcv,
       qualifiedPipelineAcv,
+      forecastedPipelineAcv,
+      upsidePipelineAcv,
       dealCount,
       avgDealSize,
       closingThisQuarter: serverKpis.closingThisQuarter,
     };
   }, [filteredOpps, serverKpis.closingThisQuarter]);
 
-  // Client-side stage aggregation from filtered opps (for quarter-filtered view)
+  // Pipeline by Forecast Category chart data (by close month)
+  const forecastChartData = useMemo(() => {
+    const monthMap: Record<string, { month: string; Forecast: number; Upside: number }> = {};
+    for (const o of filteredOpps) {
+      if (!o.close_date) continue;
+      const month = o.close_date.substring(0, 7); // YYYY-MM
+      if (!monthMap[month]) monthMap[month] = { month, Forecast: 0, Upside: 0 };
+      const acv = o.acv || 0;
+      if (o.mgmt_forecast_category === 'Forecast') {
+        monthMap[month].Forecast += acv;
+      } else {
+        // Everything else (including Upside, null, other values) goes to Upside
+        monthMap[month].Upside += acv;
+      }
+    }
+    return Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month));
+  }, [filteredOpps]);
+
+  // Pipeline by Stage pie chart data
+  const stagePieData = useMemo(() => {
+    const stageMap: Record<string, number> = {};
+    filteredOpps.forEach((o) => {
+      const stage = o.stage || "Other";
+      stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
+    });
+    const total = Object.values(stageMap).reduce((s, v) => s + v, 0);
+    const stageOrder = [...STAGES, "Other"];
+    return Object.entries(stageMap)
+      .sort(([a], [b]) => {
+        const ai = stageOrder.indexOf(a);
+        const bi = stageOrder.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      })
+      .map(([stage, acv]) => ({
+        stage,
+        acv,
+        percent: total > 0 ? ((acv / total) * 100).toFixed(1) : "0",
+      }));
+  }, [filteredOpps]);
+
+  // Client-side stage aggregation
   const stageData = useMemo(() => {
     const stages: Record<
       string,
-      { deals: typeof filteredOpps; totalAcv: number; weightedAcv: number; totalDays: number; daysCount: number }
+      { deals: typeof filteredOpps; totalAcv: number; totalCxaAcv: number; totalDays: number; daysCount: number }
     > = {};
     filteredOpps.forEach((o) => {
       const stage = o.stage || "Other";
-      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, weightedAcv: 0, totalDays: 0, daysCount: 0 };
+      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, totalCxaAcv: 0, totalDays: 0, daysCount: 0 };
       stages[stage].deals.push(o);
       stages[stage].totalAcv += o.acv || 0;
-      stages[stage].weightedAcv += (o.acv || 0) * ((o.probability || 0) / 100);
-      if (o.last_stage_changed_at) {
-        stages[stage].totalDays += Math.floor(
-          (Date.now() - new Date(o.last_stage_changed_at).getTime()) / (1000 * 60 * 60 * 24)
-        );
+      stages[stage].totalCxaAcv += o.cxa_committed_arr || 0;
+      if (o.days_in_current_stage != null) {
+        stages[stage].totalDays += o.days_in_current_stage;
         stages[stage].daysCount++;
       }
     });
@@ -179,25 +296,19 @@ export function AePipeline() {
       .sort(([a], [b]) => {
         const ai = stageOrder.indexOf(a);
         const bi = stageOrder.indexOf(b);
-        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
       })
       .map(([stage, data]) => ({
         stage,
         deals: data.deals.length,
         totalAcv: data.totalAcv,
-        weightedAcv: data.weightedAcv,
+        totalCxaAcv: data.totalCxaAcv,
         avgDaysInStage: data.daysCount > 0 ? Math.round(data.totalDays / data.daysCount) : 0,
-        oppList: data.deals,
+        oppList: [...data.deals].sort((a, b) => (b.acv || 0) - (a.acv || 0)),
       }));
   }, [filteredOpps]);
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(val);
-
+  // Columns for expanded stage rows — sorted by ACV desc, no Prob %, add CXA ACV
   const oppColumns: Column<Record<string, unknown>>[] = [
     {
       key: "account_name",
@@ -213,12 +324,12 @@ export function AePipeline() {
     {
       key: "acv",
       header: "ACV",
-      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
+      render: (row) => (row.acv ? fmtCurrency(row.acv as number) : "—"),
     },
     {
-      key: "probability",
-      header: "Prob %",
-      render: (row) => (row.probability != null ? `${row.probability}%` : "—"),
+      key: "cxa_committed_arr",
+      header: "CXA ACV",
+      render: (row) => (row.cxa_committed_arr ? fmtCurrency(row.cxa_committed_arr as number) : "—"),
     },
     { key: "close_date", header: "Close Date" },
     {
@@ -228,6 +339,9 @@ export function AePipeline() {
         row.is_paid_pilot ? <Badge variant="outline">Pilot</Badge> : null,
     },
   ];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderPieLabel = ({ stage, percent }: any) => `${stage} (${percent}%)`;
 
   if (isLoading) return <DashboardSkeleton />;
   if (stagesError)
@@ -239,77 +353,128 @@ export function AePipeline() {
         <h1 className="text-2xl font-bold tracking-tight">Pipeline</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={quarterFilter} onValueChange={(v) => v && setQuarterFilter(v)}>
-            <SelectTrigger className="w-[160px] h-8 text-xs">
-              <SelectValue placeholder="Quarter" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Quarters</SelectItem>
-              <SelectItem value="current">Current Quarter</SelectItem>
-              {quarters.map((q) => (
-                <SelectItem key={q.label} value={`${q.fiscalYear}-${q.fiscalQuarter}`}>
-                  {q.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={stageFilter} onValueChange={(v) => v && setStageFilter(v)}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <SelectValue placeholder="Stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              {STAGES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={(v) => v && setTypeFilter(v)}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <SelectValue placeholder="Deal Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {DEAL_TYPES.map((t) => (
-                <SelectItem key={t.value} value={t.value}>
-                  {t.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={pilotFilter} onValueChange={(v) => v && setPilotFilter(v)}>
-            <SelectTrigger className="w-[130px] h-8 text-xs">
-              <SelectValue placeholder="Pilot" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="yes">Paid Pilot</SelectItem>
-              <SelectItem value="no">Non-Pilot</SelectItem>
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            options={[...QUARTER_OPTIONS_ITEMS, ...quarters.map(q => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))]}
+            value={[quarterFilter]}
+            onChange={(v) => setQuarterFilter(v[v.length - 1] || "current")}
+            placeholder="Quarter"
+            className="w-[160px]"
+          />
+          <MultiSelect
+            options={STAGES.map(s => ({ value: s, label: s }))}
+            value={stageFilter}
+            onChange={setStageFilter}
+            placeholder="All Stages"
+            className="w-[160px]"
+          />
+          <MultiSelect
+            options={DEAL_TYPES}
+            value={typeFilter}
+            onChange={setTypeFilter}
+            placeholder="All Types"
+            className="w-[150px]"
+          />
+          <MultiSelect
+            options={PILOT_OPTIONS}
+            value={pilotFilter}
+            onChange={setPilotFilter}
+            placeholder="Pilot"
+            className="w-[130px]"
+          />
+          <MultiSelect
+            options={DEAL_SIZE_RANGES.map(r => ({ value: r.value, label: r.label }))}
+            value={dealSizeFilter}
+            onChange={setDealSizeFilter}
+            placeholder="Deal Size"
+            className="w-[150px]"
+          />
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
         <KpiCard label="Qualified Pipeline" value={kpis.qualifiedPipelineAcv} format="currency" />
+        <KpiCard label="Forecasted Open Pipeline" value={kpis.forecastedPipelineAcv} format="currency" />
+        <KpiCard label="Upside Open Pipeline" value={kpis.upsidePipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
         <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />
       </div>
 
-      {/* Pipeline by Stage Chart */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Pipeline by Stage</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PipelineByStageChart opportunities={filteredOpps as Opportunity[]} />
-        </CardContent>
-      </Card>
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Pipeline by Forecast Category */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Pipeline by Forecast Category</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {forecastChartData.length === 0 ? (
+              <EmptyState title="No data" description="No open opportunities with close dates" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={forecastChartData}>
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v: string) => {
+                      const [y, m] = v.split("-");
+                      return `${MONTH_LABELS[m] || m} '${y.slice(2)}`;
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={shortCurrency} width={70} />
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip
+                    formatter={(val: any) => fmtCurrency(Number(val))}
+                    labelFormatter={(v: any) => {
+                      const [y, m] = String(v).split("-");
+                      return `${MONTH_LABELS[m] || m} ${y}`;
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="Forecast" stackId="fc" fill="#5405BD" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Upside" stackId="fc" fill="#14C3B7" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pipeline by Stage — Pie Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Pipeline by Stage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {stagePieData.length === 0 ? (
+              <EmptyState title="No data" description="No open opportunities" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={stagePieData}
+                    dataKey="acv"
+                    nameKey="stage"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={renderPieLabel}
+                    labelLine={{ strokeWidth: 1 }}
+                  >
+                    {stagePieData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip formatter={(val: any) => fmtCurrency(Number(val))} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Pipeline by Stage Table */}
       <Card>
@@ -328,7 +493,7 @@ export function AePipeline() {
                 <span>Stage</span>
                 <span className="text-right"># Deals</span>
                 <span className="text-right">Total ACV</span>
-                <span className="text-right">Weighted ACV</span>
+                <span className="text-right">CXA ACV</span>
                 <span className="text-right">Avg Days in Stage</span>
               </div>
               {stageData.map((row) => (
@@ -348,8 +513,8 @@ export function AePipeline() {
                       {row.stage}
                     </span>
                     <span className="text-right">{row.deals}</span>
-                    <span className="text-right">{formatCurrency(row.totalAcv)}</span>
-                    <span className="text-right">{formatCurrency(row.weightedAcv)}</span>
+                    <span className="text-right">{fmtCurrency(row.totalAcv)}</span>
+                    <span className="text-right">{fmtCurrency(row.totalCxaAcv)}</span>
                     <span className="text-right">{row.avgDaysInStage}d</span>
                   </button>
                   {expandedStage === row.stage && (
@@ -376,7 +541,7 @@ export function AePipeline() {
         </CardHeader>
         <CardContent>
           <DataTable
-            data={filteredOpps as unknown as Record<string, unknown>[]}
+            data={[...filteredOpps].sort((a, b) => (b.acv || 0) - (a.acv || 0)) as unknown as Record<string, unknown>[]}
             columns={oppColumns}
             pageSize={25}
             onRowClick={(row) => setSelectedOpp(row.id as string)}

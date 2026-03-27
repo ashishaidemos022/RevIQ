@@ -95,6 +95,22 @@ export function useFilterParam(
 }
 
 /**
+ * Variant for multi-select filter params (stored as comma-separated string).
+ * Empty array = no filter applied (default).
+ */
+export function useFilterParamArray(
+  key: string
+): [string[], (value: string[]) => void] {
+  const [strValue, setStrValue] = useFilterParam(key, "");
+  const arrValue = strValue ? strValue.split(",") : [];
+  const setValue = useCallback(
+    (v: string[]) => setStrValue(v.length > 0 ? v.join(",") : ""),
+    [setStrValue]
+  );
+  return [arrValue, setValue];
+}
+
+/**
  * Variant for numeric filter params (e.g., topN, offset).
  */
 export function useFilterParamNumber(

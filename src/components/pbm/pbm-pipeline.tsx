@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useFilterParam } from "@/hooks/use-filter-param";
-import { usePbmOpportunities } from "@/hooks/use-pbm-opportunities";
-import { PbmOpportunity } from "@/hooks/use-pbm-opportunities";
+import { useFilterParam, useFilterParamArray } from "@/hooks/use-filter-param";
+import { usePbmOpportunities, PbmOpportunity } from "@/hooks/use-pbm-opportunities";
 import {
   getCurrentFiscalPeriod,
   getQuarterStartDate,
@@ -19,24 +18,78 @@ import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
 import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
 import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 const STAGES = [...SS0_SS2_STAGES, ...QUALIFIED_STAGES];
+
+const DEAL_SIZE_RANGES = [
+  { value: "0-25000", label: "$0 to $25K", min: 0, max: 25000 },
+  { value: "25000-50000", label: "$25K to $50K", min: 25000, max: 50000 },
+  { value: "50000-100000", label: "$50K to $100K", min: 50000, max: 100000 },
+  { value: "100000-250000", label: "$100K to $250K", min: 100000, max: 250000 },
+  { value: "250000-500000", label: "$250K to $500K", min: 250000, max: 500000 },
+  { value: "500000-1000000", label: "$500K to $1M", min: 500000, max: 1000000 },
+  { value: "1000000-plus", label: "$1M Plus", min: 1000000, max: Infinity },
+];
+
+const QUARTER_OPTIONS_ITEMS = [
+  { value: "all", label: "All Quarters" },
+  { value: "current", label: "Current Quarter" },
+];
+
+const PILOT_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "yes", label: "Paid Pilot" },
+  { value: "no", label: "Non-Pilot" },
+];
+
+const PIE_COLORS = [
+  "#5405BD", "#14C3B7", "#7c3aed", "#FFCC00", "#f97316",
+  "#ec4899", "#06b6d4", "#84cc16", "#8b5cf6", "#f43f5e",
+  "#10b981", "#6366f1",
+];
+
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+  "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+  "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+};
+
+const fmtCurrency = (val: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(val);
+
+const shortCurrency = (val: number) =>
+  val >= 1000000
+    ? `$${(val / 1000000).toFixed(1)}M`
+    : val >= 1000
+      ? `$${(val / 1000).toFixed(0)}K`
+      : `$${val.toFixed(0)}`;
 
 export function PbmPipeline() {
   const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
 
   const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", "current");
-  const [stageFilter, setStageFilter] = useFilterParam("stage", "all");
-  const [pilotFilter, setPilotFilter] = useFilterParam("pilot", "all");
+  const [stageFilter, setStageFilter] = useFilterParamArray("stage");
+  const [pilotFilter, setPilotFilter] = useFilterParamArray("pilot");
+  const [dealSizeFilter, setDealSizeFilter] = useFilterParamArray("dealSize");
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
 
@@ -49,22 +102,32 @@ export function PbmPipeline() {
     refetch,
   } = usePbmOpportunities({
     status: "open",
-    ...(pilotFilter === "yes" && { is_paid_pilot: true }),
-    ...(pilotFilter === "no" && { is_paid_pilot: false }),
+    ...(pilotFilter.includes("yes") && !pilotFilter.includes("no") && { is_paid_pilot: true }),
+    ...(pilotFilter.includes("no") && !pilotFilter.includes("yes") && { is_paid_pilot: false }),
     limit: 10000,
   });
 
   const opps = oppsData?.data || [];
 
-  // Client-side filter by stage
+  // Client-side filter by stage (multi-select)
   const stageFiltered = useMemo(() => {
-    if (stageFilter === "all") return opps;
-    return opps.filter((o) => o.stage === stageFilter);
+    if (stageFilter.length === 0) return opps;
+    return opps.filter((o) => stageFilter.includes(o.stage));
   }, [opps, stageFilter]);
 
-  // Filter by close date quarter (use string comparison to avoid UTC/local timezone issues)
+  // Deal size filter
+  const dealSizeFiltered = useMemo(() => {
+    if (dealSizeFilter.length === 0) return stageFiltered;
+    const ranges = dealSizeFilter.map(v => DEAL_SIZE_RANGES.find(r => r.value === v)).filter(Boolean) as typeof DEAL_SIZE_RANGES;
+    return stageFiltered.filter(o => {
+      const acv = o.acv || 0;
+      return ranges.some(r => acv >= r.min && acv < (r.max === Infinity ? Infinity : r.max));
+    });
+  }, [stageFiltered, dealSizeFilter]);
+
+  // Filter by close date quarter
   const filteredOpps = useMemo(() => {
-    if (quarterFilter === "all") return stageFiltered;
+    if (quarterFilter === "all") return dealSizeFiltered;
     let fy = fiscalYear;
     let fq = fiscalQuarter;
     if (quarterFilter !== "current") {
@@ -76,17 +139,23 @@ export function PbmPipeline() {
     const end = getQuarterEndDate(fy, fq);
     const startStr = start.toISOString().split('T')[0];
     const endStr = end.toISOString().split('T')[0];
-    return stageFiltered.filter((o) => {
+    return dealSizeFiltered.filter((o) => {
       if (!o.close_date) return false;
       return o.close_date >= startStr && o.close_date <= endStr;
     });
-  }, [stageFiltered, quarterFilter, fiscalYear, fiscalQuarter]);
+  }, [dealSizeFiltered, quarterFilter, fiscalYear, fiscalQuarter]);
 
   // KPIs
   const kpis = useMemo(() => {
     const totalPipelineAcv = filteredOpps.reduce((s, o) => s + (o.acv || 0), 0);
     const qualifiedPipelineAcv = filteredOpps
       .filter(o => QUALIFIED_STAGES.includes(o.stage || ''))
+      .reduce((s, o) => s + (o.acv || 0), 0);
+    const forecastedPipelineAcv = filteredOpps
+      .filter(o => o.mgmt_forecast_category === 'Forecast')
+      .reduce((s, o) => s + (o.acv || 0), 0);
+    const upsidePipelineAcv = filteredOpps
+      .filter(o => o.mgmt_forecast_category === 'Upside')
       .reduce((s, o) => s + (o.acv || 0), 0);
     const dealCount = filteredOpps.length;
     const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
@@ -98,21 +167,64 @@ export function PbmPipeline() {
       return o.close_date >= qStartStr && o.close_date <= qEndStr;
     }).length;
 
-    return { totalPipelineAcv, qualifiedPipelineAcv, dealCount, avgDealSize, closingThisQuarter };
+    return { totalPipelineAcv, qualifiedPipelineAcv, forecastedPipelineAcv, upsidePipelineAcv, dealCount, avgDealSize, closingThisQuarter };
   }, [filteredOpps, opps, fiscalYear, fiscalQuarter]);
+
+  // Forecast chart data
+  const forecastChartData = useMemo(() => {
+    const monthMap: Record<string, { month: string; Forecast: number; Upside: number }> = {};
+    for (const o of filteredOpps) {
+      if (!o.close_date) continue;
+      const month = o.close_date.substring(0, 7);
+      if (!monthMap[month]) monthMap[month] = { month, Forecast: 0, Upside: 0 };
+      const acv = o.acv || 0;
+      if (o.mgmt_forecast_category === 'Forecast') {
+        monthMap[month].Forecast += acv;
+      } else {
+        monthMap[month].Upside += acv;
+      }
+    }
+    return Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month));
+  }, [filteredOpps]);
+
+  // Pie chart data
+  const stagePieData = useMemo(() => {
+    const stageMap: Record<string, number> = {};
+    filteredOpps.forEach((o) => {
+      const stage = o.stage || "Other";
+      stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
+    });
+    const total = Object.values(stageMap).reduce((s, v) => s + v, 0);
+    const stageOrder = [...STAGES, "Other"];
+    return Object.entries(stageMap)
+      .sort(([a], [b]) => {
+        const ai = stageOrder.indexOf(a);
+        const bi = stageOrder.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      })
+      .map(([stage, acv]) => ({
+        stage,
+        acv,
+        percent: total > 0 ? ((acv / total) * 100).toFixed(1) : "0",
+      }));
+  }, [filteredOpps]);
 
   // Pipeline by stage aggregation
   const stageData = useMemo(() => {
     const stages: Record<
       string,
-      { deals: PbmOpportunity[]; totalAcv: number; weightedAcv: number }
+      { deals: PbmOpportunity[]; totalAcv: number; totalCxaAcv: number; totalDays: number; daysCount: number }
     > = {};
     filteredOpps.forEach((o) => {
       const stage = o.stage || "Other";
-      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, weightedAcv: 0 };
+      if (!stages[stage]) stages[stage] = { deals: [], totalAcv: 0, totalCxaAcv: 0, totalDays: 0, daysCount: 0 };
       stages[stage].deals.push(o);
       stages[stage].totalAcv += o.acv || 0;
-      stages[stage].weightedAcv += (o.acv || 0) * ((o.probability || 0) / 100);
+      stages[stage].totalCxaAcv += o.cxa_committed_arr || 0;
+      if (o.days_in_current_stage != null) {
+        stages[stage].totalDays += o.days_in_current_stage;
+        stages[stage].daysCount++;
+      }
     });
 
     const stageOrder = [...STAGES, "Other"];
@@ -120,23 +232,17 @@ export function PbmPipeline() {
       .sort(([a], [b]) => {
         const ai = stageOrder.indexOf(a);
         const bi = stageOrder.indexOf(b);
-        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
       })
       .map(([stage, data]) => ({
         stage,
         deals: data.deals.length,
         totalAcv: data.totalAcv,
-        weightedAcv: data.weightedAcv,
-        oppList: data.deals,
+        totalCxaAcv: data.totalCxaAcv,
+        avgDaysInStage: data.daysCount > 0 ? Math.round(data.totalDays / data.daysCount) : 0,
+        oppList: [...data.deals].sort((a, b) => (b.acv || 0) - (a.acv || 0)),
       }));
   }, [filteredOpps]);
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(val);
 
   const oppColumns: Column<Record<string, unknown>>[] = [
     {
@@ -153,12 +259,12 @@ export function PbmPipeline() {
     {
       key: "acv",
       header: "ACV",
-      render: (row) => (row.acv ? formatCurrency(row.acv as number) : "—"),
+      render: (row) => (row.acv ? fmtCurrency(row.acv as number) : "—"),
     },
     {
-      key: "probability",
-      header: "Prob %",
-      render: (row) => (row.probability != null ? `${row.probability}%` : "—"),
+      key: "cxa_committed_arr",
+      header: "CXA ACV",
+      render: (row) => (row.cxa_committed_arr ? fmtCurrency(row.cxa_committed_arr as number) : "—"),
     },
     { key: "close_date", header: "Close Date" },
     {
@@ -183,6 +289,9 @@ export function PbmPipeline() {
     },
   ];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderPieLabel = ({ stage, percent }: any) => `${stage} (${percent}%)`;
+
   if (isLoading) return <DashboardSkeleton />;
   if (error)
     return <ErrorState message="Failed to load PBM pipeline data" onRetry={refetch} />;
@@ -193,53 +302,120 @@ export function PbmPipeline() {
         <h1 className="text-2xl font-bold tracking-tight">PBM Pipeline</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={quarterFilter} onValueChange={(v) => v && setQuarterFilter(v)}>
-            <SelectTrigger className="w-[160px] h-8 text-xs">
-              <SelectValue placeholder="Quarter" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Quarters</SelectItem>
-              <SelectItem value="current">Current Quarter</SelectItem>
-              {quarters.map((q) => (
-                <SelectItem key={q.label} value={`${q.fiscalYear}-${q.fiscalQuarter}`}>
-                  {q.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={stageFilter} onValueChange={(v) => v && setStageFilter(v)}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <SelectValue placeholder="Stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              {STAGES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={pilotFilter} onValueChange={(v) => v && setPilotFilter(v)}>
-            <SelectTrigger className="w-[130px] h-8 text-xs">
-              <SelectValue placeholder="Pilot" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="yes">Paid Pilot</SelectItem>
-              <SelectItem value="no">Non-Pilot</SelectItem>
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            options={[...QUARTER_OPTIONS_ITEMS, ...quarters.map(q => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))]}
+            value={[quarterFilter]}
+            onChange={(v) => setQuarterFilter(v[v.length - 1] || "current")}
+            placeholder="Quarter"
+            className="w-[160px]"
+          />
+          <MultiSelect
+            options={STAGES.map(s => ({ value: s, label: s }))}
+            value={stageFilter}
+            onChange={setStageFilter}
+            placeholder="All Stages"
+            className="w-[160px]"
+          />
+          <MultiSelect
+            options={PILOT_OPTIONS}
+            value={pilotFilter}
+            onChange={setPilotFilter}
+            placeholder="Pilot"
+            className="w-[130px]"
+          />
+          <MultiSelect
+            options={DEAL_SIZE_RANGES.map(r => ({ value: r.value, label: r.label }))}
+            value={dealSizeFilter}
+            onChange={setDealSizeFilter}
+            placeholder="Deal Size"
+            className="w-[150px]"
+          />
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
         <KpiCard label="Qualified Pipeline" value={kpis.qualifiedPipelineAcv} format="currency" />
+        <KpiCard label="Forecasted Open Pipeline" value={kpis.forecastedPipelineAcv} format="currency" />
+        <KpiCard label="Upside Open Pipeline" value={kpis.upsidePipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
         <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Pipeline by Forecast Category */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Pipeline by Forecast Category</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {forecastChartData.length === 0 ? (
+              <EmptyState title="No data" description="No open opportunities with close dates" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={forecastChartData}>
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v: string) => {
+                      const [y, m] = v.split("-");
+                      return `${MONTH_LABELS[m] || m} '${y.slice(2)}`;
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={shortCurrency} width={70} />
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip
+                    formatter={(val: any) => fmtCurrency(Number(val))}
+                    labelFormatter={(v: any) => {
+                      const [y, m] = String(v).split("-");
+                      return `${MONTH_LABELS[m] || m} ${y}`;
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="Forecast" stackId="fc" fill="#5405BD" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Upside" stackId="fc" fill="#14C3B7" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pipeline by Stage — Pie Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Pipeline by Stage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {stagePieData.length === 0 ? (
+              <EmptyState title="No data" description="No open opportunities" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={stagePieData}
+                    dataKey="acv"
+                    nameKey="stage"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={renderPieLabel}
+                    labelLine={{ strokeWidth: 1 }}
+                  >
+                    {stagePieData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <Tooltip formatter={(val: any) => fmtCurrency(Number(val))} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Pipeline by Stage Table */}
@@ -255,16 +431,17 @@ export function PbmPipeline() {
             />
           ) : (
             <div className="space-y-1">
-              <div className="grid grid-cols-4 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
+              <div className="grid grid-cols-5 text-xs font-medium text-muted-foreground px-3 py-2 border-b">
                 <span>Stage</span>
                 <span className="text-right"># Deals</span>
                 <span className="text-right">Total ACV</span>
-                <span className="text-right">Weighted ACV</span>
+                <span className="text-right">CXA ACV</span>
+                <span className="text-right">Avg Days in Stage</span>
               </div>
               {stageData.map((row) => (
                 <div key={row.stage}>
                   <button
-                    className="grid grid-cols-4 w-full text-sm px-3 py-3 hover:bg-muted/50 rounded-md transition-colors"
+                    className="grid grid-cols-5 w-full text-sm px-3 py-3 hover:bg-muted/50 rounded-md transition-colors"
                     onClick={() =>
                       setExpandedStage(expandedStage === row.stage ? null : row.stage)
                     }
@@ -278,8 +455,9 @@ export function PbmPipeline() {
                       {row.stage}
                     </span>
                     <span className="text-right">{row.deals}</span>
-                    <span className="text-right">{formatCurrency(row.totalAcv)}</span>
-                    <span className="text-right">{formatCurrency(row.weightedAcv)}</span>
+                    <span className="text-right">{fmtCurrency(row.totalAcv)}</span>
+                    <span className="text-right">{fmtCurrency(row.totalCxaAcv)}</span>
+                    <span className="text-right">{row.avgDaysInStage}d</span>
                   </button>
                   {expandedStage === row.stage && (
                     <div className="pl-6 pb-4">
@@ -305,7 +483,7 @@ export function PbmPipeline() {
         </CardHeader>
         <CardContent>
           <DataTable
-            data={filteredOpps as unknown as Record<string, unknown>[]}
+            data={[...filteredOpps].sort((a, b) => (b.acv || 0) - (a.acv || 0)) as unknown as Record<string, unknown>[]}
             columns={oppColumns}
             pageSize={25}
             onRowClick={(row) => setSelectedOpp(row.id as string)}

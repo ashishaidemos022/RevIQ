@@ -29,6 +29,10 @@ export interface PbmOpportunity {
   probability: number | null;
   forecast_category: string | null;
   type: string | null;
+  mgmt_forecast_category: string | null;
+  cxa_committed_arr: number | null;
+  days_in_current_stage: number | null;
+  last_stage_changed_at: string | null;
   accounts?: { id: string; name: string; industry: string; region: string };
   users?: { id: string; full_name: string; email: string };
   credit_path: string | null;

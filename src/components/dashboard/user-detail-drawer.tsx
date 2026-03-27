@@ -38,6 +38,8 @@ interface UserDetail {
     deals_closed_ytd: number;
     pipeline_acv: number;
     open_deals: number;
+    booked_pilots?: number;
+    open_pilots?: number;
   };
   board: string;
   period: string;
@@ -152,6 +154,50 @@ function DealsList({ data }: { data: UserDetail }) {
   );
 }
 
+const BOOKED_PILOT_STAGES = [
+  "Stage 8-Closed Won: Finance", "Stage 7-Closed Won",
+  "Stage 6-Closed-Won: Finance Approved", "Stage 5-Closed Won",
+];
+
+function PilotsList({ data }: { data: UserDetail }) {
+  const booked = data.deals.filter(d => BOOKED_PILOT_STAGES.includes(d.stage));
+  const open = data.deals.filter(d => !d.is_closed_won && !d.is_closed_lost);
+
+  const renderSection = (title: string, deals: typeof data.deals) => (
+    <div>
+      <h3 className="text-sm font-medium mb-3">{title} ({deals.length})</h3>
+      {deals.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">None</p>
+      ) : (
+        <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+          {deals
+            .sort((a, b) => ((b.acv as number) || 0) - ((a.acv as number) || 0))
+            .map((deal) => (
+            <div key={deal.id} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/30 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{deal.account_name || "—"}</div>
+                <div className="text-xs text-muted-foreground truncate">{deal.name}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="font-medium">{deal.acv ? formatCurrency(deal.acv) : "—"}</div>
+                <Badge variant="secondary" className="text-[10px]">{deal.stage}</Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      {renderSection("Booked Pilots", booked)}
+      <Separator />
+      {renderSection("Open Pilots", open)}
+    </div>
+  );
+}
+
 export function UserDetailDrawer({ userId, open, onClose, board, period, apiPrefix = "/api/leaderboard" }: UserDetailDrawerProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["user-leaderboard-detail", userId, board, period, apiPrefix],
@@ -208,21 +254,30 @@ export function UserDetailDrawer({ userId, open, onClose, board, period, apiPref
             {/* KPIs */}
             <Card>
               <CardContent className="pt-3 pb-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <KpiMini label="ACV Closed QTD" value={formatCurrency(data.kpis.acv_closed_qtd)} />
-                  <KpiMini label="ACV Closed YTD" value={formatCurrency(data.kpis.acv_closed_ytd)} />
-                  <KpiMini label="Pipeline ACV" value={formatCurrency(data.kpis.pipeline_acv)} />
-                  <KpiMini label="Deals Closed QTD" value={data.kpis.deals_closed_qtd} />
-                  <KpiMini label="Deals Closed YTD" value={data.kpis.deals_closed_ytd} />
-                  <KpiMini label="Open Deals" value={data.kpis.open_deals} />
-                </div>
+                {data.board === "pilots" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <KpiMini label="Booked Pilots" value={data.kpis.booked_pilots ?? 0} />
+                    <KpiMini label="Open Pilots" value={data.kpis.open_pilots ?? 0} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    <KpiMini label="ACV Closed QTD" value={formatCurrency(data.kpis.acv_closed_qtd)} />
+                    <KpiMini label="ACV Closed YTD" value={formatCurrency(data.kpis.acv_closed_ytd)} />
+                    <KpiMini label="Pipeline ACV" value={formatCurrency(data.kpis.pipeline_acv)} />
+                    <KpiMini label="Deals Closed QTD" value={data.kpis.deals_closed_qtd} />
+                    <KpiMini label="Deals Closed YTD" value={data.kpis.deals_closed_ytd} />
+                    <KpiMini label="Open Deals" value={data.kpis.open_deals} />
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Separator />
 
             {/* Context-filtered content */}
-            {data.board === "activities" ? (
+            {data.board === "pilots" ? (
+              <PilotsList data={data} />
+            ) : data.board === "activities" ? (
               <div>
                 <h3 className="text-sm font-medium mb-3">
                   {boardLabel(data.board)} — {periodLabel(data.period)} ({data.activities.length})

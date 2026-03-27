@@ -187,6 +187,15 @@ export async function GET(
     const acvClosedYTD = closedWonYTD.reduce((s, o) => s + ((o.acv as number) || 0), 0);
     const pipelineACV = openDeals.reduce((s, o) => s + ((o.acv as number) || 0), 0);
 
+    // Pilot-specific KPIs
+    const BOOKED_PILOT_STAGES = [
+      'Stage 8-Closed Won: Finance', 'Stage 7-Closed Won',
+      'Stage 6-Closed-Won: Finance Approved', 'Stage 5-Closed Won',
+    ];
+    const paidPilots = allOpps.filter(o => o.is_paid_pilot);
+    const bookedPilots = paidPilots.filter(o => BOOKED_PILOT_STAGES.includes(o.stage as string)).length;
+    const openPilots = paidPilots.filter(o => !o.is_closed_won && !o.is_closed_lost).length;
+
     return NextResponse.json({
       data: {
         user: {
@@ -203,6 +212,8 @@ export async function GET(
           deals_closed_ytd: closedWonYTD.filter(o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && ((o.acv as number) || 0) > 0).length,
           pipeline_acv: pipelineACV,
           open_deals: openDeals.length,
+          booked_pilots: bookedPilots,
+          open_pilots: openPilots,
         },
         board,
         period,

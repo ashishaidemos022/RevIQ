@@ -275,12 +275,12 @@ export async function GET(request: NextRequest) {
 
     } else if (board === 'pipeline') {
       // Pipeline leaderboard: credited opportunities created (sf_created_date) within the period
-      const pbmData: Record<string, { total: number; ae_created: number; sales_sourced: number; marketing_sourced: number; partner_sourced: number; deals: Set<string> }> = {};
+      const pbmData: Record<string, { total: number; sourced_acv: number; influence_acv: number; fulfillment_acv: number; deals: Set<string> }> = {};
 
       if (pbmSfIds.length > 0) {
         let baseQuery = db
           .from('opportunities')
-          .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, reporting_acv, opportunity_source, created_by_sf_id, sf_created_date')
+          .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, reporting_acv, sf_created_date')
           .gt('acv', 0)
           .or('channel_owner_sf_id.not.is.null,rv_account_sf_id.not.is.null');
         if (startStr) baseQuery = baseQuery.gte('sf_created_date', startStr);
@@ -295,7 +295,7 @@ export async function GET(request: NextRequest) {
             const batch = oppSfIdsFromPartners.slice(i, i + 500);
             let batchQuery = db
               .from('opportunities')
-              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, reporting_acv, opportunity_source, created_by_sf_id, sf_created_date')
+              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, reporting_acv, sf_created_date')
               .gt('acv', 0)
               .in('salesforce_opportunity_id', batch);
             if (startStr) batchQuery = batchQuery.gte('sf_created_date', startStr);
@@ -311,19 +311,43 @@ export async function GET(request: NextRequest) {
           if (!allOpps.has(o.salesforce_opportunity_id)) allOpps.set(o.salesforce_opportunity_id, o);
         });
 
-        // Resolve creator roles via created_by_sf_id
-        const creatorSfIds = [...new Set([...allOpps.values()].map(o => o.created_by_sf_id).filter(Boolean))] as string[];
-        const creatorRoleMap: Record<string, string> = {};
-        if (creatorSfIds.length > 0) {
-          for (let i = 0; i < creatorSfIds.length; i += 500) {
-            const batch = creatorSfIds.slice(i, i + 500);
-            const { data: creators } = await db
-              .from('users')
-              .select('salesforce_user_id, role')
-              .in('salesforce_user_id', batch);
-            (creators || []).forEach(u => { creatorRoleMap[u.salesforce_user_id] = u.role; });
+        // Load engagement types from sf_partners for all credited opps
+        // Map: salesforce_opportunity_id → Set of engagement values for this PBM's partners
+        const oppEngagementMap = new Map<string, Map<string, Set<string>>>(); // oppSfId → (pbmLocalId → Set<engagement>)
+        const allOppSfIds = [...allOpps.keys()];
+        if (allOppSfIds.length > 0) {
+          for (let i = 0; i < allOppSfIds.length; i += 500) {
+            const batch = allOppSfIds.slice(i, i + 500);
+            const { data: partnerRows } = await db
+              .from('sf_partners')
+              .select('salesforce_opportunity_id, channel_owner_sf_id, engagement')
+              .in('salesforce_opportunity_id', batch)
+              .not('channel_owner_sf_id', 'is', null);
+            (partnerRows || []).forEach(p => {
+              const localId = pbmSfIdToLocalId.get(p.channel_owner_sf_id);
+              if (!localId) return;
+              if (!oppEngagementMap.has(p.salesforce_opportunity_id)) {
+                oppEngagementMap.set(p.salesforce_opportunity_id, new Map());
+              }
+              const pbmMap = oppEngagementMap.get(p.salesforce_opportunity_id)!;
+              if (!pbmMap.has(localId)) pbmMap.set(localId, new Set());
+              if (p.engagement) pbmMap.get(localId)!.add(p.engagement);
+            });
           }
         }
+
+        // Helper: resolve engagement classification for a PBM on an opp
+        // Priority: Source > Influence > Fulfillment
+        const resolveEngagement = (oppSfId: string, pbmLocalId: string): 'source' | 'influence' | 'fulfillment' | null => {
+          const pbmMap = oppEngagementMap.get(oppSfId);
+          if (!pbmMap) return null;
+          const engagements = pbmMap.get(pbmLocalId);
+          if (!engagements || engagements.size === 0) return null;
+          if (engagements.has('Source')) return 'source';
+          if (engagements.has('Influence')) return 'influence';
+          if (engagements.has('Fulfillment')) return 'fulfillment';
+          return null;
+        };
 
         allOpps.forEach(o => {
           const acv = parseFloat(o.reporting_acv) || parseFloat(o.acv) || 0;
@@ -333,24 +357,17 @@ export async function GET(request: NextRequest) {
           const creditPbm = (localId: string) => {
             if (creditedPbms.has(localId)) return;
             creditedPbms.add(localId);
-            if (!pbmData[localId]) pbmData[localId] = { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: new Set() };
+            if (!pbmData[localId]) pbmData[localId] = { total: 0, sourced_acv: 0, influence_acv: 0, fulfillment_acv: 0, deals: new Set() };
             pbmData[localId].total += acv;
             pbmData[localId].deals.add(oppSfId);
-            // AE Created Deals
-            if (o.created_by_sf_id) {
-              const creatorRole = (creatorRoleMap[o.created_by_sf_id] || '').toLowerCase();
-              if (creatorRole.includes('ae')) {
-                pbmData[localId].ae_created += acv;
-              }
-            }
-            // Categorize by opportunity_source
-            const src = (o.opportunity_source || '').trim();
-            if (src === 'Sales') {
-              pbmData[localId].sales_sourced += acv;
-            } else if (src === 'Marketing') {
-              pbmData[localId].marketing_sourced += acv;
-            } else if (src === 'Partner') {
-              pbmData[localId].partner_sourced += acv;
+            // Classify by engagement type (no duplication — first match wins)
+            const eng = resolveEngagement(oppSfId, localId);
+            if (eng === 'source') {
+              pbmData[localId].sourced_acv += acv;
+            } else if (eng === 'influence') {
+              pbmData[localId].influence_acv += acv;
+            } else if (eng === 'fulfillment') {
+              pbmData[localId].fulfillment_acv += acv;
             }
           };
 
@@ -381,7 +398,7 @@ export async function GET(request: NextRequest) {
       }
 
       allPBMs.forEach(pbm => {
-        const data = pbmData[pbm.id] || { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: new Set() };
+        const data = pbmData[pbm.id] || { total: 0, sourced_acv: 0, influence_acv: 0, fulfillment_acv: 0, deals: new Set() };
         entries.push({
           rank: 0,
           user_id: pbm.id,
@@ -390,10 +407,9 @@ export async function GET(request: NextRequest) {
           manager_name: pbmManagerMap[pbm.id] ?? null,
           primary_metric: data.total,
           secondary_metrics: {
-            ae_created: data.ae_created,
-            sales_sourced: data.sales_sourced,
-            marketing_sourced: data.marketing_sourced,
-            partner_sourced: data.partner_sourced,
+            sourced_acv: data.sourced_acv,
+            influence_acv: data.influence_acv,
+            fulfillment_acv: data.fulfillment_acv,
             open_deals: data.deals.size,
             avg_deal_size: data.deals.size > 0 ? data.total / data.deals.size : 0,
           },

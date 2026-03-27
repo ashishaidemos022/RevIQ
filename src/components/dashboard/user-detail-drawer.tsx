@@ -87,7 +87,7 @@ function formatRole(role: string) {
 function boardLabel(board: string) {
   const map: Record<string, string> = {
     revenue: "Closed-Won Deals",
-    pipeline: "Open Pipeline",
+    pipeline: "Deals Created",
     pilots: "Paid Pilots",
     activities: "Activities",
   };

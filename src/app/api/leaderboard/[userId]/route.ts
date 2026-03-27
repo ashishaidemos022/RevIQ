@@ -124,10 +124,11 @@ export async function GET(
         (o.close_date as string) >= periodStartStr && (o.close_date as string) <= periodEndStr
       );
     } else if (board === 'pipeline') {
-      deals = allOpps.filter(o =>
-        !o.is_closed_won && !o.is_closed_lost && o.close_date &&
-        (o.close_date as string) >= periodStartStr && (o.close_date as string) <= periodEndStr
-      );
+      // Deals created (by sf_created_date) within the period — matches pipeline leaderboard logic
+      deals = allOpps.filter(o => {
+        const created = (o.sf_created_date as string) || '';
+        return created >= periodStartStr && created <= periodEndStr && ((o.acv as number) || 0) > 0;
+      });
     } else if (board === 'pilots') {
       deals = allOpps.filter(o => o.is_paid_pilot);
     } else {

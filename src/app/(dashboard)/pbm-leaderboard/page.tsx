@@ -119,10 +119,9 @@ function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; o
             <th className="text-left py-2 px-2">Manager</th>
             <th className="text-left py-2 px-2 w-20">Region</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Total ACV Created</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">AE Created Deals</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Sales Sourced</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Mktg Sourced</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">Partner Sourced</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Sourced ACV</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Influence ACV</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Fulfillment ACV</th>
             <th className="text-right py-2 px-2 w-16">Deals</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Avg Size</th>
           </tr>
@@ -146,10 +145,9 @@ function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; o
               <td className="py-2 px-2 text-muted-foreground">{e.manager_name || "—"}</td>
               <td className="py-2 px-2 text-muted-foreground">{e.region || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.primary_metric)}</td>
-              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.ae_created || 0)}</td>
-              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.sales_sourced || 0)}</td>
-              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.marketing_sourced || 0)}</td>
-              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.partner_sourced || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.sourced_acv || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.influence_acv || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.fulfillment_acv || 0)}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.open_deals || 0}</td>
               <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.avg_deal_size || 0)}</td>
             </tr>

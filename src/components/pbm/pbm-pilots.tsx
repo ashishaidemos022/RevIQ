@@ -189,15 +189,14 @@ export function PbmPilots() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleBarClick = (chartName: string) => (data: any) => {
-    if (data?.activePayload?.[0]?.payload) {
-      const month = data.activePayload[0].payload.month;
-      if (drillChart === chartName && drillMonth === month) {
-        setDrillChart(null);
-        setDrillMonth(null);
-      } else {
-        setDrillChart(chartName);
-        setDrillMonth(month);
-      }
+    const month = data?.payload?.month || data?.month;
+    if (!month) return;
+    if (drillChart === chartName && drillMonth === month) {
+      setDrillChart(null);
+      setDrillMonth(null);
+    } else {
+      setDrillChart(chartName);
+      setDrillMonth(month);
     }
   };
 
@@ -336,12 +335,12 @@ export function PbmPilots() {
               <EmptyState title="No data" description="No booked pilots found" />
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={bookedChartData} onClick={handleBarClick("booked")}>
+                <BarChart data={bookedChartData}>
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={fmtMonth} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   <Tooltip labelFormatter={(v: any) => fmtMonth(String(v))} />
-                  <Bar dataKey="count" fill="#5405BD" cursor="pointer" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="#5405BD" cursor="pointer" radius={[4, 4, 0, 0]} onClick={handleBarClick("booked")} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -357,12 +356,12 @@ export function PbmPilots() {
               <EmptyState title="No data" description="No open pilot deals" />
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={openChartData} onClick={handleBarClick("open")}>
+                <BarChart data={openChartData}>
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={fmtMonth} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   <Tooltip labelFormatter={(v: any) => fmtMonth(String(v))} />
-                  <Bar dataKey="count" fill="#14C3B7" cursor="pointer" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="#14C3B7" cursor="pointer" radius={[4, 4, 0, 0]} onClick={handleBarClick("open")} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -378,12 +377,12 @@ export function PbmPilots() {
               <EmptyState title="No data" description="No pilots found" />
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={addedChartData} onClick={handleBarClick("added")}>
+                <BarChart data={addedChartData}>
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={fmtMonth} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   <Tooltip labelFormatter={(v: any) => fmtMonth(String(v))} />
-                  <Bar dataKey="count" fill="#FFCC00" cursor="pointer" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="#FFCC00" cursor="pointer" radius={[4, 4, 0, 0]} onClick={handleBarClick("added")} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -401,7 +400,7 @@ export function PbmPilots() {
           }
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {drillChart === "booked" ? "Booked Pilots" : drillChart === "open" ? "Open Pilot Deals" : "Pilots Added"} — {drillMonth ? fmtMonth(drillMonth) : ""}

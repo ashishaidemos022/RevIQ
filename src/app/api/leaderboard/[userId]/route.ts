@@ -99,14 +99,16 @@ export async function GET(
       if (!page || page.length === 0) {
         hasMore = false;
       } else {
-        // Flatten split rows: merge opportunity fields with split_pct
+        // Flatten split rows: merge opportunity fields with split-adjusted ACV
         const flattened = page.map((s: Record<string, unknown>) => {
-          const opp = s.opportunities as Record<string, unknown>;
+          const rawOpp = s.opportunities as Record<string, unknown> | Record<string, unknown>[];
+          const opp = Array.isArray(rawOpp) ? rawOpp[0] : rawOpp;
           const pct = typeof s.split_percentage === 'string'
             ? parseFloat(s.split_percentage)
             : ((s.split_percentage as number) || 0);
           return {
             ...opp,
+            acv: splitAcv(opp.acv as number | null, pct),
             split_owner_user_id: s.split_owner_user_id,
             split_pct: pct,
           };
@@ -200,9 +202,10 @@ export async function GET(
     );
     const openDeals = allOpps.filter(o => !o.is_closed_won && !o.is_closed_lost);
 
-    const acvClosedQTD = closedWonQTD.reduce((s, o) => s + splitAcv(o.acv as number, o.split_pct as number), 0);
-    const acvClosedYTD = closedWonYTD.reduce((s, o) => s + splitAcv(o.acv as number, o.split_pct as number), 0);
-    const pipelineACV = openDeals.reduce((s, o) => s + splitAcv(o.acv as number, o.split_pct as number), 0);
+    // acv is already split-adjusted during flattening
+    const acvClosedQTD = closedWonQTD.reduce((s, o) => s + ((o.acv as number) || 0), 0);
+    const acvClosedYTD = closedWonYTD.reduce((s, o) => s + ((o.acv as number) || 0), 0);
+    const pipelineACV = openDeals.reduce((s, o) => s + ((o.acv as number) || 0), 0);
 
     // Pilot-specific KPIs (count of split rows, unweighted)
     const BOOKED_PILOT_STAGES = [

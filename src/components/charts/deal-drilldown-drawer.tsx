@@ -25,6 +25,7 @@ interface DealDrilldownDrawerProps {
   deals: DrillDownDeal[];
   showStage?: boolean;
   accentColor?: string;
+  acvLabel?: string;
 }
 
 const fmtCurrency = (val: number) =>
@@ -42,6 +43,7 @@ export function DealDrilldownDrawer({
   deals,
   showStage = false,
   accentColor,
+  acvLabel = "ACV",
 }: DealDrilldownDrawerProps) {
   const totalAcv = deals.reduce((sum, d) => sum + d.acv, 0);
 
@@ -76,7 +78,7 @@ export function DealDrilldownDrawer({
                   {showStage && (
                     <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Stage</th>
                   )}
-                  <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">ACV</th>
+                  <th className="text-right py-2.5 px-3 font-medium text-muted-foreground">{acvLabel}</th>
                 </tr>
               </thead>
               <tbody>

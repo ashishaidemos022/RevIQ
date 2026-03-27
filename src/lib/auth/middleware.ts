@@ -53,11 +53,38 @@ export async function resolveViewAs(
     throw new AuthError('View As target user not found', 404);
   }
 
+  // Resolve effective role from active permission override (if any)
+  let effectiveRole = data.role as UserRole;
+  const { data: override } = await db
+    .from('permission_overrides')
+    .select('effective_role, reference_user_ids')
+    .eq('user_id', viewAsId)
+    .eq('is_active', true)
+    .single();
+
+  if (override) {
+    const refIds: string[] = override.reference_user_ids || [];
+    if (refIds.length > 0) {
+      const { data: refUsers } = await db
+        .from('users')
+        .select('id, role')
+        .in('id', refIds);
+      const fullAccessRef = (refUsers || []).find(
+        u => FULL_ACCESS_ROLES.includes(u.role as UserRole)
+      );
+      if (fullAccessRef) {
+        effectiveRole = fullAccessRef.role as UserRole;
+      }
+    } else if (override.effective_role) {
+      effectiveRole = override.effective_role as UserRole;
+    }
+  }
+
   return {
     user_id: data.id,
     full_name: data.full_name,
     email: data.email,
-    role: data.role as UserRole,
+    role: effectiveRole,
   };
 }
 

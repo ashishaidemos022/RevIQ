@@ -259,13 +259,8 @@ export function AePipeline() {
       stageMap[stage] = (stageMap[stage] || 0) + (o.acv || 0);
     });
     const total = Object.values(stageMap).reduce((s, v) => s + v, 0);
-    const stageOrder = [...STAGES, "Other"];
     return Object.entries(stageMap)
-      .sort(([a], [b]) => {
-        const ai = stageOrder.indexOf(a);
-        const bi = stageOrder.indexOf(b);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-      })
+      .sort(([, a], [, b]) => b - a)
       .map(([stage, acv]) => ({
         stage,
         acv,
@@ -291,13 +286,8 @@ export function AePipeline() {
       }
     });
 
-    const stageOrder = [...STAGES, "Other"];
     return Object.entries(stages)
-      .sort(([a], [b]) => {
-        const ai = stageOrder.indexOf(a);
-        const bi = stageOrder.indexOf(b);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-      })
+      .sort(([, a], [, b]) => b.totalAcv - a.totalAcv)
       .map(([stage, data]) => ({
         stage,
         deals: data.deals.length,
@@ -413,7 +403,7 @@ export function AePipeline() {
             {forecastChartData.length === 0 ? (
               <EmptyState title="No data" description="No open opportunities with close dates" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={450}>
                 <BarChart data={forecastChartData}>
                   <XAxis
                     dataKey="month"
@@ -450,7 +440,7 @@ export function AePipeline() {
             {stagePieData.length === 0 ? (
               <EmptyState title="No data" description="No open opportunities" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={450}>
                 <PieChart>
                   <Pie
                     data={stagePieData}

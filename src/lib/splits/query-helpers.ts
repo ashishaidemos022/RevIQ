@@ -8,8 +8,8 @@
  * Formula: attributed_value = opportunity_value * split_percentage / 100
  */
 
-/** Only use Revenue splits — these sum to exactly 100% per opportunity. */
-export const REVENUE_SPLIT_TYPE = 'Revenue';
+/** Only use Revenue (ACV) splits — these sum to exactly 100% per opportunity. */
+export const REVENUE_SPLIT_TYPE = 'Revenue (ACV)';
 
 /** Compute split-adjusted value. split_percentage is stored as whole number (e.g. 50 = 50%). */
 export function splitAcv(value: number | string | null, splitPct: number | string | null): number {

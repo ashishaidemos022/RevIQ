@@ -311,41 +311,57 @@ export async function GET(request: NextRequest) {
           if (!allOpps.has(o.salesforce_opportunity_id)) allOpps.set(o.salesforce_opportunity_id, o);
         });
 
-        // Load engagement types from sf_partners for all credited opps
-        // Map: salesforce_opportunity_id → Set of engagement values for this PBM's partners
-        const oppEngagementMap = new Map<string, Map<string, Set<string>>>(); // oppSfId → (pbmLocalId → Set<engagement>)
+        // Load ALL sf_partners records for credited opps (engagement + split percentages)
+        interface PartnerRecord {
+          salesforce_opportunity_id: string;
+          channel_owner_sf_id: string | null;
+          engagement: string | null;
+          source_split: number | null;
+          influencer_split: number | null;
+          fulfillment_split: number | null;
+        }
+        const allPartnerRecords: PartnerRecord[] = [];
         const allOppSfIds = [...allOpps.keys()];
         if (allOppSfIds.length > 0) {
           for (let i = 0; i < allOppSfIds.length; i += 500) {
             const batch = allOppSfIds.slice(i, i + 500);
             const { data: partnerRows } = await db
               .from('sf_partners')
-              .select('salesforce_opportunity_id, channel_owner_sf_id, engagement')
-              .in('salesforce_opportunity_id', batch)
-              .not('channel_owner_sf_id', 'is', null);
-            (partnerRows || []).forEach(p => {
-              const localId = pbmSfIdToLocalId.get(p.channel_owner_sf_id);
-              if (!localId) return;
-              if (!oppEngagementMap.has(p.salesforce_opportunity_id)) {
-                oppEngagementMap.set(p.salesforce_opportunity_id, new Map());
-              }
-              const pbmMap = oppEngagementMap.get(p.salesforce_opportunity_id)!;
-              if (!pbmMap.has(localId)) pbmMap.set(localId, new Set());
-              if (p.engagement) pbmMap.get(localId)!.add(p.engagement);
-            });
+              .select('salesforce_opportunity_id, channel_owner_sf_id, engagement, source_split, influencer_split, fulfillment_split')
+              .in('salesforce_opportunity_id', batch);
+            if (partnerRows) allPartnerRecords.push(...(partnerRows as PartnerRecord[]));
           }
         }
 
-        // Helper: resolve engagement classification for a PBM on an opp
+        // Index partner records by opp
+        const partnersByOpp = new Map<string, PartnerRecord[]>();
+        allPartnerRecords.forEach(p => {
+          if (!partnersByOpp.has(p.salesforce_opportunity_id)) {
+            partnersByOpp.set(p.salesforce_opportunity_id, []);
+          }
+          partnersByOpp.get(p.salesforce_opportunity_id)!.push(p);
+        });
+
+        // For Channel Owner: check ALL partner records on the opp for engagement
         // Priority: Source > Influence > Fulfillment
-        const resolveEngagement = (oppSfId: string, pbmLocalId: string): 'source' | 'influence' | 'fulfillment' | null => {
-          const pbmMap = oppEngagementMap.get(oppSfId);
-          if (!pbmMap) return null;
-          const engagements = pbmMap.get(pbmLocalId);
-          if (!engagements || engagements.size === 0) return null;
-          if (engagements.has('Source')) return 'source';
-          if (engagements.has('Influence')) return 'influence';
-          if (engagements.has('Fulfillment')) return 'fulfillment';
+        const resolveChannelOwnerEngagement = (oppSfId: string): 'source' | 'influence' | 'fulfillment' | null => {
+          const records = partnersByOpp.get(oppSfId) || [];
+          const engagements = new Set(records.map(r => r.engagement).filter(Boolean));
+          if ([...engagements].some(e => e!.toLowerCase().includes('source'))) return 'source';
+          if ([...engagements].some(e => e!.toLowerCase().includes('influence'))) return 'influence';
+          if ([...engagements].some(e => e!.toLowerCase().includes('fulfillment'))) return 'fulfillment';
+          return null;
+        };
+
+        // For non-Channel-Owner: find their specific partner record's engagement type
+        // Full ACV credit (no split percentage applied)
+        const resolvePartnerEngagement = (oppSfId: string, pbmSfId: string): 'source' | 'influence' | 'fulfillment' | null => {
+          const records = partnersByOpp.get(oppSfId) || [];
+          const myRecord = records.find(r => r.channel_owner_sf_id === pbmSfId);
+          if (!myRecord || !myRecord.engagement) return null;
+          if (myRecord.engagement === 'Source') return 'source';
+          if (myRecord.engagement === 'Influence') return 'influence';
+          if (myRecord.engagement === 'Fulfillment') return 'fulfillment';
           return null;
         };
 
@@ -354,44 +370,58 @@ export async function GET(request: NextRequest) {
           const oppSfId = o.salesforce_opportunity_id;
           const creditedPbms = new Set<string>();
 
-          const creditPbm = (localId: string) => {
-            if (creditedPbms.has(localId)) return;
-            creditedPbms.add(localId);
+          const ensurePbm = (localId: string) => {
             if (!pbmData[localId]) pbmData[localId] = { total: 0, sourced_acv: 0, influence_acv: 0, fulfillment_acv: 0, deals: new Set() };
-            pbmData[localId].total += acv;
-            pbmData[localId].deals.add(oppSfId);
-            // Classify by engagement type (no duplication — first match wins)
-            const eng = resolveEngagement(oppSfId, localId);
-            if (eng === 'source') {
-              pbmData[localId].sourced_acv += acv;
-            } else if (eng === 'influence') {
-              pbmData[localId].influence_acv += acv;
-            } else if (eng === 'fulfillment') {
-              pbmData[localId].fulfillment_acv += acv;
-            }
           };
 
-          // Credit 1: Channel Owner on Opportunity
+          // Credit 1: Channel Owner on Opportunity — full ACV, classified by all partner records
           if (o.channel_owner_sf_id) {
             const localId = pbmSfIdToLocalId.get(o.channel_owner_sf_id);
-            if (localId) creditPbm(localId);
+            if (localId && !creditedPbms.has(localId)) {
+              creditedPbms.add(localId);
+              ensurePbm(localId);
+              pbmData[localId].total += acv;
+              pbmData[localId].deals.add(oppSfId);
+              const eng = resolveChannelOwnerEngagement(oppSfId);
+              if (eng === 'source') pbmData[localId].sourced_acv += acv;
+              else if (eng === 'influence') pbmData[localId].influence_acv += acv;
+              else if (eng === 'fulfillment') pbmData[localId].fulfillment_acv += acv;
+            }
           }
 
-          // Credit 2: RV Account Owner
+          // Credit 2: RV Account Owner — not channel owner, full ACV classified by their partner record's engagement
           if (o.rv_account_sf_id) {
             const rvOwnerSfId = rvAccountOwnerMap.get(o.rv_account_sf_id);
             if (rvOwnerSfId) {
               const localId = pbmSfIdToLocalId.get(rvOwnerSfId);
-              if (localId) creditPbm(localId);
+              if (localId && !creditedPbms.has(localId)) {
+                creditedPbms.add(localId);
+                ensurePbm(localId);
+                pbmData[localId].total += acv;
+                pbmData[localId].deals.add(oppSfId);
+                const eng = resolvePartnerEngagement(oppSfId, rvOwnerSfId);
+                if (eng === 'source') pbmData[localId].sourced_acv += acv;
+                else if (eng === 'influence') pbmData[localId].influence_acv += acv;
+                else if (eng === 'fulfillment') pbmData[localId].fulfillment_acv += acv;
+              }
             }
           }
 
-          // Credit 3: Partner__c Channel Owner
+          // Credit 3: Partner__c Channel Owner — not channel owner on opp, full ACV classified by their partner record's engagement
           const partnerOwners = sfPartnersByOpp.get(oppSfId);
           if (partnerOwners) {
             partnerOwners.forEach(sfId => {
               const localId = pbmSfIdToLocalId.get(sfId);
-              if (localId) creditPbm(localId);
+              if (localId && !creditedPbms.has(localId)) {
+                creditedPbms.add(localId);
+                ensurePbm(localId);
+                pbmData[localId].total += acv;
+                pbmData[localId].deals.add(oppSfId);
+                const eng = resolvePartnerEngagement(oppSfId, sfId);
+                if (eng === 'source') pbmData[localId].sourced_acv += acv;
+                else if (eng === 'influence') pbmData[localId].influence_acv += acv;
+                else if (eng === 'fulfillment') pbmData[localId].fulfillment_acv += acv;
+              }
             });
           }
         });

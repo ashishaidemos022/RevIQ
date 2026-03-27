@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
         const label = `Q${q} FY${fy}`;
         empty[label] = {
           fiscalYear: fy, fiscalQuarter: q, label,
-          acvClosed: 0, dealsClosed: 0, quotaAttainment: 0,
-          activePilots: 0, pilotConversionRate: 0,
+          acvClosed: 0, dealsClosed: 0, cxaClosed: 0, dealsClosedWithCxa: 0,
+          quotaAttainment: 0, bookedPilots: 0,
           commissionEarned: 0, totalActivities: 0,
         };
       }
@@ -49,8 +49,10 @@ export async function GET(request: NextRequest) {
       name: string | null;
       salesforce_opportunity_id: string;
       acv: string | number | null;
+      ai_acv: string | number | null;
       sub_type: string | null;
       close_date: string | null;
+      stage: string | null;
       is_closed_won: boolean;
       is_closed_lost: boolean;
       is_paid_pilot: boolean;
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
       const batch = creditedOppSfIds.slice(i, i + 500);
       const { data: opps } = await db
         .from('opportunities')
-        .select('id, name, salesforce_opportunity_id, acv, sub_type, close_date, is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date, users!opportunities_owner_user_id_fkey(full_name)')
+        .select('id, name, salesforce_opportunity_id, acv, ai_acv, sub_type, close_date, stage, is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date, users!opportunities_owner_user_id_fkey(full_name)')
         .in('salesforce_opportunity_id', batch);
       if (opps) allCreditedOpps = allCreditedOpps.concat(opps as unknown as typeof allCreditedOpps);
     }
@@ -81,11 +83,13 @@ export async function GET(request: NextRequest) {
         o => o.is_closed_won && o.close_date && o.close_date >= startStr && o.close_date <= endStr
       );
       const acvClosed = closedInQ.reduce((s, o) => s + (parseFloat(String(o.acv)) || 0), 0);
+      const cxaClosed = closedInQ.reduce((s, o) => s + (parseFloat(String(o.ai_acv)) || 0), 0);
       // Deals Closed: only count deals with a valid sub_type AND acv > 0
       const countableOpps = closedInQ.filter(
         o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (parseFloat(String(o.acv)) || 0) > 0
       );
       const dealsClosed = countableOpps.length;
+      const dealsClosedWithCxa = countableOpps.filter(o => (parseFloat(String(o.ai_acv)) || 0) > 0).length;
 
       // Deal-level data for drill-down
       const acvDeals = closedInQ
@@ -96,19 +100,23 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.acv - a.acv);
 
       // These metrics are N/A before FY2027
-      let activePilots: number | null = null;
-      let pilotConversionRate: number | null = null;
+      let bookedPilots: number | null = null;
       let commissionEarned: number | null = null;
       let totalActivities: number | null = null;
 
+      const BOOKED_PILOT_STAGES = [
+        'Stage 8-Closed Won: Finance',
+        'Stage 7-Closed Won',
+        'Stage 6-Closed-Won: Finance Approved',
+        'Stage 5-Closed Won',
+      ];
+
       if (fy >= 2027) {
-        // Active pilots at quarter end
-        const pilotsAtEnd = allCreditedOpps.filter(
-          o => o.is_paid_pilot && o.paid_pilot_start_date && o.paid_pilot_start_date <= endStr
-        );
-        activePilots = pilotsAtEnd.filter(o => !o.is_closed_won && !o.is_closed_lost).length;
-        const convertedPilots = pilotsAtEnd.filter(o => o.is_closed_won).length;
-        pilotConversionRate = pilotsAtEnd.length > 0 ? (convertedPilots / pilotsAtEnd.length) * 100 : 0;
+        // Booked pilots in quarter — paid pilots with a booked stage and close date in quarter
+        bookedPilots = allCreditedOpps.filter(
+          o => o.is_paid_pilot && o.stage && BOOKED_PILOT_STAGES.includes(o.stage) &&
+               o.close_date && o.close_date >= startStr && o.close_date <= endStr
+        ).length;
 
         // Commission earned
         if (pbmLocalIds.length > 0) {
@@ -183,10 +191,11 @@ export async function GET(request: NextRequest) {
         label,
         acvClosed,
         dealsClosed,
+        cxaClosed,
+        dealsClosedWithCxa,
         quotaAttainment,
         annualQuota,
-        activePilots,
-        pilotConversionRate,
+        bookedPilots,
         commissionEarned,
         totalActivities,
         acvDeals,

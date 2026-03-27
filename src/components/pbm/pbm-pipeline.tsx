@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useFilterParam, useFilterParamArray } from "@/hooks/use-filter-param";
 import { usePbmOpportunities, PbmOpportunity } from "@/hooks/use-pbm-opportunities";
 import {
   getCurrentFiscalPeriod,
   getQuarterStartDate,
   getQuarterEndDate,
-  getRollingQuarters,
 } from "@/lib/fiscal";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DataTable, Column } from "@/components/dashboard/data-table";
@@ -15,6 +14,7 @@ import { DashboardSkeleton } from "@/components/dashboard/loading-skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { OpportunityDrawer } from "@/components/dashboard/opportunity-drawer";
+import { DealDrilldownDrawer, DrillDownDeal } from "@/components/charts/deal-drilldown-drawer";
 import { CreditPathBadge } from "@/components/pbm/credit-path-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,10 +46,23 @@ const DEAL_SIZE_RANGES = [
   { value: "1000000-plus", label: "$1M Plus", min: 1000000, max: Infinity },
 ];
 
-const QUARTER_OPTIONS_ITEMS = [
-  { value: "all", label: "All Quarters" },
-  { value: "current", label: "Current Quarter" },
-];
+// Build quarter options: current quarter + next 3 quarters
+function getQuarterOptions() {
+  const { fiscalYear, fiscalQuarter } = getCurrentFiscalPeriod();
+  const options: { value: string; label: string }[] = [];
+  let fy = fiscalYear;
+  let fq = fiscalQuarter;
+  for (let i = 0; i < 4; i++) {
+    const value = i === 0 ? "current" : `${fy}-${fq}`;
+    const label = i === 0 ? `Current Quarter (Q${fq} FY${fy})` : `Q${fq} FY${fy}`;
+    options.push({ value, label });
+    fq++;
+    if (fq > 4) { fq = 1; fy++; }
+  }
+  return options;
+}
+
+const QUARTER_OPTIONS_ITEMS = getQuarterOptions();
 
 const PILOT_OPTIONS = [
   { value: "all", label: "All" },
@@ -92,8 +105,10 @@ export function PbmPipeline() {
   const [dealSizeFilter, setDealSizeFilter] = useFilterParamArray("dealSize");
   const [selectedOpp, setSelectedOpp] = useState<string | null>(null);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
-
-  const quarters = getRollingQuarters(8);
+  const [drillDown, setDrillDown] = useState<{
+    title: string;
+    deals: DrillDownDeal[];
+  } | null>(null);
 
   const {
     data: oppsData,
@@ -160,15 +175,8 @@ export function PbmPipeline() {
     const dealCount = filteredOpps.length;
     const avgDealSize = dealCount > 0 ? totalPipelineAcv / dealCount : 0;
 
-    const qStartStr = getQuarterStartDate(fiscalYear, fiscalQuarter).toISOString().split('T')[0];
-    const qEndStr = getQuarterEndDate(fiscalYear, fiscalQuarter).toISOString().split('T')[0];
-    const closingThisQuarter = opps.filter((o) => {
-      if (!o.close_date) return false;
-      return o.close_date >= qStartStr && o.close_date <= qEndStr;
-    }).length;
-
-    return { totalPipelineAcv, qualifiedPipelineAcv, forecastedPipelineAcv, upsidePipelineAcv, dealCount, avgDealSize, closingThisQuarter };
-  }, [filteredOpps, opps, fiscalYear, fiscalQuarter]);
+    return { totalPipelineAcv, qualifiedPipelineAcv, forecastedPipelineAcv, upsidePipelineAcv, dealCount, avgDealSize };
+  }, [filteredOpps]);
 
   // Forecast chart data
   const forecastChartData = useMemo(() => {
@@ -279,6 +287,44 @@ export function PbmPipeline() {
     },
   ];
 
+  // Drill-down: bar chart click — filter opps by clicked month
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleForecastBarClick = useCallback((barData: any) => {
+    const month = barData?.month || barData?.payload?.month;
+    if (!month) return;
+    const [y, m] = month.split("-");
+    const label = `${MONTH_LABELS[m] || m} ${y}`;
+    const deals = filteredOpps
+      .filter(o => o.close_date?.startsWith(month))
+      .sort((a, b) => (b.reporting_acv || b.acv || 0) - (a.reporting_acv || a.acv || 0))
+      .map(o => ({
+        id: o.id,
+        name: o.name || "Unnamed",
+        owner: o.users?.full_name || "Unknown",
+        acv: o.reporting_acv || o.acv || 0,
+        stage: o.stage,
+      }));
+    if (deals.length > 0) setDrillDown({ title: `Pipeline — ${label}`, deals });
+  }, [filteredOpps]);
+
+  // Drill-down: pie chart click — filter opps by clicked stage
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handlePieClick = useCallback((_: any, idx: number) => {
+    const entry = stagePieData[idx];
+    if (!entry) return;
+    const deals = filteredOpps
+      .filter(o => (o.stage || "Other") === entry.stage)
+      .sort((a, b) => (b.reporting_acv || b.acv || 0) - (a.reporting_acv || a.acv || 0))
+      .map(o => ({
+        id: o.id,
+        name: o.name || "Unnamed",
+        owner: o.users?.full_name || "Unknown",
+        acv: o.reporting_acv || o.acv || 0,
+        stage: o.stage,
+      }));
+    if (deals.length > 0) setDrillDown({ title: `Pipeline — ${entry.stage}`, deals });
+  }, [filteredOpps, stagePieData]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderPieLabel = ({ stage, percent }: any) => `${stage} (${percent}%)`;
 
@@ -293,11 +339,11 @@ export function PbmPipeline() {
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <MultiSelect
-            options={[...QUARTER_OPTIONS_ITEMS, ...quarters.map(q => ({ value: `${q.fiscalYear}-${q.fiscalQuarter}`, label: q.label }))]}
+            options={QUARTER_OPTIONS_ITEMS}
             value={[quarterFilter]}
             onChange={(v) => setQuarterFilter(v[v.length - 1] || "current")}
             placeholder="Quarter"
-            className="w-[160px]"
+            className="w-[220px]"
           />
           <MultiSelect
             options={STAGES.map(s => ({ value: s, label: s }))}
@@ -324,14 +370,13 @@ export function PbmPipeline() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
         <KpiCard label="Qualified Pipeline" value={kpis.qualifiedPipelineAcv} format="currency" />
         <KpiCard label="Forecasted Open Pipeline" value={kpis.forecastedPipelineAcv} format="currency" />
         <KpiCard label="Upside Open Pipeline" value={kpis.upsidePipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
-        <KpiCard label="Closing This Quarter" value={kpis.closingThisQuarter} format="number" />
       </div>
 
       {/* Charts Row */}
@@ -365,8 +410,8 @@ export function PbmPipeline() {
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="Forecast" stackId="fc" fill="#5405BD" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Upside" stackId="fc" fill="#14C3B7" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Forecast" stackId="fc" fill="#5405BD" radius={[0, 0, 0, 0]} onClick={handleForecastBarClick} style={{ cursor: "pointer" }} />
+                  <Bar dataKey="Upside" stackId="fc" fill="#14C3B7" radius={[4, 4, 0, 0]} onClick={handleForecastBarClick} style={{ cursor: "pointer" }} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -393,6 +438,8 @@ export function PbmPipeline() {
                     outerRadius={100}
                     label={renderPieLabel}
                     labelLine={{ strokeWidth: 1 }}
+                    onClick={handlePieClick}
+                    style={{ cursor: "pointer" }}
                   >
                     {stagePieData.map((_, i) => (
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
@@ -486,6 +533,15 @@ export function PbmPipeline() {
         opportunityId={selectedOpp}
         open={!!selectedOpp}
         onClose={() => setSelectedOpp(null)}
+      />
+
+      <DealDrilldownDrawer
+        open={!!drillDown}
+        onClose={() => setDrillDown(null)}
+        title={drillDown?.title || ""}
+        deals={drillDown?.deals || []}
+        showStage
+        acvLabel="Reporting ACV"
       />
     </div>
   );

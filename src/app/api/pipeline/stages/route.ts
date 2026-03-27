@@ -8,6 +8,7 @@ interface OppRow {
   name: string;
   stage: string | null;
   acv: number | null;
+  reporting_acv: number | null;
   probability: number | null;
   close_date: string | null;
   is_paid_pilot: boolean;
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     const opps = await fetchAll<OppRow>(() => {
       let q = db
         .from('opportunities')
-        .select('id, name, stage, acv, probability, close_date, is_paid_pilot, last_stage_changed_at, mgmt_forecast_category, cxa_committed_arr, days_in_current_stage, accounts(id, name), users!opportunities_owner_user_id_fkey(id, full_name, email)')
+        .select('id, name, stage, acv, reporting_acv, probability, close_date, is_paid_pilot, last_stage_changed_at, mgmt_forecast_category, cxa_committed_arr, days_in_current_stage, accounts(id, name), users!opportunities_owner_user_id_fkey(id, full_name, email)')
         .eq('is_closed_won', false)
         .eq('is_closed_lost', false);
       q = scopedQuery(q, 'owner_user_id', scope);

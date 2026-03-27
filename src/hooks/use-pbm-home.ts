@@ -9,6 +9,7 @@ export interface PbmHomeData {
   cxa_acv_closed_qtd: number;
   acv_closed_ytd: number;
   deals_closed_qtd: number;
+  pct_closed_deals_with_cxa: number;
   quota_attainment_qtd: number;
   quota_attainment_ytd: number;
   quarter_pace_percent: number;

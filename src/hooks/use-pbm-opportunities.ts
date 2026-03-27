@@ -20,6 +20,7 @@ export interface PbmOpportunity {
   name: string;
   stage: string;
   acv: number | null;
+  reporting_acv: number | null;
   close_date: string | null;
   is_closed_won: boolean;
   is_closed_lost: boolean;

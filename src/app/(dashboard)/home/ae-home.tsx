@@ -22,6 +22,7 @@ interface HomeKpis {
   cxaAcvClosedQTD: number;
   acvClosedYTD: number;
   dealsClosedQTD: number;
+  pctClosedDealsWithCxa: number;
   quotaAttainmentQTD: number;
   quotaAttainmentYTD: number;
   quarterPacePercent: number;
@@ -128,6 +129,18 @@ export function AeHome() {
             }).format(row.acv as number)
           : "—",
     },
+    {
+      key: "ai_acv",
+      header: "CXA ACV",
+      render: (row) =>
+        row.ai_acv
+          ? new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              maximumFractionDigits: 0,
+            }).format(row.ai_acv as number)
+          : "—",
+    },
     { key: "close_date", header: "Close Date" },
     {
       key: "is_paid_pilot",
@@ -150,7 +163,7 @@ export function AeHome() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Home Dashboard</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <KpiCard
           label="ACV Closed QTD"
           value={kpis?.acvClosedQTD || 0}
@@ -170,6 +183,11 @@ export function AeHome() {
           label="Deals Closed QTD"
           value={kpis?.dealsClosedQTD || 0}
           format="number"
+        />
+        <KpiCard
+          label="% Closed Deals with CXA"
+          value={kpis?.pctClosedDealsWithCxa || 0}
+          format="percent"
         />
         <KpiCard
           label="Quota Attainment QTD"
@@ -195,7 +213,7 @@ export function AeHome() {
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
-              Pipeline by Close Month
+              Open Pipeline by Close Month
             </CardTitle>
           </CardHeader>
           <CardContent>

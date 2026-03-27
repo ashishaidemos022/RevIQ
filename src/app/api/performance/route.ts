@@ -30,10 +30,11 @@ export async function GET(request: NextRequest) {
       label: string;
       acvClosed: number;
       dealsClosed: number;
+      cxaClosed: number;
+      dealsClosedWithCxa: number;
       quotaAttainment: number | null;
       annualQuota: number | null;
-      activePilots: number | null;
-      pilotConversionRate: number | null;
+      bookedPilots: number | null;
       commissionEarned: number | null;
       totalActivities: number | null;
       acvDeals: { id: string; name: string; owner: string; acv: number }[];
@@ -58,12 +59,13 @@ export async function GET(request: NextRequest) {
         id: string;
         name: string | null;
         acv: number | null;
+        ai_acv: number | null;
         sub_type: string | null;
         users: { full_name: string } | null;
       }>(() =>
         applyScope(
           db.from('opportunities')
-            .select('id, name, acv, sub_type, users!opportunities_owner_user_id_fkey(full_name)')
+            .select('id, name, acv, ai_acv, sub_type, users!opportunities_owner_user_id_fkey(full_name)')
             .eq('is_closed_won', true)
             .gte('close_date', startStr)
             .lte('close_date', endStr),
@@ -72,11 +74,13 @@ export async function GET(request: NextRequest) {
       );
 
       const acvClosed = closedOpps.reduce((s, o) => s + (o.acv || 0), 0);
+      const cxaClosed = closedOpps.reduce((s, o) => s + (o.ai_acv || 0), 0);
       // Deals Closed: only count deals with a valid sub_type AND acv > 0
       const countableOpps = closedOpps.filter(
         o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
       );
       const dealsClosed = countableOpps.length;
+      const dealsClosedWithCxa = countableOpps.filter(o => (o.ai_acv || 0) > 0).length;
 
       // Deal-level data for drill-down
       const acvDeals = closedOpps
@@ -87,28 +91,32 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.acv - a.acv);
 
       // These metrics are N/A before FY2027
-      let activePilots: number | null = null;
-      let pilotConversionRate: number | null = null;
+      let bookedPilots: number | null = null;
       let commissionEarned: number | null = null;
       let totalActivities: number | null = null;
 
+      const BOOKED_PILOT_STAGES = [
+        'Stage 8-Closed Won: Finance',
+        'Stage 7-Closed Won',
+        'Stage 6-Closed-Won: Finance Approved',
+        'Stage 5-Closed Won',
+      ];
+
       if (fy >= 2027) {
-        // Active pilots at quarter end — paginated
-        const pilots = await fetchAll<{ is_closed_won: boolean; is_closed_lost: boolean }>(() =>
+        // Booked pilots in quarter — paid pilots with a booked stage and close date in quarter
+        const pilots = await fetchAll<{ stage: string }>(() =>
           applyScope(
             db.from('opportunities')
-              .select('is_closed_won, is_closed_lost')
+              .select('stage')
               .eq('is_paid_pilot', true)
-              .lte('paid_pilot_start_date', endStr),
+              .in('stage', BOOKED_PILOT_STAGES)
+              .gte('close_date', startStr)
+              .lte('close_date', endStr),
             'owner_user_id'
           )
         );
 
-        activePilots = pilots.filter(p => !p.is_closed_won && !p.is_closed_lost).length;
-        const convertedPilots = pilots.filter(p => p.is_closed_won).length;
-        pilotConversionRate = pilots.length > 0
-          ? (convertedPilots / pilots.length) * 100
-          : 0;
+        bookedPilots = pilots.length;
 
         // Commission earned — paginated
         const comms = await fetchAll<{ commission_amount: number | null }>(() =>
@@ -210,10 +218,11 @@ export async function GET(request: NextRequest) {
         label,
         acvClosed,
         dealsClosed,
+        cxaClosed,
+        dealsClosedWithCxa,
         quotaAttainment,
         annualQuota: fy < 2027 ? null : totalQuota,
-        activePilots,
-        pilotConversionRate,
+        bookedPilots,
         commissionEarned,
         totalActivities,
         acvDeals,

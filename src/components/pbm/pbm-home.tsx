@@ -111,6 +111,12 @@ export function PbmHome() {
       render: (row) =>
         row.acv ? formatCurrency(row.acv as number) : "—",
     },
+    {
+      key: "ai_acv",
+      header: "CXA ACV",
+      render: (row) =>
+        row.ai_acv ? formatCurrency(row.ai_acv as number) : "—",
+    },
     { key: "close_date", header: "Close Date" },
     {
       key: "credit_path",
@@ -151,7 +157,7 @@ export function PbmHome() {
         PBM Home Dashboard
       </h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <KpiCard
           label="ACV Closed QTD"
           value={d?.acv_closed_qtd || 0}
@@ -171,6 +177,11 @@ export function PbmHome() {
           label="Deals Closed QTD"
           value={d?.deals_closed_qtd || 0}
           format="number"
+        />
+        <KpiCard
+          label="% Closed Deals with CXA"
+          value={d?.pct_closed_deals_with_cxa || 0}
+          format="percent"
         />
         <KpiCard
           label="Quota Attainment QTD"
@@ -196,7 +207,7 @@ export function PbmHome() {
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
-              Pipeline by Close Month
+              Open Pipeline by Close Month
             </CardTitle>
           </CardHeader>
           <CardContent>

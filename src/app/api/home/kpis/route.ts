@@ -35,9 +35,12 @@ export async function GET(request: NextRequest) {
 
     const acvClosedQTD = qtdOpps.reduce((s, o) => s + (o.acv || 0), 0);
     const cxaAcvClosedQTD = qtdOpps.reduce((s, o) => s + (o.ai_acv || 0), 0);
-    const dealsClosedQTD = qtdOpps.filter(
+    const countableQtdOpps = qtdOpps.filter(
       o => o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && (o.acv || 0) > 0
-    ).length;
+    );
+    const dealsClosedQTD = countableQtdOpps.length;
+    const dealsWithCxaQTD = countableQtdOpps.filter(o => (o.ai_acv || 0) > 0).length;
+    const pctClosedDealsWithCxa = dealsClosedQTD > 0 ? (dealsWithCxaQTD / dealsClosedQTD) * 100 : 0;
 
     // Closed-won YTD (paginated)
     const ytdOpps = await fetchAll<{ acv: number | null }>(() => {
@@ -109,6 +112,7 @@ export async function GET(request: NextRequest) {
         cxaAcvClosedQTD,
         acvClosedYTD,
         dealsClosedQTD,
+        pctClosedDealsWithCxa,
         quotaAttainmentQTD,
         quotaAttainmentYTD,
         quarterPacePercent,

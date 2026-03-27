@@ -37,10 +37,11 @@ interface QuarterData {
   label: string;
   acvClosed: number;
   dealsClosed: number;
+  cxaClosed: number;
+  dealsClosedWithCxa: number;
   quotaAttainment: number | null;
   annualQuota: number | null;
-  activePilots: number | null;
-  pilotConversionRate: number | null;
+  bookedPilots: number | null;
   commissionEarned: number | null;
   totalActivities: number | null;
   acvDeals?: DealRecord[];
@@ -50,9 +51,10 @@ interface QuarterData {
 const METRICS = [
   { key: "acvClosed", label: "ACV Closed", format: "currency" },
   { key: "dealsClosed", label: "Deals Closed", format: "number" },
+  { key: "cxaClosed", label: "CXA Closed", format: "currency" },
+  { key: "dealsClosedWithCxa", label: "Deals Closed with CXA", format: "number" },
   { key: "quotaAttainment", label: "Quota Attainment %", format: "percent" },
-  { key: "activePilots", label: "Active Pilots", format: "number" },
-  { key: "pilotConversionRate", label: "Pilot Conversion Rate", format: "percent" },
+  { key: "bookedPilots", label: "Booked Pilots", format: "number" },
   { key: "totalActivities", label: "Total Activities", format: "number" },
 ] as const;
 

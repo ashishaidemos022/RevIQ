@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
     let cxaAcvClosedQTD = 0;
     let acvClosedYTD = 0;
     let dealsClosedQTD = 0;
+    let dealsWithCxaQTD = 0;
 
     if (creditedOppSfIds.length > 0) {
       for (let i = 0; i < creditedOppSfIds.length; i += 500) {
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
             cxaAcvClosedQTD += aiAcv;
             if (o.sub_type && COUNTABLE_DEAL_SUBTYPES.includes(o.sub_type as typeof COUNTABLE_DEAL_SUBTYPES[number]) && acv > 0) {
               dealsClosedQTD++;
+              if (aiAcv > 0) dealsWithCxaQTD++;
             }
           }
         });
@@ -147,6 +149,7 @@ export async function GET(request: NextRequest) {
       cxa_acv_closed_qtd: cxaAcvClosedQTD,
       acv_closed_ytd: acvClosedYTD,
       deals_closed_qtd: dealsClosedQTD,
+      pct_closed_deals_with_cxa: dealsClosedQTD > 0 ? (dealsWithCxaQTD / dealsClosedQTD) * 100 : 0,
       quota_attainment_qtd: quotaAttainmentQTD,
       quota_attainment_ytd: quotaAttainmentYTD,
       quarter_pace_percent: quarterPacePercent,

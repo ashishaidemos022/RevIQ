@@ -83,6 +83,19 @@ export async function GET(request: NextRequest) {
         o => o.is_closed_won && o.close_date && o.close_date >= startStr && o.close_date <= endStr
       );
       const acvClosed = closedInQ.reduce((s, o) => s + (parseFloat(String(o.acv)) || 0), 0);
+
+      // Weekly cumulative ACV for pacing chart (13 weeks per quarter)
+      const weeklyAcv: number[] = new Array(13).fill(0);
+      for (const o of closedInQ) {
+        if (!o.close_date) continue;
+        const dayInQ = Math.floor((new Date(o.close_date).getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        const weekIdx = Math.min(Math.floor(dayInQ / 7), 12);
+        weeklyAcv[weekIdx] += parseFloat(String(o.acv)) || 0;
+      }
+      // Convert to cumulative
+      for (let i = 1; i < 13; i++) {
+        weeklyAcv[i] += weeklyAcv[i - 1];
+      }
       const cxaClosed = closedInQ.reduce((s, o) => s + (parseFloat(String(o.ai_acv)) || 0), 0);
       // Deals Closed: only count deals with a valid sub_type AND acv > 0
       const countableOpps = closedInQ.filter(
@@ -198,6 +211,7 @@ export async function GET(request: NextRequest) {
         bookedPilots,
         commissionEarned,
         totalActivities,
+        weeklyAcv,
         acvDeals,
         dealsClosedDeals,
       };

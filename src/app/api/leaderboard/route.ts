@@ -167,38 +167,57 @@ export async function GET(request: NextRequest) {
 
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
     } else if (board === 'pipeline') {
+      // Pipeline leaderboard: opportunities created (sf_created_date) within the period
       let query = db
         .from('opportunities')
-        .select('owner_user_id, acv, opportunity_source')
-        .eq('is_closed_won', false)
-        .eq('is_closed_lost', false)
+        .select('owner_user_id, acv, reporting_acv, opportunity_source, created_by_sf_id')
         .gt('acv', 0)
         .in('owner_user_id', aeIds);
+      if (startStr) query = query.gte('sf_created_date', startStr);
+      if (endStr) query = query.lte('sf_created_date', endStr);
       const { data: opps } = await query;
 
-      const aeData: Record<string, { total: number; ae_sourced: number; sales_sourced: number; marketing_sourced: number; partner_sourced: number; deals: number }> = {};
-      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; opportunity_source: string | null }) => {
+      // Resolve creator roles via created_by_sf_id → users.salesforce_user_id
+      const creatorSfIds = [...new Set((opps || []).map(o => o.created_by_sf_id).filter(Boolean))] as string[];
+      const creatorRoleMap: Record<string, string> = {};
+      if (creatorSfIds.length > 0) {
+        for (let i = 0; i < creatorSfIds.length; i += 500) {
+          const batch = creatorSfIds.slice(i, i + 500);
+          const { data: creators } = await db
+            .from('users')
+            .select('salesforce_user_id, role')
+            .in('salesforce_user_id', batch);
+          (creators || []).forEach(u => { creatorRoleMap[u.salesforce_user_id] = u.role; });
+        }
+      }
+
+      const aeData: Record<string, { total: number; ae_created: number; sales_sourced: number; marketing_sourced: number; partner_sourced: number; deals: number }> = {};
+      (opps || []).forEach((o: { owner_user_id: string | null; acv: number | null; reporting_acv: number | null; opportunity_source: string | null; created_by_sf_id: string | null }) => {
         const id = o.owner_user_id || '';
-        const acv = o.acv || 0;
-        if (!aeData[id]) aeData[id] = { total: 0, ae_sourced: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
+        const acv = o.reporting_acv || o.acv || 0;
+        if (!aeData[id]) aeData[id] = { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
         aeData[id].total += acv;
         aeData[id].deals++;
-        // Categorize by opportunity source
-        const src = (o.opportunity_source || '').toLowerCase();
-        if (src.includes('ae') || src.includes('account executive')) {
-          aeData[id].ae_sourced += acv;
-        } else if (src.includes('marketing')) {
-          aeData[id].marketing_sourced += acv;
-        } else if (src.includes('partner') || src.includes('channel')) {
-          aeData[id].partner_sourced += acv;
-        } else {
-          // Default bucket: sales sourced (SDR, outbound, sales, etc.)
+        // AE Created Deals: creator role contains 'ae'
+        if (o.created_by_sf_id) {
+          const creatorRole = (creatorRoleMap[o.created_by_sf_id] || '').toLowerCase();
+          if (creatorRole.includes('ae')) {
+            aeData[id].ae_created += acv;
+          }
+        }
+        // Categorize by opportunity_source
+        const src = (o.opportunity_source || '').trim();
+        if (src === 'Sales') {
           aeData[id].sales_sourced += acv;
+        } else if (src === 'Marketing') {
+          aeData[id].marketing_sourced += acv;
+        } else if (src === 'Partner') {
+          aeData[id].partner_sourced += acv;
         }
       });
 
       allAEs.forEach(ae => {
-        const data = aeData[ae.id] || { total: 0, ae_sourced: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
+        const data = aeData[ae.id] || { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: 0 };
         entries.push({
           rank: 0,
           user_id: ae.id,
@@ -207,7 +226,7 @@ export async function GET(request: NextRequest) {
           manager_name: aeManagerMap[ae.id] ?? null,
           primary_metric: data.total,
           secondary_metrics: {
-            ae_sourced: data.ae_sourced,
+            ae_created: data.ae_created,
             sales_sourced: data.sales_sourced,
             marketing_sourced: data.marketing_sourced,
             partner_sourced: data.partner_sourced,
@@ -235,10 +254,10 @@ export async function GET(request: NextRequest) {
         if (o.is_closed_won) {
           aeData[id].booked++;
           aeData[id].bookedCount++;
-          if (o.paid_pilot_start_date && o.close_date) {
-            aeData[id].totalDuration += Math.ceil(
-              (new Date(o.close_date).getTime() - new Date(o.paid_pilot_start_date).getTime()) / (1000 * 60 * 60 * 24)
-            );
+          if (o.sf_created_date) {
+            const created = new Date(o.sf_created_date).getTime();
+            const end = o.close_date ? new Date(o.close_date).getTime() : Date.now();
+            aeData[id].totalDuration += Math.floor((end - created) / (1000 * 60 * 60 * 24));
           }
         } else if (!o.is_closed_lost) {
           aeData[id].open++;

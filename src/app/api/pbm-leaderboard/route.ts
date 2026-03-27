@@ -274,16 +274,18 @@ export async function GET(request: NextRequest) {
       entries.sort((a, b) => b.primary_metric - a.primary_metric || a.full_name.localeCompare(b.full_name));
 
     } else if (board === 'pipeline') {
-      const pbmData: Record<string, { total: number; partner_sourced: number; partner_influenced: number; deals: Set<string> }> = {};
+      // Pipeline leaderboard: credited opportunities created (sf_created_date) within the period
+      const pbmData: Record<string, { total: number; ae_created: number; sales_sourced: number; marketing_sourced: number; partner_sourced: number; deals: Set<string> }> = {};
 
       if (pbmSfIds.length > 0) {
-        const { data: opps } = await db
+        let baseQuery = db
           .from('opportunities')
-          .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, opportunity_source')
-          .eq('is_closed_won', false)
-          .eq('is_closed_lost', false)
+          .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, reporting_acv, opportunity_source, created_by_sf_id, sf_created_date')
           .gt('acv', 0)
           .or('channel_owner_sf_id.not.is.null,rv_account_sf_id.not.is.null');
+        if (startStr) baseQuery = baseQuery.gte('sf_created_date', startStr);
+        if (endStr) baseQuery = baseQuery.lte('sf_created_date', endStr);
+        const { data: opps } = await baseQuery;
 
         // Also fetch opps that only have Partner__c credit
         const oppSfIdsFromPartners = [...sfPartnersByOpp.keys()];
@@ -291,13 +293,14 @@ export async function GET(request: NextRequest) {
         if (oppSfIdsFromPartners.length > 0) {
           for (let i = 0; i < oppSfIdsFromPartners.length; i += 500) {
             const batch = oppSfIdsFromPartners.slice(i, i + 500);
-            const { data: batchOpps } = await db
+            let batchQuery = db
               .from('opportunities')
-              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, opportunity_source')
-              .eq('is_closed_won', false)
-              .eq('is_closed_lost', false)
+              .select('salesforce_opportunity_id, channel_owner_sf_id, rv_account_sf_id, acv, reporting_acv, opportunity_source, created_by_sf_id, sf_created_date')
               .gt('acv', 0)
               .in('salesforce_opportunity_id', batch);
+            if (startStr) batchQuery = batchQuery.gte('sf_created_date', startStr);
+            if (endStr) batchQuery = batchQuery.lte('sf_created_date', endStr);
+            const { data: batchOpps } = await batchQuery;
             if (batchOpps) partnerOnlyOpps = partnerOnlyOpps!.concat(batchOpps);
           }
         }
@@ -308,23 +311,46 @@ export async function GET(request: NextRequest) {
           if (!allOpps.has(o.salesforce_opportunity_id)) allOpps.set(o.salesforce_opportunity_id, o);
         });
 
+        // Resolve creator roles via created_by_sf_id
+        const creatorSfIds = [...new Set([...allOpps.values()].map(o => o.created_by_sf_id).filter(Boolean))] as string[];
+        const creatorRoleMap: Record<string, string> = {};
+        if (creatorSfIds.length > 0) {
+          for (let i = 0; i < creatorSfIds.length; i += 500) {
+            const batch = creatorSfIds.slice(i, i + 500);
+            const { data: creators } = await db
+              .from('users')
+              .select('salesforce_user_id, role')
+              .in('salesforce_user_id', batch);
+            (creators || []).forEach(u => { creatorRoleMap[u.salesforce_user_id] = u.role; });
+          }
+        }
+
         allOpps.forEach(o => {
-          const acv = parseFloat(o.acv) || 0;
+          const acv = parseFloat(o.reporting_acv) || parseFloat(o.acv) || 0;
           const oppSfId = o.salesforce_opportunity_id;
-          const src = (o.opportunity_source || '').toLowerCase();
-          const isPartnerSourced = src.includes('partner') || src.includes('channel');
           const creditedPbms = new Set<string>();
 
           const creditPbm = (localId: string) => {
             if (creditedPbms.has(localId)) return;
             creditedPbms.add(localId);
-            if (!pbmData[localId]) pbmData[localId] = { total: 0, partner_sourced: 0, partner_influenced: 0, deals: new Set() };
+            if (!pbmData[localId]) pbmData[localId] = { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: new Set() };
             pbmData[localId].total += acv;
             pbmData[localId].deals.add(oppSfId);
-            if (isPartnerSourced) {
+            // AE Created Deals
+            if (o.created_by_sf_id) {
+              const creatorRole = (creatorRoleMap[o.created_by_sf_id] || '').toLowerCase();
+              if (creatorRole.includes('ae')) {
+                pbmData[localId].ae_created += acv;
+              }
+            }
+            // Categorize by opportunity_source
+            const src = (o.opportunity_source || '').trim();
+            if (src === 'Sales') {
+              pbmData[localId].sales_sourced += acv;
+            } else if (src === 'Marketing') {
+              pbmData[localId].marketing_sourced += acv;
+            } else if (src === 'Partner') {
               pbmData[localId].partner_sourced += acv;
-            } else {
-              pbmData[localId].partner_influenced += acv;
             }
           };
 
@@ -355,7 +381,7 @@ export async function GET(request: NextRequest) {
       }
 
       allPBMs.forEach(pbm => {
-        const data = pbmData[pbm.id] || { total: 0, partner_sourced: 0, partner_influenced: 0, deals: new Set() };
+        const data = pbmData[pbm.id] || { total: 0, ae_created: 0, sales_sourced: 0, marketing_sourced: 0, partner_sourced: 0, deals: new Set() };
         entries.push({
           rank: 0,
           user_id: pbm.id,
@@ -364,8 +390,10 @@ export async function GET(request: NextRequest) {
           manager_name: pbmManagerMap[pbm.id] ?? null,
           primary_metric: data.total,
           secondary_metrics: {
+            ae_created: data.ae_created,
+            sales_sourced: data.sales_sourced,
+            marketing_sourced: data.marketing_sourced,
             partner_sourced: data.partner_sourced,
-            partner_influenced: data.partner_influenced,
             open_deals: data.deals.size,
             avg_deal_size: data.deals.size > 0 ? data.total / data.deals.size : 0,
           },
@@ -394,10 +422,10 @@ export async function GET(request: NextRequest) {
           if (opp.is_closed_won) {
             pbmData[pbmLocalId].booked++;
             pbmData[pbmLocalId].bookedCount++;
-            if (opp.paid_pilot_start_date && opp.close_date) {
-              pbmData[pbmLocalId].totalDuration += Math.ceil(
-                (new Date(opp.close_date).getTime() - new Date(opp.paid_pilot_start_date).getTime()) / (1000 * 60 * 60 * 24)
-              );
+            if (opp.sf_created_date) {
+              const created = new Date(opp.sf_created_date).getTime();
+              const end = opp.close_date ? new Date(opp.close_date).getTime() : Date.now();
+              pbmData[pbmLocalId].totalDuration += Math.floor((end - created) / (1000 * 60 * 60 * 24));
             }
           } else if (!opp.is_closed_lost) {
             pbmData[pbmLocalId].open++;

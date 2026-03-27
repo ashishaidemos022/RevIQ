@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
       bookedPilots: number | null;
       commissionEarned: number | null;
       totalActivities: number | null;
+      weeklyAcv: number[];
       acvDeals: { id: string; name: string; owner: string; acv: number }[];
       dealsClosedDeals: { id: string; name: string; owner: string; acv: number }[];
     }> = {};
@@ -61,11 +62,12 @@ export async function GET(request: NextRequest) {
         acv: number | null;
         ai_acv: number | null;
         sub_type: string | null;
+        close_date: string | null;
         users: { full_name: string } | null;
       }>(() =>
         applyScope(
           db.from('opportunities')
-            .select('id, name, acv, ai_acv, sub_type, users!opportunities_owner_user_id_fkey(full_name)')
+            .select('id, name, acv, ai_acv, sub_type, close_date, users!opportunities_owner_user_id_fkey(full_name)')
             .eq('is_closed_won', true)
             .gte('close_date', startStr)
             .lte('close_date', endStr),
@@ -74,6 +76,19 @@ export async function GET(request: NextRequest) {
       );
 
       const acvClosed = closedOpps.reduce((s, o) => s + (o.acv || 0), 0);
+
+      // Weekly cumulative ACV for pacing chart (13 weeks per quarter)
+      const weeklyAcv: number[] = new Array(13).fill(0);
+      for (const o of closedOpps) {
+        if (!o.close_date) continue;
+        const dayInQ = Math.floor((new Date(o.close_date).getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        const weekIdx = Math.min(Math.floor(dayInQ / 7), 12);
+        weeklyAcv[weekIdx] += o.acv || 0;
+      }
+      // Convert to cumulative
+      for (let i = 1; i < 13; i++) {
+        weeklyAcv[i] += weeklyAcv[i - 1];
+      }
       const cxaClosed = closedOpps.reduce((s, o) => s + (o.ai_acv || 0), 0);
       // Deals Closed: only count deals with a valid sub_type AND acv > 0
       const countableOpps = closedOpps.filter(
@@ -225,6 +240,7 @@ export async function GET(request: NextRequest) {
         bookedPilots,
         commissionEarned,
         totalActivities,
+        weeklyAcv,
         acvDeals,
         dealsClosedDeals,
       };

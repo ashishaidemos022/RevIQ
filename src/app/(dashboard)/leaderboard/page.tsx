@@ -151,7 +151,7 @@ function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; o
             <th className="text-left py-2 px-2 w-12">Rank</th>
             <th className="text-left py-2 px-2">AE Name</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Total ACV Created</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">AE Sourced</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">AE Created Deals</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Sales Sourced</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Mktg Sourced</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Partner Sourced</th>
@@ -176,7 +176,7 @@ function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; o
                 {e.is_current_user && <span className="ml-2 text-xs text-primary font-semibold">(You)</span>}
               </td>
               <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.primary_metric)}</td>
-              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.ae_sourced || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.ae_created || 0)}</td>
               <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.sales_sourced || 0)}</td>
               <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.marketing_sourced || 0)}</td>
               <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.partner_sourced || 0)}</td>

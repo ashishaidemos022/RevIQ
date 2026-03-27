@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import {
   BarChart,
   Bar,
-  ComposedChart,
+  LineChart,
   Line,
   XAxis,
   YAxis,
@@ -44,6 +44,7 @@ interface QuarterData {
   bookedPilots: number | null;
   commissionEarned: number | null;
   totalActivities: number | null;
+  weeklyAcv?: number[];
   acvDeals?: DealRecord[];
   dealsClosedDeals?: DealRecord[];
 }
@@ -55,7 +56,6 @@ const METRICS = [
   { key: "dealsClosedWithCxa", label: "Deals Closed with CXA", format: "number" },
   { key: "quotaAttainment", label: "Quota Attainment %", format: "percent" },
   { key: "bookedPilots", label: "Booked Pilots", format: "number" },
-  { key: "totalActivities", label: "Total Activities", format: "number" },
 ] as const;
 
 function formatValue(value: number, format: string): string {
@@ -127,6 +127,21 @@ export function AePerformance() {
       setDrillDown({ title: `${label} — ACV Closed`, deals: qd.acvDeals });
     }
   }, [perfData]);
+
+  // Bookings by Week pacing chart data
+  const QUARTER_COLORS = ["#d1d5db", "#a3a3a3", "#737373", "#525252", "#7c3aed"];
+  const weeklyPacingData = useMemo(() => {
+    if (quarterResults.length === 0) return [];
+    const weeks: Array<Record<string, unknown>> = [];
+    for (let w = 0; w < 13; w++) {
+      const point: Record<string, unknown> = { week: `W${w + 1}` };
+      quarterResults.forEach((q) => {
+        point[q.label] = q.weeklyAcv?.[w] ?? 0;
+      });
+      weeks.push(point);
+    }
+    return weeks;
+  }, [quarterResults]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleDealsBarClick = useCallback((barData: any) => {
@@ -283,38 +298,32 @@ export function AePerformance() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">ACV Closed vs Quota</CardTitle>
+            <CardTitle className="text-sm font-medium">Bookings by Week (Quarterly Pacing)</CardTitle>
           </CardHeader>
           <CardContent>
-            {quarterResults.some((q) => q.annualQuota !== null) ? (
+            {weeklyPacingData.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
-                <ComposedChart data={quarterResults.filter((q) => q.annualQuota !== null)}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <LineChart data={weeklyPacingData}>
+                  <XAxis dataKey="week" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCurrencyShort} />
-                  <Tooltip
-                    formatter={(val, name) => [
-                      fmtCurrency(Number(val)),
-                      name === "acvClosed" ? "ACV Closed (YTD)" : "Annual Quota",
-                    ]}
-                  />
-                  <Legend
-                    formatter={(value) => (value === "acvClosed" ? "ACV Closed (YTD)" : "Annual Quota")}
-                    wrapperStyle={{ fontSize: 11 }}
-                  />
-                  <Bar dataKey="acvClosed" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-                  <Line
-                    type="monotone"
-                    dataKey="annualQuota"
-                    stroke="#eab308"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={{ r: 4 }}
-                  />
-                </ComposedChart>
+                  <Tooltip formatter={(val) => fmtCurrency(Number(val))} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {quarterResults.map((q, idx) => (
+                    <Line
+                      key={q.label}
+                      type="monotone"
+                      dataKey={q.label}
+                      stroke={QUARTER_COLORS[Math.max(0, QUARTER_COLORS.length - quarterResults.length + idx)]}
+                      strokeWidth={idx === quarterResults.length - 1 ? 3 : 1.5}
+                      dot={idx === quarterResults.length - 1 ? { r: 3 } : false}
+                      strokeDasharray={idx === quarterResults.length - 1 ? undefined : "4 3"}
+                    />
+                  ))}
+                </LineChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-[250px] text-sm text-muted-foreground">
-                Quota data available from FY2027
+                No weekly data available
               </div>
             )}
           </CardContent>

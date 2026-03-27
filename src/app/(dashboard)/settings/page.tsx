@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuthStore } from "@/stores/auth-store";
+import { useFilterParam } from "@/hooks/use-filter-param";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuotasTab } from "./quotas-tab";
 import { HierarchyTab } from "./hierarchy-tab";
@@ -28,11 +29,12 @@ export default function SettingsPage() {
   const canViewSync = isRevopsRW || isEnterpriseRO || isCRO || isCLevel;
 
   const defaultTab = canViewQuotas ? "quotas" : "hierarchy";
+  const [activeTab, setActiveTab] = useFilterParam("tab", defaultTab);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-      <Tabs defaultValue={defaultTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           {canViewQuotas && <TabsTrigger value="quotas">Quotas</TabsTrigger>}
           {canViewHierarchy && <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>}

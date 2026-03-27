@@ -76,7 +76,7 @@ function RevenueBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; on
             <th className="text-left py-2 px-2 w-20">Region</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">ACV Closed w/ Multiplier</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">ACV Closed</th>
-            <th className="text-right py-2 px-2 w-16">Deals</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">Deals w/out Organic Expansion</th>
           </tr>
         </thead>
         <tbody>

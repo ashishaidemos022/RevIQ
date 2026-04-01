@@ -4,6 +4,7 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncSnowflakeUsage } from '@/lib/snowflake/sync-usage';
+import { isDemoMode } from '@/lib/demo';
 
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -28,6 +29,10 @@ function verifyCronSecret(request: NextRequest): boolean {
 
 // Monthly sync: Snowflake usage billing data (previous month)
 export async function GET(request: NextRequest) {
+  if (isDemoMode()) {
+    return NextResponse.json({ skipped: true, reason: 'demo mode' });
+  }
+
   if (!verifyCronSecret(request)) {
     return new NextResponse(null, { status: 401 });
   }

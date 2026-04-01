@@ -42,7 +42,7 @@ const MONTH_LABELS: Record<string, string> = {
 };
 
 const GROUP_COLORS: Record<string, string> = {
-  "SS0-SS2": "#7c3aed",           // Talkdesk purple
+  "SS0-SS2": "#7c3aed",           // primary purple
   "Qualified Pipeline": "#14b8a6", // Teal
 };
 

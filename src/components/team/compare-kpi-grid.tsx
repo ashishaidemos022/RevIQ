@@ -139,7 +139,7 @@ export function CompareKpiGrid({ entities, mode }: CompareKpiGridProps) {
         <CardContent className="p-0">
           <div className="overflow-x-auto rounded-lg">
             <table className="w-full text-sm">
-              {/* Talkdesk-branded header with entity names */}
+              {/* Branded header with entity names */}
               <thead>
                 <tr
                   className="text-white"

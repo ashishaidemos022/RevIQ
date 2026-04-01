@@ -4,7 +4,7 @@ import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { getCurrentFiscalPeriod, getQuarterStartDate, getQuarterEndDate, getFiscalYearRange } from '@/lib/fiscal';
 import { COUNTABLE_DEAL_SUBTYPES } from '@/lib/deal-subtypes';
 
-const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro'];
+const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro', 'cro', 'c_level', 'leader'];
 
 function normalizeRegion(region: string | null): string | null {
   if (!region) return null;

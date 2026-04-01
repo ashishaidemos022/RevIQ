@@ -6,6 +6,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncSalesforceOpportunities } from '@/lib/salesforce/sync-opportunities';
 import { syncOpportunitySplits } from '@/lib/salesforce/sync-opportunity-splits';
 import { syncPartners } from '@/lib/salesforce/sync-partners';
+import { isDemoMode } from '@/lib/demo';
 
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -30,6 +31,10 @@ function verifyCronSecret(request: NextRequest): boolean {
 
 // Hourly sync: Opportunities
 export async function GET(request: NextRequest) {
+  if (isDemoMode()) {
+    return NextResponse.json({ skipped: true, reason: 'demo mode' });
+  }
+
   if (!verifyCronSecret(request)) {
     return new NextResponse(null, { status: 401 });
   }

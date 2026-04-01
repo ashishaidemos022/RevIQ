@@ -16,6 +16,7 @@ import { PipelineByStageChart } from "@/components/charts/pipeline-by-stage";
 import { QuotaGauge } from "@/components/charts/quota-gauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CommissionScenario } from "@/components/dashboard/commission-scenario";
 
 interface HomeKpis {
   acvClosedQTD: number;
@@ -131,7 +132,7 @@ export function AeHome() {
     },
     {
       key: "ai_acv",
-      header: "CXA ACV",
+      header: "AI ACV",
       render: (row) =>
         row.ai_acv
           ? new Intl.NumberFormat("en-US", {
@@ -170,7 +171,7 @@ export function AeHome() {
           format="currency"
         />
         <KpiCard
-          label="CXA ACV Closed QTD"
+          label="AI ACV Closed QTD"
           value={kpis?.cxaAcvClosedQTD || 0}
           format="currency"
         />
@@ -185,7 +186,7 @@ export function AeHome() {
           format="number"
         />
         <KpiCard
-          label="% Closed Deals with CXA"
+          label="% Closed Deals with AI"
           value={kpis?.pctClosedDealsWithCxa || 0}
           format="percent"
         />
@@ -254,6 +255,9 @@ export function AeHome() {
           />
         </CardContent>
       </Card>
+
+      {/* Commission Scenario Modeling */}
+      <CommissionScenario />
 
       <OpportunityDrawer
         opportunityId={selectedOpp}

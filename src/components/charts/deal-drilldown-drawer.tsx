@@ -84,7 +84,7 @@ export function DealDrilldownDrawer({
               <tbody>
                 {deals.map((deal, i) => (
                   <tr
-                    key={deal.id}
+                    key={deal.id ?? i}
                     className={cn(
                       "border-b last:border-0",
                       i % 2 === 0 ? "bg-background" : "bg-muted/20"

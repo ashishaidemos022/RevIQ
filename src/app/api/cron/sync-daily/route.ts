@@ -6,6 +6,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncSalesforceUsers } from '@/lib/salesforce/sync-users';
 import { syncSalesforceAccounts } from '@/lib/salesforce/sync-accounts';
 import { syncRVAccounts } from '@/lib/salesforce/sync-rv-accounts';
+import { isDemoMode } from '@/lib/demo';
 
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -30,6 +31,10 @@ function verifyCronSecret(request: NextRequest): boolean {
 
 // Daily sync: Users, Accounts, RV Accounts
 export async function GET(request: NextRequest) {
+  if (isDemoMode()) {
+    return NextResponse.json({ skipped: true, reason: 'demo mode' });
+  }
+
   if (!verifyCronSecret(request)) {
     return new NextResponse(null, { status: 401 });
   }

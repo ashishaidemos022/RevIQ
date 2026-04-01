@@ -192,8 +192,8 @@ export function Header() {
       )}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-card px-4 md:px-6">
         <div className="flex items-center md:hidden">
-          <img src="/revenueiq-logo.svg" alt="Talkdesk RevenueIQ" className="h-8 dark:hidden" />
-          <img src="/revenueiq-logo-dark.svg" alt="Talkdesk RevenueIQ" className="h-8 hidden dark:block" />
+          <img src="/revenueiq-logo.svg" alt="RevenueIQ" className="h-8 dark:hidden" />
+          <img src="/revenueiq-logo-dark.svg" alt="RevenueIQ" className="h-8 hidden dark:block" />
         </div>
 
         <div className="hidden md:flex items-center gap-2 text-xs">

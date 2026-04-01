@@ -113,7 +113,7 @@ export function PbmHome() {
     },
     {
       key: "ai_acv",
-      header: "CXA ACV",
+      header: "AI ACV",
       render: (row) =>
         row.ai_acv ? formatCurrency(row.ai_acv as number) : "—",
     },
@@ -164,7 +164,7 @@ export function PbmHome() {
           format="currency"
         />
         <KpiCard
-          label="CXA ACV Closed QTD"
+          label="AI ACV Closed QTD"
           value={d?.cxa_acv_closed_qtd || 0}
           format="currency"
         />
@@ -179,7 +179,7 @@ export function PbmHome() {
           format="number"
         />
         <KpiCard
-          label="% Closed Deals with CXA"
+          label="% Closed Deals with AI"
           value={d?.pct_closed_deals_with_cxa || 0}
           format="percent"
         />

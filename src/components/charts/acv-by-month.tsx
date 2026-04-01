@@ -24,7 +24,7 @@ interface AcvByMonthChartProps {
   opportunities?: Opportunity[];
   /** Pre-aggregated ACV by month (YYYY-MM → amount). When provided, opportunities is ignored. */
   acvByMonth?: Record<string, number>;
-  /** CXA ACV by month (YYYY-MM → amount) */
+  /** AI ACV by month (YYYY-MM → amount) */
   cxaAcvByMonth?: Record<string, number>;
   /** CCaaS ACV by month (YYYY-MM → amount) */
   ccaasAcvByMonth?: Record<string, number>;
@@ -131,7 +131,7 @@ export function AcvByMonthChart({ opportunities, acvByMonth, cxaAcvByMonth, ccaa
           <YAxis tick={{ fontSize: 11 }} tickFormatter={shortCurrency} />
           <Tooltip
             formatter={(val, name) => {
-              const label = name === "cxaAcv" ? "CXA ACV" : name === "ccaasAcv" ? "CCaaS ACV" : "ACV";
+              const label = name === "cxaAcv" ? "AI ACV" : name === "ccaasAcv" ? "CCaaS ACV" : "ACV";
               return [fmtCurrency(Number(val)), label];
             }}
           />
@@ -139,7 +139,7 @@ export function AcvByMonthChart({ opportunities, acvByMonth, cxaAcvByMonth, ccaa
             <>
               <Legend
                 formatter={(value: string) =>
-                  value === "ccaasAcv" ? "CCaaS ACV" : value === "cxaAcv" ? "CXA ACV" : "ACV"
+                  value === "ccaasAcv" ? "CCaaS ACV" : value === "cxaAcv" ? "AI ACV" : "ACV"
                 }
               />
               <Bar

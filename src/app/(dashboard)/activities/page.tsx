@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Filter, Zap, RotateCcw } from "lucide-react";
+import { ActivityOutcomeCorrelation } from "@/components/dashboard/activity-outcome-correlation";
 import {
   BarChart,
   Bar,
@@ -255,6 +256,9 @@ export default function ActivitiesPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Activity-to-Outcome Correlation */}
+      <ActivityOutcomeCorrelation />
 
     </div>
   );

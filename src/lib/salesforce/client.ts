@@ -1,4 +1,5 @@
 import jsforce, { Connection } from 'jsforce';
+import { isDemoMode } from '@/lib/demo';
 
 let connection: Connection | null = null;
 let tokenExpiresAt: number = 0;
@@ -30,6 +31,17 @@ function getConfig() {
 }
 
 export async function getSalesforceConnection(): Promise<Connection> {
+  if (isDemoMode()) {
+    // Return a no-op stub — demo mode never calls Salesforce
+    const stub = {
+      instanceUrl: 'https://demo.salesforce.com',
+      accessToken: 'demo-token',
+      query: async () => ({ records: [], totalSize: 0, done: true }),
+      sobject: () => ({ find: async () => [] }),
+    } as unknown as Connection;
+    return stub;
+  }
+
   const now = Date.now();
 
   // Reuse connection if token is still valid (with 5-min buffer)

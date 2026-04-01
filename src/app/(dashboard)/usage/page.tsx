@@ -27,6 +27,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Radio, RotateCcw } from "lucide-react";
+import { ExpansionSignals } from "@/components/dashboard/expansion-signals";
 import {
   BarChart,
   Bar,
@@ -130,9 +131,9 @@ const FISCAL_QUARTER_MONTHS: Record<number, string[]> = {
 };
 
 function periodToFiscalQuarter(yyyymm: string): { fy: number; fq: number } {
-  const year = parseInt(yyyymm.slice(0, 4));
-  const month = yyyymm.slice(4, 6);
-  const monthNum = parseInt(month);
+  const parts = yyyymm.includes('-') ? yyyymm.split('-') : [yyyymm.slice(0, 4), yyyymm.slice(4, 6)];
+  const year = parseInt(parts[0]);
+  const monthNum = parseInt(parts[1]);
   const fy = monthNum >= 2 ? year + 1 : year;
   const fq = monthNum >= 2 && monthNum <= 4 ? 1
     : monthNum >= 5 && monthNum <= 7 ? 2
@@ -170,14 +171,15 @@ const MONTH_NAMES: Record<string, string> = {
 };
 
 function formatPeriod(yyyymm: string): string {
-  const year = yyyymm.slice(0, 4);
-  const month = yyyymm.slice(4, 6);
-  return `${MONTH_NAMES[month] || month} ${year}`;
+  const parts = yyyymm.includes('-') ? yyyymm.split('-') : [yyyymm.slice(0, 4), yyyymm.slice(4, 6)];
+  return `${MONTH_NAMES[parts[1]] || parts[1]} ${parts[0]}`;
 }
 
 function shortPeriod(yyyymm: string): string {
-  const year = yyyymm.slice(2, 4);
-  const month = yyyymm.slice(4, 6);
+  // Handle both "YYYYMM" and "YYYY-MM" formats
+  const parts = yyyymm.includes('-') ? yyyymm.split('-') : [yyyymm.slice(0, 4), yyyymm.slice(4, 6)];
+  const year = parts[0].slice(2);
+  const month = parts[1];
   const SHORT: Record<string, string> = {
     "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
     "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
@@ -203,9 +205,9 @@ const shortCurrency = (val: number) => {
       : `$${Math.round(v)}`;
 };
 
-const COLOR_CONSUMPTION = "#5405BD"; // Talkdesk purple
-const COLOR_OVERAGE = "#14C3B7";     // Talkdesk teal
-const COLOR_TREND_LINE = "#FFCC00";  // Talkdesk gold
+const COLOR_CONSUMPTION = "#5405BD"; // primary purple
+const COLOR_OVERAGE = "#14C3B7";     // teal
+const COLOR_TREND_LINE = "#FFCC00";  // gold
 
 const TAXONOMY_COLORS = [
   "#5405BD", "#14C3B7", "#FFCC00", "#8023F9", "#f59e0b",
@@ -614,6 +616,14 @@ export default function UsagePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Expansion Signals ── */}
+      {accounts.length > 0 && (
+        <ExpansionSignals
+          accounts={accounts}
+          onAccountClick={(id) => setSelectedAccount(id)}
+        />
+      )}
 
       {/* ── Account Table ── */}
       <Card>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 
-const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro'];
+const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro', 'cro', 'c_level', 'leader'];
 
 export async function GET(request: NextRequest) {
   try {

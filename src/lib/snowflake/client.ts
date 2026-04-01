@@ -1,4 +1,5 @@
 import snowflake from 'snowflake-sdk';
+import { isDemoMode } from '@/lib/demo';
 
 // Disable ocsp check to avoid issues in serverless environments
 snowflake.configure({ ocspFailOpen: true });
@@ -33,6 +34,11 @@ export async function executeSnowflakeQuery<T = Record<string, unknown>>(
   sql: string,
   binds: snowflake.Binds = []
 ): Promise<T[]> {
+  if (isDemoMode()) {
+    // Demo mode — never connect to Snowflake; sync functions use mock data directly
+    return [];
+  }
+
   const config = getSnowflakeConfig();
 
   const connection = snowflake.createConnection({

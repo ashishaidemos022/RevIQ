@@ -3,11 +3,11 @@
  *
  * Hardcoded hex values are required because Recharts renders SVG directly
  * and CSS custom properties (hsl(var(--chart-x))) don't resolve in SVG
- * fill/stroke attributes. These colors match the Talkdesk theme:
+ * fill/stroke attributes. These colors match the brand theme:
  *
- * 1. Purple (#7c3aed)  — Talkdesk brand
+ * 1. Purple (#7c3aed)  — brand primary
  * 2. Teal   (#14b8a6)  — high contrast against purple
- * 3. Gold   (#eab308)  — Talkdesk accent
+ * 3. Gold   (#eab308)  — accent
  * 4. Rose   (#f43f5e)  — warm contrast
  */
 export const COMPARE_COLORS = [

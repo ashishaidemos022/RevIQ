@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ForecastAccuracy } from "@/components/dashboard/forecast-accuracy";
+import { WinLossAnalysis } from "@/components/dashboard/win-loss-analysis";
 import {
   BarChart,
   Bar,
@@ -53,8 +55,8 @@ interface QuarterData {
 const METRICS = [
   { key: "acvClosed", label: "ACV Closed", format: "currency" },
   { key: "dealsClosed", label: "Deals Closed", format: "number" },
-  { key: "cxaClosed", label: "CXA Closed", format: "currency" },
-  { key: "dealsClosedWithCxa", label: "Deals Closed with CXA", format: "number" },
+  { key: "cxaClosed", label: "AI Closed", format: "currency" },
+  { key: "dealsClosedWithCxa", label: "Deals Closed with AI", format: "number" },
   { key: "quotaAttainment", label: "Quota Attainment %", format: "percent" },
   { key: "bookedPilots", label: "Booked Pilots", format: "number" },
 ] as const;
@@ -342,6 +344,14 @@ export function PbmPerformance() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Forecast Accuracy Section */}
+      {quarterResults.length > 0 && (
+        <ForecastAccuracy quarterResults={quarterResults} />
+      )}
+
+      {/* Win/Loss Analysis Section */}
+      <WinLossAnalysis />
 
       <DealDrilldownDrawer
         open={!!drillDown}

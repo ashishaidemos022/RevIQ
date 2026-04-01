@@ -134,6 +134,7 @@ export interface Opportunity {
   manager_notes: string | null;
   rv_account_sf_id: string | null;
   rv_account_type: string | null;
+  channel_owner_sf_id: string | null;
   days_in_current_stage: number | null;
   sf_created_date: string | null;
 }

@@ -47,8 +47,9 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border bg-sidebar z-30">
       <div className="flex items-center justify-center px-4 py-4 border-b border-sidebar-border">
-        <div className="w-full rounded-lg bg-white px-4 py-3">
-          <img src="/revenueiq-logo.svg" alt="Talkdesk RevenueIQ" className="w-full" />
+        <div className="w-full text-center">
+          <div className="text-lg font-bold tracking-tight text-sidebar-primary">Rev IQ</div>
+          <div className="text-[10px] font-medium uppercase tracking-widest text-sidebar-foreground/60">Revenue Intelligence Platform</div>
         </div>
       </div>
 

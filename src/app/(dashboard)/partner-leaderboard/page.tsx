@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Building2, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PartnerDetailDrawer } from "@/components/dashboard/partner-detail-drawer";
+import { PartnerInfluenceHeatmap } from "@/components/dashboard/partner-influence-heatmap";
 
 interface PartnerEntry {
   rank: number;
@@ -124,6 +125,15 @@ const REGIONS = [
   { value: "APAC", label: "APAC" },
 ] as const;
 
+const PARTNER_TYPES = [
+  { value: "all", label: "All Types" },
+  { value: "GSI", label: "GSI" },
+  { value: "VAR", label: "VAR" },
+  { value: "SI", label: "SI" },
+  { value: "Master Agent", label: "Master Agent" },
+  { value: "Sub Agent", label: "Sub Agent" },
+] as const;
+
 const BOARDS = [
   { id: "revenue", label: "Revenue" },
   { id: "pipeline", label: "Pipeline" },
@@ -158,7 +168,7 @@ function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowC
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[850px]">
+      <table className="w-full min-w-[1200px]">
         <thead>
           <tr className="text-xs font-medium text-muted-foreground border-b">
             <SortHeader label="Rank" sortKey="rank" {...hp} className="w-12" />
@@ -168,6 +178,9 @@ function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowC
             <SortHeader label="Region" sortKey="region" {...hp} className="w-20" />
             <SortHeader label="ACV Closed w/ Multiplier" sortKey="acv_closed_multiplier" {...hp} align="right" />
             <SortHeader label="ACV Closed" sortKey="acv_closed" {...hp} align="right" />
+            <SortHeader label="Sourced ACV Closed" sortKey="sourced_acv" {...hp} align="right" />
+            <SortHeader label="Influenced ACV Closed" sortKey="influenced_acv" {...hp} align="right" />
+            <SortHeader label="Fulfillment ACV Closed" sortKey="fulfillment_acv" {...hp} align="right" />
             <SortHeader label="Deals" sortKey="deals" {...hp} align="right" className="w-16" />
           </tr>
         </thead>
@@ -188,6 +201,9 @@ function RevenueBoard({ entries, onRowClick }: { entries: PartnerEntry[]; onRowC
               <td className="py-2 px-2 text-muted-foreground">{e.region || "—"}</td>
               <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.secondary_metrics.acv_closed_multiplier || 0)}</td>
               <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.acv_closed || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.sourced_acv || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.influenced_acv || 0)}</td>
+              <td className="py-2 px-2 text-right">{formatCurrency(e.secondary_metrics.fulfillment_acv || 0)}</td>
               <td className="py-2 px-2 text-right">{e.secondary_metrics.deals || 0}</td>
             </tr>
           ))}
@@ -299,6 +315,7 @@ export default function PartnerLeaderboardPage() {
   const [board, setBoard] = useFilterParam("board", "revenue");
   const [period, setPeriod] = useFilterParam("period", "qtd");
   const [region, setRegion] = useFilterParam("region", "combined");
+  const [partnerType, setPartnerType] = useFilterParam("type", "all");
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
 
   const {
@@ -314,7 +331,16 @@ export default function PartnerLeaderboardPage() {
       ),
   });
 
-  const entries = data?.data || [];
+  const rawEntries = data?.data || [];
+
+  // Client-side filter by partner type + re-rank
+  const entries = useMemo(() => {
+    if (partnerType === "all") return rawEntries;
+    const filtered = rawEntries.filter(
+      (e) => e.partner_type === partnerType
+    );
+    return filtered.map((e, i) => ({ ...e, rank: i + 1 }));
+  }, [rawEntries, partnerType]);
 
   if (isLoading) return <DashboardSkeleton />;
   if (error) return <ErrorState message="Failed to load Partner leaderboard" onRetry={refetch} />;
@@ -350,6 +376,7 @@ export default function PartnerLeaderboardPage() {
               setBoard("revenue");
               setPeriod("qtd");
               setRegion("combined");
+              setPartnerType("all");
             }}
           >
             <RotateCcw className="h-3.5 w-3.5 mr-1" />
@@ -365,6 +392,19 @@ export default function PartnerLeaderboardPage() {
                 onClick={() => setRegion(r.value)}
               >
                 {r.label}
+              </Button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-md border bg-muted/30 p-0.5 gap-0.5">
+            {PARTNER_TYPES.map((t) => (
+              <Button
+                key={t.value}
+                variant={partnerType === t.value ? "default" : "ghost"}
+                size="sm"
+                className="text-xs h-7 px-3"
+                onClick={() => setPartnerType(t.value)}
+              >
+                {t.label}
               </Button>
             ))}
           </div>
@@ -416,6 +456,9 @@ export default function PartnerLeaderboardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Partner Effectiveness Heatmap */}
+      <PartnerInfluenceHeatmap />
 
       <PartnerDetailDrawer
         partnerId={selectedPartner}

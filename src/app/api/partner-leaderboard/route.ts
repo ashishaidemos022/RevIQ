@@ -3,7 +3,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { requireAuth, handleAuthError } from '@/lib/auth/middleware';
 import { getQuarterStartDate, getQuarterEndDate, getFiscalYearRange, getCurrentFiscalPeriod } from '@/lib/fiscal';
 
-const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro'];
+const ALLOWED_ROLES = ['revops_rw', 'revops_ro', 'enterprise_ro', 'cro', 'c_level', 'leader'];
 
 function normalizeRegion(region: string | null): string | null {
   if (!region) return null;
@@ -195,7 +195,25 @@ export async function GET(request: NextRequest) {
           return true;
         });
 
-        const acv = opps.reduce((sum, o) => sum + (o.acv || 0), 0);
+        let acv = 0;
+        let sourcedAcv = 0;
+        let influencedAcv = 0;
+        let fulfillmentAcv = 0;
+
+        for (const opp of opps) {
+          const oppAcv = opp.acv || 0;
+          acv += oppAcv;
+
+          const rvType = ((opp.rv_account_type as string) || '').toLowerCase();
+          if (rvType.includes('sourced') || rvType.includes('source')) {
+            sourcedAcv += oppAcv;
+          } else if (rvType.includes('fulfillment') || rvType.includes('resell')) {
+            fulfillmentAcv += oppAcv;
+          } else {
+            influencedAcv += oppAcv;
+          }
+        }
+
         const deals = opps.length;
 
         entries.push({
@@ -207,8 +225,11 @@ export async function GET(request: NextRequest) {
           region: normalizeRegion(rv.region),
           primary_metric: acv,
           secondary_metrics: {
-            acv_closed_multiplier: acv, // Same as ACV for now
+            acv_closed_multiplier: Math.round(acv * 1.15), // Multiplier applied
             acv_closed: acv,
+            sourced_acv: sourcedAcv,
+            influenced_acv: influencedAcv,
+            fulfillment_acv: fulfillmentAcv,
             deals,
           },
         });

@@ -48,18 +48,18 @@
 }
 
 :root {
-  /* Talkdesk brand: #5405bd primary purple, #360379 dark purple, #ffcc00 gold accent, #180136 dark text */
+  /* Brand: #5405bd primary purple, #360379 dark purple, #ffcc00 gold accent, #180136 dark text */
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.17 0.05 300);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.17 0.05 300);
-  --primary: oklch(0.38 0.24 295);           /* #5405bd - Talkdesk purple */
+  --primary: oklch(0.38 0.24 295);           /* #5405bd - primary purple */
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.96 0.01 295);         /* light purple tint */
   --secondary-foreground: oklch(0.30 0.18 295);
   --muted: oklch(0.96 0.01 295);
   --muted-foreground: oklch(0.50 0.03 295);
-  --accent: oklch(0.88 0.17 90);             /* #ffcc00 - Talkdesk gold */
+  --accent: oklch(0.88 0.17 90);             /* #ffcc00 - accent gold */
   --accent-foreground: oklch(0.17 0.05 300);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.91 0.01 295);

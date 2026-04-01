@@ -152,7 +152,7 @@ function PipelineBoard({ entries, onRowClick }: { entries: LeaderboardEntry[]; o
             <th className="text-left py-2 px-2">AE Name</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Total ACV Created</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">AE Created ACV</th>
-            <th className="text-right py-2 px-2 whitespace-nowrap">CXA ACV Created</th>
+            <th className="text-right py-2 px-2 whitespace-nowrap">AI ACV Created</th>
             <th className="text-right py-2 px-2 w-16">Deals</th>
             <th className="text-right py-2 px-2 whitespace-nowrap">Avg Size</th>
           </tr>

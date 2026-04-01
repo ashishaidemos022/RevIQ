@@ -25,6 +25,10 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, Filter, RotateCcw } from "lucide-react";
 import { Opportunity } from "@/types";
 import { SS0_SS2_STAGES, QUALIFIED_STAGES } from "@/lib/stage-groups";
+import { analyzeStageAging, getAgingSeverity } from "@/lib/deal-velocity";
+import { StageAgingAlerts, AgingIndicator } from "@/components/dashboard/stage-aging-alerts";
+import { AgingThresholdsDialog } from "@/components/dashboard/aging-thresholds-dialog";
+import { useAgingThresholds } from "@/hooks/use-aging-thresholds";
 import {
   BarChart,
   Bar,
@@ -135,7 +139,7 @@ export function AePipeline() {
   const isManager = user && MANAGER_PLUS_ROLES.includes(user.role as typeof MANAGER_PLUS_ROLES[number]);
 
   // Filters — multi-select stored as arrays, single-select as strings
-  const [quarterFilter, setQuarterFilter] = useFilterParam("quarter", "current");
+  const [quarterFilter, setQuarterFilter] = useFilterParamArray("quarter");
   const [stageFilter, setStageFilter] = useFilterParamArray("stage");
   const [typeFilter, setTypeFilter] = useFilterParamArray("type");
   const [pilotFilter, setPilotFilter] = useFilterParamArray("pilot");
@@ -146,6 +150,8 @@ export function AePipeline() {
     title: string;
     deals: DrillDownDeal[];
   } | null>(null);
+  const [thresholdsOpen, setThresholdsOpen] = useState(false);
+  const { thresholds: customThresholds, isCustomized, updateThresholds, resetToDefaults } = useAgingThresholds();
 
   // Build query params shared across server-side endpoints
   const filterParams = useMemo(() => {
@@ -190,6 +196,26 @@ export function AePipeline() {
     queryFn: () => apiFetch<StagesResponse>(`/api/pipeline/stages${filterParams ? `?${filterParams}` : ''}`),
   });
 
+  // Fetch quota for pipeline coverage ratio
+  const quotaQueryParams = useMemo(() => {
+    const params = [{ fy: fiscalYear, q: fiscalQuarter }];
+    return encodeURIComponent(JSON.stringify(params));
+  }, [fiscalYear, fiscalQuarter]);
+
+  const { data: perfData } = useQuery({
+    queryKey: ["pipeline-quota", quotaQueryParams, viewAsUser?.user_id],
+    queryFn: () =>
+      apiFetch<{ data: Record<string, { annualQuota: number | null }> }>(
+        `/api/performance?quarters=${quotaQueryParams}${viewAsUser ? `&viewAs=${viewAsUser.user_id}` : ""}`
+      ),
+  });
+
+  const quarterlyQuota = useMemo(() => {
+    if (!perfData?.data) return null;
+    const qData = Object.values(perfData.data)[0];
+    return qData?.annualQuota ? qData.annualQuota / 4 : null;
+  }, [perfData]);
+
   const isLoading = kpisLoading || stagesLoading;
   const allOpps = stagesData?.data?.opportunities || [];
 
@@ -203,23 +229,32 @@ export function AePipeline() {
     });
   }, [allOpps, dealSizeFilter]);
 
-  // Filter by close date quarter
+  // Filter by close date quarter (multi-select)
   const filteredOpps = useMemo(() => {
-    if (quarterFilter === "all") return dealSizeFiltered;
-    let fy = fiscalYear;
-    let fq = fiscalQuarter;
-    if (quarterFilter !== "current") {
-      const parts = quarterFilter.split("-");
-      fy = parseInt(parts[0]);
-      fq = parseInt(parts[1]);
+    // No quarters selected = show all (same as selecting all)
+    if (quarterFilter.length === 0) return dealSizeFiltered;
+
+    // Build date ranges for each selected quarter
+    const ranges: Array<{ start: string; end: string }> = [];
+    for (const qf of quarterFilter) {
+      let fy = fiscalYear;
+      let fq = fiscalQuarter;
+      if (qf !== "current") {
+        const parts = qf.split("-");
+        fy = parseInt(parts[0]);
+        fq = parseInt(parts[1]);
+      }
+      const start = getQuarterStartDate(fy, fq);
+      const end = getQuarterEndDate(fy, fq);
+      ranges.push({
+        start: start.toISOString().split('T')[0],
+        end: end.toISOString().split('T')[0],
+      });
     }
-    const start = getQuarterStartDate(fy, fq);
-    const end = getQuarterEndDate(fy, fq);
-    const startStr = start.toISOString().split('T')[0];
-    const endStr = end.toISOString().split('T')[0];
+
     return dealSizeFiltered.filter((o) => {
       if (!o.close_date) return false;
-      return o.close_date >= startStr && o.close_date <= endStr;
+      return ranges.some(r => o.close_date! >= r.start && o.close_date! <= r.end);
     });
   }, [dealSizeFiltered, quarterFilter, fiscalYear, fiscalQuarter]);
 
@@ -312,6 +347,12 @@ export function AePipeline() {
       }));
   }, [filteredOpps]);
 
+  // Stage aging analysis
+  const agingSummary = useMemo(
+    () => analyzeStageAging(filteredOpps, customThresholds),
+    [filteredOpps, customThresholds]
+  );
+
   // Columns for expanded stage rows — sorted by ACV desc, no Prob %, add CXA ACV
   const oppColumns: Column<Record<string, unknown>>[] = [
     {
@@ -332,10 +373,20 @@ export function AePipeline() {
     },
     {
       key: "cxa_committed_arr",
-      header: "CXA ACV",
+      header: "AI ACV",
       render: (row) => (row.cxa_committed_arr ? fmtCurrency(row.cxa_committed_arr as number) : "—"),
     },
     { key: "close_date", header: "Close Date" },
+    {
+      key: "days_in_current_stage",
+      header: "Days in Stage",
+      render: (row) => {
+        const days = row.days_in_current_stage as number | null;
+        const stage = row.stage as string;
+        const severity = getAgingSeverity(stage, days, customThresholds);
+        return <AgingIndicator days={days} stage={stage} severity={severity} />;
+      },
+    },
     {
       key: "is_paid_pilot",
       header: "Pilot",
@@ -399,7 +450,7 @@ export function AePipeline() {
             size="sm"
             className="h-8 text-xs"
             onClick={() => {
-              setQuarterFilter("current");
+              setQuarterFilter([]);
               setStageFilter([]);
               setTypeFilter([]);
               setPilotFilter([]);
@@ -412,9 +463,9 @@ export function AePipeline() {
           <Filter className="h-4 w-4 text-muted-foreground" />
           <MultiSelect
             options={QUARTER_OPTIONS_ITEMS}
-            value={[quarterFilter]}
-            onChange={(v) => setQuarterFilter(v[v.length - 1] || "current")}
-            placeholder="Quarter"
+            value={quarterFilter}
+            onChange={setQuarterFilter}
+            placeholder="All Quarters"
             className="w-[220px]"
           />
           <MultiSelect
@@ -449,14 +500,58 @@ export function AePipeline() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Pipeline ACV" value={kpis.totalPipelineAcv} format="currency" />
         <KpiCard label="Qualified Pipeline" value={kpis.qualifiedPipelineAcv} format="currency" />
         <KpiCard label="Forecasted Open Pipeline" value={kpis.forecastedPipelineAcv} format="currency" />
         <KpiCard label="Upside Open Pipeline" value={kpis.upsidePipelineAcv} format="currency" />
         <KpiCard label="Deals in Pipeline" value={kpis.dealCount} format="number" />
         <KpiCard label="Avg Deal Size" value={kpis.avgDealSize} format="currency" />
+        <KpiCard
+          label="Pipeline Coverage"
+          value={quarterlyQuota && quarterlyQuota > 0
+            ? `${(kpis.totalPipelineAcv / quarterlyQuota).toFixed(1)}x`
+            : "N/A"}
+          className={quarterlyQuota && quarterlyQuota > 0
+            ? kpis.totalPipelineAcv / quarterlyQuota >= 3
+              ? "border-green-500/30 bg-green-500/5"
+              : kpis.totalPipelineAcv / quarterlyQuota >= 2
+                ? "border-amber-500/30 bg-amber-500/5"
+                : "border-red-500/30 bg-red-500/5"
+            : undefined}
+          trend={quarterlyQuota && quarterlyQuota > 0
+            ? { direction: kpis.totalPipelineAcv / quarterlyQuota >= 3 ? "up" : kpis.totalPipelineAcv / quarterlyQuota >= 2 ? "flat" : "down",
+                value: 0,
+                label: `${fmtCurrency(kpis.totalPipelineAcv)} / ${fmtCurrency(quarterlyQuota)} quota` }
+            : undefined}
+        />
+        <KpiCard
+          label="Qualified Coverage"
+          value={quarterlyQuota && quarterlyQuota > 0
+            ? `${(kpis.qualifiedPipelineAcv / quarterlyQuota).toFixed(1)}x`
+            : "N/A"}
+          className={quarterlyQuota && quarterlyQuota > 0
+            ? kpis.qualifiedPipelineAcv / quarterlyQuota >= 2
+              ? "border-green-500/30 bg-green-500/5"
+              : kpis.qualifiedPipelineAcv / quarterlyQuota >= 1
+                ? "border-amber-500/30 bg-amber-500/5"
+                : "border-red-500/30 bg-red-500/5"
+            : undefined}
+          trend={quarterlyQuota && quarterlyQuota > 0
+            ? { direction: kpis.qualifiedPipelineAcv / quarterlyQuota >= 2 ? "up" : kpis.qualifiedPipelineAcv / quarterlyQuota >= 1 ? "flat" : "down",
+                value: 0,
+                label: `SS3+ only vs quota` }
+            : undefined}
+        />
       </div>
+
+      {/* Stage Aging Alerts */}
+      <StageAgingAlerts
+        summary={agingSummary}
+        onDealClick={(id) => setSelectedOpp(id)}
+        onConfigureThresholds={() => setThresholdsOpen(true)}
+        isCustomized={isCustomized}
+      />
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -551,7 +646,7 @@ export function AePipeline() {
                 <span>Stage</span>
                 <span className="text-right"># Deals</span>
                 <span className="text-right">Total ACV</span>
-                <span className="text-right">CXA ACV</span>
+                <span className="text-right">AI ACV</span>
                 <span className="text-right">Avg Days in Stage</span>
               </div>
               {stageData.map((row) => (
@@ -573,7 +668,13 @@ export function AePipeline() {
                     <span className="text-right">{row.deals}</span>
                     <span className="text-right">{fmtCurrency(row.totalAcv)}</span>
                     <span className="text-right">{fmtCurrency(row.totalCxaAcv)}</span>
-                    <span className="text-right">{row.avgDaysInStage}d</span>
+                    <span className="text-right">
+                      <AgingIndicator
+                        days={row.avgDaysInStage}
+                        stage={row.stage}
+                        severity={getAgingSeverity(row.stage, row.avgDaysInStage, customThresholds)}
+                      />
+                    </span>
                   </button>
                   {expandedStage === row.stage && (
                     <div className="pl-6 pb-4">
@@ -621,6 +722,15 @@ export function AePipeline() {
         deals={drillDown?.deals || []}
         showStage
         acvLabel="Reporting ACV"
+      />
+
+      <AgingThresholdsDialog
+        open={thresholdsOpen}
+        onClose={() => setThresholdsOpen(false)}
+        currentThresholds={customThresholds}
+        onSave={updateThresholds}
+        onReset={resetToDefaults}
+        isCustomized={isCustomized}
       />
     </div>
   );

@@ -128,8 +128,8 @@ function DealsList({ data }: { data: UserDetail }) {
         <p className="text-sm text-muted-foreground text-center py-6">No deals found</p>
       ) : (
         <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-          {filteredDeals.map((deal) => (
-            <div key={deal.id} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/30 text-sm">
+          {filteredDeals.map((deal, i) => (
+            <div key={deal.id ?? i} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/30 text-sm">
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{deal.account_name || "—"}</div>
                 <div className="text-xs text-muted-foreground truncate">{deal.name}</div>

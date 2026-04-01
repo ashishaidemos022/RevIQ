@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FlaskConical, Filter, RotateCcw } from "lucide-react";
+import { PilotPipelineLinkage } from "@/components/dashboard/pilot-pipeline-linkage";
 import {
   BarChart,
   Bar,
@@ -416,6 +417,9 @@ export function AePilots() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Pilot → Pipeline Linkage */}
+      <PilotPipelineLinkage />
 
       {/* All Pilots Table */}
       <Card>

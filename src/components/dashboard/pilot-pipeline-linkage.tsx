@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -18,7 +18,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -212,7 +211,7 @@ export function PilotPipelineLinkage() {
                 const goLiveDays = daysFromNow(row.estimated_go_live);
 
                 return (
-                  <TooltipProvider key={row.pilot_id} delayDuration={300}>
+                  <Fragment key={row.pilot_id}>
                     {/* Main row */}
                     <TableRow
                       className={cn(
@@ -265,20 +264,18 @@ export function PilotPipelineLinkage() {
                       <TableCell>
                         {row.estimated_go_live ? (
                           <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span
-                                className={cn(
-                                  "text-xs tabular-nums",
-                                  row.at_risk
-                                    ? "text-red-600 dark:text-red-400 font-semibold"
-                                    : "text-muted-foreground"
-                                )}
-                              >
-                                {formatDate(row.estimated_go_live)}
-                                {row.at_risk && (
-                                  <AlertTriangle className="inline h-3 w-3 ml-1 -mt-0.5" />
-                                )}
-                              </span>
+                            <TooltipTrigger
+                              className={cn(
+                                "text-xs tabular-nums cursor-default",
+                                row.at_risk
+                                  ? "text-red-600 dark:text-red-400 font-semibold"
+                                  : "text-muted-foreground"
+                              )}
+                            >
+                              {formatDate(row.estimated_go_live)}
+                              {row.at_risk && (
+                                <AlertTriangle className="inline h-3 w-3 ml-1 -mt-0.5" />
+                              )}
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
                               {goLiveDays !== null && goLiveDays > 0
@@ -305,12 +302,10 @@ export function PilotPipelineLinkage() {
                           <TableCell key={q} className="text-right tabular-nums">
                             {acv > 0 ? (
                               <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-sm font-medium">
-                                    {shortCurrency(acv)}
-                                    <span className="text-[10px] text-muted-foreground ml-1">
-                                      ({count})
-                                    </span>
+                                <TooltipTrigger className="text-sm font-medium cursor-default">
+                                  {shortCurrency(acv)}
+                                  <span className="text-[10px] text-muted-foreground ml-1">
+                                    ({count})
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="text-xs max-w-[240px]">
@@ -438,7 +433,7 @@ export function PilotPipelineLinkage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </TooltipProvider>
+                  </Fragment>
                 );
               })}
             </TableBody>

@@ -28,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FlaskConical, Filter, RotateCcw } from "lucide-react";
 import { PilotPipelineLinkage } from "@/components/dashboard/pilot-pipeline-linkage";
+import { PilotConversionTracker } from "@/components/dashboard/pilot-conversion-tracker";
 import {
   BarChart,
   Bar,
@@ -420,6 +421,9 @@ export function AePilots() {
 
       {/* Pilot → Pipeline Linkage */}
       <PilotPipelineLinkage />
+
+      {/* Pilot Conversion Tracker */}
+      <PilotConversionTracker />
 
       {/* All Pilots Table */}
       <Card>

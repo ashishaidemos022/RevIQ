@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { FlaskConical, Filter, RotateCcw } from "lucide-react";
 import { PilotPipelineLinkage } from "@/components/dashboard/pilot-pipeline-linkage";
 import { PilotConversionTracker } from "@/components/dashboard/pilot-conversion-tracker";
+import { PilotDurationAnalytics } from "@/components/dashboard/pilot-duration-analytics";
 import {
   BarChart,
   Bar,
@@ -424,6 +425,9 @@ export function AePilots() {
 
       {/* Pilot Conversion Tracker */}
       <PilotConversionTracker />
+
+      {/* Pilot Duration Analytics */}
+      <PilotDurationAnalytics pilots={allPilots as PilotOpp[]} />
 
       {/* All Pilots Table */}
       <Card>

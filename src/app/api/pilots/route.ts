@@ -16,7 +16,7 @@ const SPLIT_SELECT = [
   'split_percentage',
   'opportunities!inner(id, name, salesforce_opportunity_id, stage, acv, close_date, sf_created_date,',
   'is_closed_won, is_closed_lost, is_paid_pilot, paid_pilot_start_date, paid_pilot_end_date,',
-  'parent_pilot_opportunity_sf_id,',
+  'parent_pilot_opportunity_sf_id, pilot_implementation_stage,',
   'accounts(id, name, industry, region),',
   'users!opportunities_owner_user_id_fkey(id, full_name, email))',
 ].join(' ');

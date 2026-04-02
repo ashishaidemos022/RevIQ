@@ -40,7 +40,7 @@ const PILOT_SPLIT_SELECT = [
   'split_owner_user_id',
   'split_percentage',
   'opportunities!inner(id, salesforce_opportunity_id, name, stage, acv, close_date,',
-  'paid_pilot_start_date, paid_pilot_end_date, pilot_status,',
+  'paid_pilot_start_date, paid_pilot_end_date, pilot_status, pilot_implementation_stage,',
   'is_closed_won, is_closed_lost, is_paid_pilot, sf_created_date,',
   'parent_pilot_opportunity_sf_id, account_id,',
   'accounts(id, name, industry, region),',
@@ -57,6 +57,7 @@ interface PilotRow {
   paid_pilot_start_date: string | null;
   paid_pilot_end_date: string | null;
   pilot_status: string | null;
+  pilot_implementation_stage: string | null;
   is_closed_won: boolean;
   is_closed_lost: boolean;
   is_paid_pilot: boolean;
@@ -220,6 +221,7 @@ export async function GET(request: NextRequest) {
         pilot_start_date: p.paid_pilot_start_date,
         pilot_end_date: p.paid_pilot_end_date,
         pilot_status: status,
+        pilot_implementation_stage: p.pilot_implementation_stage,
         estimated_go_live: estimatedGoLive,
         at_risk: atRisk,
         account_id: acctId,

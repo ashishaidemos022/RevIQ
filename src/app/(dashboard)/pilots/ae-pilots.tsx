@@ -31,6 +31,7 @@ import { PilotPipelineLinkage } from "@/components/dashboard/pilot-pipeline-link
 import { PilotConversionTracker } from "@/components/dashboard/pilot-conversion-tracker";
 import { PilotDurationAnalytics } from "@/components/dashboard/pilot-duration-analytics";
 import { PilotRiskPanel } from "@/components/dashboard/pilot-risk-panel";
+import { PilotStageProgress } from "@/components/dashboard/pilot-stage-progress";
 import {
   BarChart,
   Bar,
@@ -90,6 +91,7 @@ interface PilotOpp {
   is_closed_lost: boolean;
   is_paid_pilot: boolean;
   paid_pilot_end_date: string | null;
+  pilot_implementation_stage: string | null;
   age: number | null;
   accounts?: { id: string; name: string };
   users?: { id: string; full_name: string; email: string };
@@ -280,6 +282,13 @@ export function AePilots() {
       key: "age",
       header: "Duration (Days)",
       render: (row) => (row.age != null ? `${row.age}d` : "—"),
+    },
+    {
+      key: "implementation",
+      header: "Implementation",
+      render: (row) => (
+        <PilotStageProgress stage={row.pilot_implementation_stage as string | null} compact />
+      ),
     },
     {
       key: "status",

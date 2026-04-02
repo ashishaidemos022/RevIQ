@@ -25,7 +25,7 @@ const PILOT_SELECT = [
   'split_owner_user_id',
   'split_percentage',
   'opportunities!inner(id, salesforce_opportunity_id, name, stage, acv, close_date,',
-  'paid_pilot_start_date, paid_pilot_end_date, pilot_status,',
+  'paid_pilot_start_date, paid_pilot_end_date, pilot_status, pilot_implementation_stage,',
   'is_closed_won, is_closed_lost, is_paid_pilot, sf_created_date, account_id,',
   'parent_pilot_opportunity_sf_id,',
   'accounts(id, name, industry, region),',

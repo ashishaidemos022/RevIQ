@@ -71,6 +71,7 @@ function opp(
     rv_account_type: null,
     channel_owner_sf_id: null,
     days_in_current_stage: Math.floor(Math.random() * 45) + 5,
+    pilot_implementation_stage: null,
     sf_created_date: '2025-10-01T00:00:00Z',
     ...opts,
   };
@@ -191,44 +192,44 @@ const OPEN_PIPELINE: Opportunity[] = [
 const PAID_PILOTS: Opportunity[] = [
   // ── Active pilots — spread across Feb, Mar, Apr (Q1) and Q2 ─────────────
   // sf_created_date spread from Apr'25 to Apr'26 for "Added to Pipeline" chart
-  // Ashley Park (008) — AMER — close in Feb
+  // Ashley Park (008) — AMER — close in Feb — UAT (nearly done, been running since Nov)
   opp(31, 'sf-opp-031', 'demo-acc-001', 'demo-usr-008', 'Acme Manufacturing — AI Workflow Pilot',       'Stage 4-Shortlist',    45000,  '2026-02-28', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2025-11-15', paid_pilot_end_date: '2026-02-28', forecast_category: 'pipeline', probability: 55, channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-08-14T00:00:00Z' }),
-  // Ryan Patel (009) — AMER — close in Mar
+    { paid_pilot_start_date: '2025-11-15', paid_pilot_end_date: '2026-02-28', forecast_category: 'pipeline', probability: 55, channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-08-14T00:00:00Z', pilot_implementation_stage: 'uat' }),
+  // Ryan Patel (009) — AMER — close in Mar — Configuration (started Dec, in config since Feb)
   opp(34, 'sf-opp-034', 'demo-acc-003', 'demo-usr-009', 'NovaTech Solutions — Intelligence Pilot',       'Stage 4-Verbal',      50000,  '2026-03-15', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2025-12-01', paid_pilot_end_date: '2026-03-31', forecast_category: 'best_case', probability: 65, rv_account_sf_id: 'BlueStar Technologies', sf_created_date: '2025-09-18T00:00:00Z' }),
-  // Jennifer Liu (010) — AMER — close in Mar
+    { paid_pilot_start_date: '2025-12-01', paid_pilot_end_date: '2026-03-31', forecast_category: 'best_case', probability: 65, rv_account_sf_id: 'BlueStar Technologies', sf_created_date: '2025-09-18T00:00:00Z', pilot_implementation_stage: 'configuration' }),
+  // Jennifer Liu (010) — AMER — close in Mar — Discovery (started Jan, still in discovery)
   opp(36, 'sf-opp-036', 'demo-acc-006', 'demo-usr-010', 'Pacific Shield — Claims AI Pilot',              'Stage 3-Evaluation',  32000,  '2026-03-31', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2026-01-15', paid_pilot_end_date: '2026-04-15', forecast_category: 'pipeline', probability: 40, channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-10-15T00:00:00Z' }),
-  // Marcus Johnson (011) — AMER — close in Apr
+    { paid_pilot_start_date: '2026-01-15', paid_pilot_end_date: '2026-04-15', forecast_category: 'pipeline', probability: 40, channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-10-15T00:00:00Z', pilot_implementation_stage: 'discovery' }),
+  // Marcus Johnson (011) — AMER — close in Apr — Discovery (started Jan, still early)
   opp(33, 'sf-opp-033', 'demo-acc-010', 'demo-usr-011', 'Zenith Telecom — CX AI Pilot',                  'Stage 3-Evaluation',  35000,  '2026-04-10', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2026-01-15', paid_pilot_end_date: '2026-04-15', forecast_category: 'pipeline', probability: 40, rv_account_sf_id: 'Nexus Partner Group', sf_created_date: '2025-11-20T00:00:00Z' }),
-  // Kelly Chen (012) — AMER — close in Feb
+    { paid_pilot_start_date: '2026-01-15', paid_pilot_end_date: '2026-04-15', forecast_category: 'pipeline', probability: 40, rv_account_sf_id: 'Nexus Partner Group', sf_created_date: '2025-11-20T00:00:00Z', pilot_implementation_stage: 'discovery' }),
+  // Kelly Chen (012) — AMER — close in Feb — UAT (started Nov, nearly through)
   opp(37, 'sf-opp-037', 'demo-acc-009', 'demo-usr-012', 'Cascade Logistics — Route Optimization Pilot', 'Stage 4-Shortlist',    28000,  '2026-02-20', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2025-11-01', paid_pilot_end_date: '2026-02-28', forecast_category: 'pipeline', probability: 50, channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-06-05T00:00:00Z' }),
-  // Anna Schmidt (013) — EMEA — close in May
+    { paid_pilot_start_date: '2025-11-01', paid_pilot_end_date: '2026-02-28', forecast_category: 'pipeline', probability: 50, channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-06-05T00:00:00Z', pilot_implementation_stage: 'uat' }),
+  // Anna Schmidt (013) — EMEA — close in May — Configuration (started Feb, in config since Mar)
   opp(32, 'sf-opp-032', 'demo-acc-004', 'demo-usr-013', 'Quantum Dynamics — Analytics Intelligence Pilot','Stage 3-Proposal',  60000,  '2026-05-31', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2026-02-15', paid_pilot_end_date: '2026-05-31', forecast_category: 'pipeline', probability: 45, rv_account_sf_id: 'Apex Solutions LLC', sf_created_date: '2025-10-20T00:00:00Z' }),
-  // Carlos Mendez (014) — EMEA — close in Jun
+    { paid_pilot_start_date: '2026-02-15', paid_pilot_end_date: '2026-05-31', forecast_category: 'pipeline', probability: 45, rv_account_sf_id: 'Apex Solutions LLC', sf_created_date: '2025-10-20T00:00:00Z', pilot_implementation_stage: 'configuration' }),
+  // Carlos Mendez (014) — EMEA — close in Jun — Not Started (just kicked off Mar 1)
   opp(38, 'sf-opp-038', 'demo-acc-007', 'demo-usr-014', 'Summit Energy — Smart Grid Pilot',              'Stage 3-Evaluation',  55000,  '2026-06-30', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2026-03-01', paid_pilot_end_date: '2026-06-30', forecast_category: 'pipeline', probability: 35, channel_owner_sf_id: 'sf-usr-018', sf_created_date: '2026-01-15T00:00:00Z' }),
-  // Tom Nguyen (015) — APAC — close in Apr
+    { paid_pilot_start_date: '2026-03-01', paid_pilot_end_date: '2026-06-30', forecast_category: 'pipeline', probability: 35, channel_owner_sf_id: 'sf-usr-018', sf_created_date: '2026-01-15T00:00:00Z', pilot_implementation_stage: 'not_started' }),
+  // Tom Nguyen (015) — APAC — close in Apr — UAT (started Feb, moving fast)
   opp(39, 'sf-opp-039', 'demo-acc-013', 'demo-usr-015', 'Ironbridge Manufacturing — Quality AI Pilot',   'Stage 4-Verbal',      42000,  '2026-04-20', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2026-02-01', paid_pilot_end_date: '2026-04-30', forecast_category: 'best_case', probability: 60, rv_account_sf_id: 'Nexus Partner Group', sf_created_date: '2026-04-02T00:00:00Z' }),
-  // Lisa Wang (016) — APAC — close in May
+    { paid_pilot_start_date: '2026-02-01', paid_pilot_end_date: '2026-04-30', forecast_category: 'best_case', probability: 60, rv_account_sf_id: 'Nexus Partner Group', sf_created_date: '2026-04-02T00:00:00Z', pilot_implementation_stage: 'uat' }),
+  // Lisa Wang (016) — APAC — close in May — Not Started (just started mid-Mar)
   opp(40, 'sf-opp-040', 'demo-acc-014', 'demo-usr-016', 'DataStream Analytics — Prediction Engine Pilot','Stage 3-Proposal',    38000,  '2026-05-30', 'new_business', 'New Logo', false, false, true,
-    { paid_pilot_start_date: '2026-03-15', paid_pilot_end_date: '2026-06-15', forecast_category: 'pipeline', probability: 40, channel_owner_sf_id: 'sf-usr-018', sf_created_date: '2025-05-18T00:00:00Z' }),
+    { paid_pilot_start_date: '2026-03-15', paid_pilot_end_date: '2026-06-15', forecast_category: 'pipeline', probability: 40, channel_owner_sf_id: 'sf-usr-018', sf_created_date: '2025-05-18T00:00:00Z', pilot_implementation_stage: 'not_started' }),
 
   // ── Converted (closed-won) pilots — for win rate and conversion KPIs ───
-  // Ashley Park (008) — converted pilot in Q1
+  // Ashley Park (008) — converted pilot in Q1 — reached production
   opp(41, 'sf-opp-041', 'demo-acc-005', 'demo-usr-008', 'Aurora Retail — Personalization Engine Pilot',  'Stage 7-Closed Won',  40000,  '2026-02-28', 'new_business', 'New Logo', true, false, true,
-    { paid_pilot_start_date: '2025-11-01', paid_pilot_end_date: '2026-02-28', channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-04-15T00:00:00Z' }),
-  // Marcus Johnson (011) — converted pilot in Q1
+    { paid_pilot_start_date: '2025-11-01', paid_pilot_end_date: '2026-02-28', channel_owner_sf_id: 'sf-usr-017', sf_created_date: '2025-04-15T00:00:00Z', pilot_implementation_stage: 'production' }),
+  // Marcus Johnson (011) — converted pilot in Q1 — reached production
   opp(42, 'sf-opp-042', 'demo-acc-002', 'demo-usr-011', 'Vertex Healthcare — Patient Flow Pilot',       'Stage 7-Closed Won',  48000,  '2026-03-10', 'new_business', 'New Logo', true, false, true,
-    { paid_pilot_start_date: '2025-12-01', paid_pilot_end_date: '2026-03-10', rv_account_sf_id: 'Apex Solutions LLC', sf_created_date: '2025-12-08T00:00:00Z' }),
-  // Anna Schmidt (013) — converted pilot in Q1
+    { paid_pilot_start_date: '2025-12-01', paid_pilot_end_date: '2026-03-10', rv_account_sf_id: 'Apex Solutions LLC', sf_created_date: '2025-12-08T00:00:00Z', pilot_implementation_stage: 'production' }),
+  // Anna Schmidt (013) — converted pilot in Q1 — reached production
   opp(43, 'sf-opp-043', 'demo-acc-011', 'demo-usr-013', 'Alpine Medical — Compliance Automation Pilot',  'Stage 7-Closed Won',  52000,  '2026-03-15', 'new_business', 'New Logo', true, false, true,
-    { paid_pilot_start_date: '2025-12-15', paid_pilot_end_date: '2026-03-15', channel_owner_sf_id: 'sf-usr-018', sf_created_date: '2026-02-12T00:00:00Z' }),
+    { paid_pilot_start_date: '2025-12-15', paid_pilot_end_date: '2026-03-15', channel_owner_sf_id: 'sf-usr-018', sf_created_date: '2026-02-12T00:00:00Z', pilot_implementation_stage: 'production' }),
 
   // ── Lost pilots — for win rate calculation ─────────────────────────────
   // Carlos Mendez (014) — lost pilot in Q1

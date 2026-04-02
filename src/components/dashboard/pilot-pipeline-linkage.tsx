@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronRight, Link2 } from "lucide-react";
+import { PilotStageProgress } from "./pilot-stage-progress";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ interface PilotPipelineRow {
   pilot_start_date: string | null;
   pilot_end_date: string | null;
   pilot_status: string;
+  pilot_implementation_stage: string | null;
   estimated_go_live: string | null;
   at_risk: boolean;
   account_id: string;
@@ -349,8 +351,11 @@ export function PilotPipelineLinkage() {
                               <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                                 Pilot Details
                               </p>
+                              {row.pilot_implementation_stage && (
+                                <PilotStageProgress stage={row.pilot_implementation_stage} className="mb-2" />
+                              )}
                               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                                <span className="text-muted-foreground">Stage</span>
+                                <span className="text-muted-foreground">Sales Stage</span>
                                 <span>{row.pilot_stage}</span>
                                 <span className="text-muted-foreground">Close Date</span>
                                 <span>{formatDate(row.pilot_close_date)}</span>

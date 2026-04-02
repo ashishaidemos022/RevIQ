@@ -26,6 +26,7 @@ import {
   XOctagon,
   Zap,
 } from "lucide-react";
+import { PilotStageProgress } from "./pilot-stage-progress";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ interface RiskEntry {
   pilot_id: string;
   pilot_name: string;
   pilot_stage: string;
+  pilot_implementation_stage: string | null;
   pilot_acv: number;
   pilot_close_date: string | null;
   pilot_start_date: string | null;
@@ -338,6 +340,9 @@ export function PilotRiskPanel() {
                                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                                   Pilot Details
                                 </p>
+                                {risk.pilot_implementation_stage && (
+                                  <PilotStageProgress stage={risk.pilot_implementation_stage} className="mb-1" />
+                                )}
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                                   <span className="text-muted-foreground">Pilot</span>
                                   <span className="truncate">{risk.pilot_name}</span>

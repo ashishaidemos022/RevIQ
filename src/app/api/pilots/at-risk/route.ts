@@ -47,7 +47,7 @@ const PILOT_SELECT = [
   'split_owner_user_id',
   'split_percentage',
   'opportunities!inner(id, salesforce_opportunity_id, name, stage, acv, close_date,',
-  'paid_pilot_start_date, paid_pilot_end_date, pilot_status,',
+  'paid_pilot_start_date, paid_pilot_end_date, pilot_status, pilot_implementation_stage,',
   'is_closed_won, is_closed_lost, is_paid_pilot, sf_created_date, account_id,',
   'accounts(id, name, industry, region),',
   'users!opportunities_owner_user_id_fkey(id, full_name, email))',
@@ -94,6 +94,7 @@ interface RiskEntry {
   pilot_id: string;
   pilot_name: string;
   pilot_stage: string;
+  pilot_implementation_stage: string | null;
   pilot_acv: number;
   pilot_close_date: string | null;
   pilot_start_date: string | null;
@@ -203,6 +204,7 @@ export async function GET(request: NextRequest) {
         pilot_id: pilot.id,
         pilot_name: pilot.name,
         pilot_stage: pilot.stage,
+        pilot_implementation_stage: (pilot as Record<string, unknown>).pilot_implementation_stage as string | null,
         pilot_acv: pilotAcv,
         pilot_close_date: pilot.close_date,
         pilot_start_date: pilot.paid_pilot_start_date,

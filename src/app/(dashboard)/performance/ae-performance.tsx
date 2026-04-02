@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ForecastAccuracy } from "@/components/dashboard/forecast-accuracy";
+import { ForecastEvolution } from "@/components/dashboard/forecast-evolution";
 import { WinLossAnalysis } from "@/components/dashboard/win-loss-analysis";
 import {
   BarChart,
@@ -346,6 +347,11 @@ export function AePerformance() {
       {/* Forecast Accuracy Section */}
       {quarterResults.length > 0 && (
         <ForecastAccuracy quarterResults={quarterResults} />
+      )}
+
+      {/* Forecast Evolution (Snapshot-based) */}
+      {quarterResults.length > 0 && (
+        <ForecastEvolution quarterResults={quarterResults} />
       )}
 
       {/* Win/Loss Analysis Section */}

@@ -23,6 +23,9 @@ export const OAUTH_CONFIG = {
 /** Derive the base URL at runtime so it works in dev and on Vercel */
 export function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  // VERCEL_PROJECT_PRODUCTION_URL is the stable production domain (e.g. revenueiq-demo.vercel.app)
+  // VERCEL_URL is the deployment-specific URL which changes every deploy — avoid for OAuth
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return `http://localhost:${process.env.PORT || 3000}`;
 }

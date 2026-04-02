@@ -32,6 +32,7 @@ import { PilotConversionTracker } from "@/components/dashboard/pilot-conversion-
 import { PilotDurationAnalytics } from "@/components/dashboard/pilot-duration-analytics";
 import { PilotRiskPanel } from "@/components/dashboard/pilot-risk-panel";
 import { PilotStageProgress } from "@/components/dashboard/pilot-stage-progress";
+import { PilotGanttTimeline } from "@/components/dashboard/pilot-gantt-timeline";
 import {
   BarChart,
   Bar,
@@ -330,6 +331,9 @@ export function AePilots() {
 
       {/* At-Risk Pipeline Alert */}
       <PilotRiskPanel />
+
+      {/* Pilot Gantt Timeline */}
+      <PilotGanttTimeline />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

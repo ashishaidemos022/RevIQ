@@ -30,6 +30,7 @@ import { FlaskConical, Filter, RotateCcw } from "lucide-react";
 import { PilotPipelineLinkage } from "@/components/dashboard/pilot-pipeline-linkage";
 import { PilotConversionTracker } from "@/components/dashboard/pilot-conversion-tracker";
 import { PilotDurationAnalytics } from "@/components/dashboard/pilot-duration-analytics";
+import { PilotRiskPanel } from "@/components/dashboard/pilot-risk-panel";
 import {
   BarChart,
   Bar,
@@ -317,6 +318,9 @@ export function AePilots() {
           />
         </div>
       </div>
+
+      {/* At-Risk Pipeline Alert */}
+      <PilotRiskPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
